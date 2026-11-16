@@ -37,7 +37,7 @@ func _ready() -> void:
 	_vp = SubViewport.new()
 	_vp.own_world_3d = true
 	_vp.transparent_bg = true
-	_vp.msaa_3d = Viewport.MSAA_2X
+	_vp.msaa_3d = Viewport.MSAA_2X if GameData.msaa_now() >= 2 else Viewport.MSAA_DISABLED  # 웹 보통 이하는 끔
 	_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED  # 보일 때만 그림 (_process) — 3인칭·메뉴·죽음 땐 안 그림
 	add_child(_vp)
 	texture = _vp.get_texture()

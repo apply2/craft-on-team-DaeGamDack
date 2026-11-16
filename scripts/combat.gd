@@ -820,14 +820,14 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			speed = lerpf(W.speed_min, W.speed_max, t)
 			dmg = roundf(lerpf(W.dmg_min, W.dmg_max, t))
 			e.cd = W.nock
-			mesh = WeaponModels.make_arrow("bow")
+			mesh = WeaponModels.make_arrow_fast("bow")
 			Sfx.play("bow", e.global_position)
 		"crossbow":
 			speed = W.speed
 			dmg = W.dmg
 			e.cd = W.cd
 			xbow_spent(e)
-			mesh = WeaponModels.make_arrow("crossbow")
+			mesh = WeaponModels.make_arrow_fast("crossbow")
 			Sfx.play("xbow", e.global_position)
 		"holy":  # 위로 살짝 띄워 던지는 포물선. 맞으면 피해 대신 웅덩이
 			speed = W.speed
@@ -844,6 +844,7 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			dmg = W.dmg
 			e.cd = maxf(e.cd, 0.3)
 			var cg: Node3D = WeaponModels.make_chicken().g
+			Meshes.merge_tree(cg)  # 날아가는 닭: 조각 합치기 (웹 최적화)
 			mesh = cg
 			e.has_chicken = false
 			e.wep = GameData.CLASSES[e.cls].weapon
@@ -1214,12 +1215,12 @@ func remote_fire(e: PlayerController, kind: String, pos: Vector3, vel: Vector3, 
 			dmg = W.dmg
 			Sfx.play("throw", pos)
 		"bow":
-			mesh = WeaponModels.make_arrow("bow")
+			mesh = WeaponModels.make_arrow_fast("bow")
 			dmg = roundf(lerpf(W.dmg_min, W.dmg_max, t))
 			Sfx.play("bow", pos)
 			e.rec_v += 5 + 4 * t
 		"crossbow":
-			mesh = WeaponModels.make_arrow("crossbow")
+			mesh = WeaponModels.make_arrow_fast("crossbow")
 			dmg = W.dmg
 			Sfx.play("xbow", pos)
 			e.rec_v += 10

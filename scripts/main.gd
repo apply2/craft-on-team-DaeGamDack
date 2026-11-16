@@ -598,7 +598,7 @@ func _setup_environment() -> void:
 
 ## 그래픽 품질 → 그림자 (낮음 = 끔, 보통 130m, 높음 220m)·MSAA, 설정의 3D 해상도. 잔디·소품은 맵(WorldBuilder.apply_gfx)이 함
 func _apply_gfx() -> void:
-	var d: float = GameData.gfx().shadow_dist
+	var d: float = GameData.shadow_dist_now()
 	sun.shadow_enabled = d > 0.0
 	if d > 0.0:
 		sun.directional_shadow_max_distance = d

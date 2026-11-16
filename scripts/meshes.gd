@@ -287,6 +287,46 @@ static func merge(items: Array, keep_src := false) -> ArrayMesh:
 	return am
 
 
+## 웹 최적화: 노드 트리 안에서 움직이지 않는 조각(자식 없는 MeshInstance3D, 불투명 StandardMaterial3D)을
+## 같은 부모끼리 메시 하나로 합친다 (그림자 켬/끔 따로). skip에 든 노드(따로 움직이는 조각)는 그대로 둔다.
+## 말·닭·진열된 총처럼 GameData.mat 색을 쓰는 모델에 쓴다. 재질은 모두 같이 쓰는 정점 색 재질 하나.
+static var _shared_vc: StandardMaterial3D
+
+
+static func shared_vc_mat() -> StandardMaterial3D:
+	if _shared_vc == null:
+		_shared_vc = vertex_color_mat()
+	return _shared_vc
+
+
+static func merge_tree(n: Node3D, skip := {}) -> void:
+	var groups := {true: [], false: []}
+	for c in n.get_children():
+		if skip.has(c):
+			continue
+		if c is MeshInstance3D and c.get_child_count() == 0 and (c as MeshInstance3D).material_override is StandardMaterial3D \
+				and ((c as MeshInstance3D).material_override as StandardMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_DISABLED \
+				and ((c as MeshInstance3D).material_override as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL:
+			var mi := c as MeshInstance3D
+			groups[mi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF].append(mi)
+		elif c is Node3D:
+			merge_tree(c, skip)
+	for shadow: bool in [true, false]:
+		var list: Array = groups[shadow]
+		if list.size() < 2:
+			continue
+		var items := []
+		for mi: MeshInstance3D in list:
+			items.append([mi.mesh, (mi.material_override as StandardMaterial3D).albedo_color, mi.transform])
+		var out := MeshInstance3D.new()
+		out.mesh = merge(items, true)
+		out.material_override = shared_vc_mat()
+		out.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		n.add_child(out)
+		for mi: MeshInstance3D in list:
+			mi.free()
+
+
 ## merge()로 합친 메시용 재질 (GameData.mat과 같은 색이 나오게 정점 색을 sRGB로 읽음)
 static func vertex_color_mat() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()

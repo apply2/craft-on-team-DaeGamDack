@@ -690,6 +690,12 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
     웹에서 직접 고른 적이 없으면(`res_scale_saved`) 브라우저 화면 점 수로 자동 (`auto_res_scale` — `WEB_PERF.auto_mpix` 190만 점 이하: 720p 100%, 1080p 85%, 1440p 70%, 4K 50%). 브라우저 화면은 창 전체 × 화면 배율이라 PC 창 1280x720보다 점이 몇 배 많다.
   - **MSAA**는 그래픽 품질에 따라 (`GFX.*.msaa`, 웹은 `web_msaa` — 보통까지 끔). 예전엔 project.godot의 2배가 늘 켜져 있었다.
   - 웹은 `Engine.max_physics_steps_per_frame = WEB_PERF.max_physics_steps`(3): 느린 프레임 뒤에 물리를 8번까지 몰아 돌려 더 느려지는 걸 막음.
+  - **그리기 호출 줄이기 2** (사용자 "PC는 부드러운데 웹만 메뉴부터 30fps 아래" — 브라우저는 그리기 호출 하나하나가 비쌈. 메뉴 약 480 → 400번, 웹 그림자까지 하면 약 300번):
+    - 날아가는·꽂힌 화살 = `WeaponModels.make_arrow_fast` (조각 4개 → 합친 메시 1개, 종류마다 메시 하나를 같이 씀, 그림자 끔). 1인칭 손은 그대로 `make_arrow`.
+    - 맵의 말·닭·진열된 저격총/AK·던진 닭 = `Meshes.merge_tree(노드, skip)` (같은 부모의 움직이지 않는 조각끼리 합침, 정점 색 재질 `Meshes.shared_vc_mat`).
+      말은 꼬리(따로 흔들림)·마상창(`Items.held_lance`가 창끝 조각을 찾음)을 skip. 새 모델에 쓸 땐 따로 움직이는 MeshInstance3D를 skip에 넣을 것.
+    - 웹 그림자 거리 `GFX.*.web_shadow_dist` (보통 70m, 높음 220m) → `GameData.shadow_dist_now()`.
+    - 메뉴 병과 무리·병과 액자·결과 무대·1인칭 손 SubViewport의 MSAA도 `GameData.msaa_now()`를 따름.
 
 ## PC 내보내기 (exe)
 
