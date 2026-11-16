@@ -667,7 +667,7 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
 ```
 - 웹 템플릿은 `%APPDATA%/Godot/export_templates/4.7.2.stable/`에 web_nothreads_release/debug.zip만 깔려 있다 (전체 1.3GB 대신 필요한 것만 받음).
 - 스레드 없는(nothreads) 빌드라 COOP/COEP 헤더가 필요 없다 → GitHub Pages·itch.io에 그대로 올리면 된다.
-- 웹에서도 친구대전이 된다 (WebRTC는 브라우저 것). 올리는 곳: Vercel (`npx vercel deploy export/web --prod`) 또는 GitHub Pages·itch.io — README "웹으로 올리기".
+- 웹에서도 친구대전이 된다 (WebRTC는 브라우저 것). Web 프리셋은 `addons/webrtc_native/*`를 빼고 내보낸다 (안 빼면 브라우저 콘솔에 확장 못 찾음 오류). 올리는 곳: Vercel (`npx vercel deploy export/web --prod`) 또는 GitHub Pages·itch.io — README "웹으로 올리기".
 - 웹에선 Esc를 브라우저가 가져가 마우스 잠금만 풀린다 → 잠금이 풀리면 일시정지 (`main._check_web_lock`, HTML pointerlockchange).
 - 웹엔 시스템 폰트가 없어서 폰트에 없는 글자는 □로 나온다. UI 글자를 새로 넣으면 도현·대체 폰트에 있는지 확인할 것.
 - 최적화: 움직이지 않는 맵 조각은 `world_builder._merge_static()`이, 캐릭터의 관절별 조각은 `derp_model._merge()`가 `Meshes.merge()`로 정점 색 메시 하나로 합친다.
