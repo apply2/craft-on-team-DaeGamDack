@@ -1,9 +1,12 @@
 class_name Net
 extends Node
-## 친구대전 (같은 와이파이·LAN) — HTML의 MP(claude.ai 방 기능)를 ENet으로 옮긴 것.
-## 방장 컴퓨터가 ENet 서버가 되고, 친구는 방 코드 4자리로 찾아 들어온다:
-##   방장은 UDP 방송으로 "방 코드 + 포트"를 0.5초마다 알리고, 친구는 그 방송을 듣다가 코드가 맞으면 접속한다.
-##   방 코드 대신 방장 IP를 직접 넣어도 된다.
+## 친구대전 (온라인) — HTML의 MP(claude.ai 방 기능)를 WebRTC로 옮긴 것. 웹·PC 어디서든, 같은 와이파이가 아니어도 된다.
+## 방장 컴퓨터(브라우저)가 WebRTC 서버(peer 1)가 되고, 친구는 방 코드 4자리로 들어온다:
+##   방장과 친구가 Supabase Realtime의 같은 방 채널(NetSignal)에 들어가서 연결 정보(SDP·ICE)만 주고받고,
+##   그 뒤 게임 데이터는 WebRTC로 방장 ↔ 친구가 직접 오간다 (친구끼리는 방장이 중계 — ENet 때와 같은 별 모양).
+##   신호 순서: 친구 "hi"(sid) → 방장 "id"(sid, 번호 2,3,…) → 방장 "sdp" offer → 친구 "sdp" answer ↔ 서로 "ice".
+##   친구는 연결되면 신호 채널을 닫고, 방장은 새 친구를 받으려고 방이 열린 동안 계속 들어가 있는다.
+##   PC 버전은 addons/webrtc_native(GDExtension)가 WebRTC를 맡고, 웹은 브라우저 것을 쓴다.
 ## 권한은 HTML과 같다:
 ##   - 각자 자기 캐릭터를 움직이고 30Hz로 상태를 보낸다. 남의 캐릭터는 받은 상태를 따라 그린다.
 ##   - 투사체(돌·활·석궁·성수) 피해는 맞은 사람 쪽에서 판정, 저격총·AK·마상창은 쏜 사람 쪽에서 판정.
@@ -55,35 +58,26 @@ var _send_t := 0.0
 var _host_t := 0.0
 var _mt_t := 0.0
 var _cm_t := 0.0
-var _udp: PacketPeerUDP   # 방장: 방송 보내기 / 친구: 방송 듣기
-var _beacon_t := 0.0
-var _find_t := 0.0
+var _sig: NetSignal       # 방 채널 (방장: 방이 열린 동안 / 친구: 연결될 때까지)
+var _rtc: WebRTCMultiplayerPeer
+var _conns := {}          # peer id → {pc: WebRTCPeerConnection, sid, t: 연결 기다린 시간, ice: 설명보다 먼저 온 ICE, has_remote}
+var _sid := ""            # 친구: 방장이 번호를 줄 때까지 나를 부르는 임시 이름
+var _my_id := 0           # 친구: 방장이 준 번호 (2, 3, …)
+var _next_id := 2         # 방장: 다음 친구 번호
+var _opening := false     # 방장: 방 채널에 들어가는 중
+var _find_t := 0.0        # 친구: 방장이 대답하기를 기다리는 남은 시간
+var _hi_t := 0.0
+var _conn_t := 0.0        # 친구: 번호를 받은 뒤 직접 연결까지 남은 시간
 var _joining := false
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	multiplayer.connected_to_server.connect(_on_connected)
-	multiplayer.connection_failed.connect(func() -> void: _fail("방에 들어가지 못했어요. 방장 컴퓨터가 같은 와이파이에 있는지 확인해 주세요."))
+	multiplayer.connection_failed.connect(func() -> void: _fail(NO_LINK))
 	multiplayer.server_disconnected.connect(func() -> void: _close("방장이 방을 닫았어요"))
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-
-
-## 이 컴퓨터의 와이파이 IP (192.168.x.x 같은 사설 IPv4). 친구가 코드로 못 찾을 때 직접 넣는다
-## 공유기는 보통 192.168.x.x를 준다. 172.x는 WSL·Hyper-V 같은 가상 어댑터일 때가 많아 맨 뒤로 둔다
-static func lan_ip() -> String:
-	var addrs := IP.get_local_addresses()
-	for pre: String in ["192.168.", "10."]:
-		for a: String in addrs:
-			if a.begins_with(pre):
-				return a
-	for a: String in addrs:
-		if a.begins_with("172."):
-			var b := int(a.split(".")[1])
-			if b >= 16 and b <= 31:
-				return a
-	return ""
 
 
 static func gen_code() -> String:
@@ -131,40 +125,60 @@ func mine(peer: int) -> PlayerController:
 
 
 # ── 방 만들기·들어가기·나가기 ────────────────────────────────
+const NO_LINK := "친구와 직접 연결하지 못했어요. 학교·회사 와이파이처럼 막힌 곳이면 휴대폰 핫스팟 같은 다른 인터넷으로 해 보세요."
+const NO_RTC := "이 PC 버전엔 온라인 연결 부품(addons/webrtc_native)이 없어요. exe 옆에 함께 나온 dll 파일도 같이 두세요."
+
+var _sig_retry_t := 0.0   # 방장: 신호 채널이 끊기면 잠깐 뒤 다시 들어감 (이미 들어온 친구는 직접 연결이라 상관없음)
+
+
+## 이 컴퓨터에서 WebRTC를 쓸 수 있나 (웹 = 브라우저, PC = GDExtension)
+static func rtc_ok() -> bool:
+	var pc := WebRTCPeerConnection.new()
+	var ok := pc.initialize({"iceServers": []}) == OK
+	pc.close()
+	return ok
+
+
+static func _ice() -> Array:
+	return GameData.ice_override if GameData.ice_override is Array else GameData.NET.ice
+
+
 func host_room(nick: String, c: String) -> void:
-	var N: Dictionary = GameData.NET
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(int(N.port), int(N.max_players) - 1)
-	if err != OK:
-		status.emit("방을 만들지 못했어요. 이미 이 컴퓨터에서 방을 열었거나 포트 %d이(가) 막혀 있어요." % int(N.port))
+	if on or _sig:
 		return
-	multiplayer.multiplayer_peer = peer
-	_begin(nick, c, gen_code(), true)
-	_udp = PacketPeerUDP.new()
-	_udp.set_broadcast_enabled(true)
-	_beacon_t = 0.0
-
-
-## code_or_ip: 방 코드 4자리 또는 방장 IP (예: 192.168.0.12)
-func join_room(nick: String, c: String, code_or_ip: String) -> void:
-	var s := code_or_ip.strip_edges().to_upper()
-	if s.is_valid_ip_address():
-		_connect_to(s, nick, c, "")
-		return
-	if not _valid_code(s):
-		status.emit("방 코드 4자리를 입력하세요.")
-		return
-	_close_udp()
-	_udp = PacketPeerUDP.new()
-	if _udp.bind(int(GameData.NET.disc_port)) != OK:
-		_udp = null
-		status.emit("방을 찾을 수 없어요. 방장 IP를 직접 넣어 보세요.")
+	if not rtc_ok():
+		status.emit(NO_RTC)
 		return
 	my_name = _nick(nick)
 	cls = c
+	code = gen_code()
+	_opening = true
+	_open_sig()
+	if _sig:
+		status.emit("방 여는 중…")
+
+
+func join_room(nick: String, c: String, room: String) -> void:
+	var s := room.strip_edges().to_upper()
+	if not _valid_code(s):
+		status.emit("방 코드 4자리를 입력하세요.")
+		return
+	if not rtc_ok():
+		status.emit(NO_RTC)
+		return
+	if on:
+		return
+	_shutdown()
+	my_name = _nick(nick)
+	cls = c
 	code = s
+	_sid = "%08x%08x" % [randi(), randi()]
+	_my_id = 0
 	_find_t = float(GameData.NET.find_timeout)
-	status.emit("같은 와이파이에서 방 %s을(를) 찾는 중…" % s)
+	_hi_t = 0.0
+	_open_sig()
+	if _sig:
+		status.emit("방 %s을(를) 찾는 중…" % s)
 
 
 static func _valid_code(s: String) -> bool:
@@ -176,20 +190,6 @@ static func _valid_code(s: String) -> bool:
 	return true
 
 
-func _connect_to(ip: String, nick: String, c: String, room: String) -> void:
-	var N: Dictionary = GameData.NET
-	var peer := ENetMultiplayerPeer.new()
-	if peer.create_client(ip, int(N.port)) != OK:
-		status.emit("방에 들어가지 못했어요.")
-		return
-	multiplayer.multiplayer_peer = peer
-	_joining = true
-	my_name = _nick(nick)
-	cls = c
-	code = room
-	status.emit("연결하는 중…")
-
-
 static func _nick(n: String) -> String:
 	n = n.strip_edges().substr(0, int(GameData.NET.name_max))
 	return n if n != "" else "기사%d" % randi_range(10, 99)
@@ -197,6 +197,9 @@ static func _nick(n: String) -> String:
 
 func _on_connected() -> void:
 	_joining = false
+	if _sig:  # 이제 방장과 직접 이어졌으니 신호 채널은 닫는다 (Supabase 동시 접속 수 아끼기)
+		_sig.close()
+		_sig = null
 	_begin(my_name, cls, code, false)
 	_hello_all()
 
@@ -226,10 +229,12 @@ func _begin(nick: String, c: String, room: String, host: bool) -> void:
 
 
 func leave() -> void:
-	if not on and not _joining and _udp == null:
+	if not on and not _joining and _sig == null:
 		return
+	var was_on := on
 	_shutdown()
-	main.leave_mp()
+	if was_on:
+		main.leave_mp()
 
 
 func _close(reason: String) -> void:
@@ -240,20 +245,31 @@ func _close(reason: String) -> void:
 
 
 func _fail(text: String) -> void:
+	if on:  # 방 안에 있다가 끊김 → 방 닫힘과 같게
+		_close(text)
+		return
 	_joining = false
 	_shutdown()
 	status.emit(text)
 
 
 func _shutdown() -> void:
-	_close_udp()
+	if _sig:
+		_sig.close()
+	_sig = null
+	_opening = false
+	_find_t = 0.0
+	_my_id = 0
+	_sig_retry_t = 0.0
 	for p: int in remotes.keys():
 		_remove_remote(p)
 	info.clear()
 	bot_roster = []
+	_conns.clear()
 	if multiplayer.multiplayer_peer and not multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	_rtc = null
 	on = false
 	is_host = false
 	_joining = false
@@ -261,14 +277,182 @@ func _shutdown() -> void:
 		combat.net = null
 
 
-func _close_udp() -> void:
-	if _udp:
-		_udp.close()
-	_udp = null
+# ── 신호 (Supabase Realtime 방 채널) ─────────────────────────
+func _open_sig() -> void:
+	var s := NetSignal.new()
+	_sig = s
+	s.joined.connect(_on_sig_joined)
+	s.message.connect(_on_sig)
+	s.failed.connect(_on_sig_failed.bind(s))
+	s.open(code)
+
+
+func _on_sig_joined() -> void:
+	if not _opening:
+		return
+	_opening = false  # 방장: 채널에 들어갔으니 방을 연다
+	_rtc = WebRTCMultiplayerPeer.new()
+	_rtc.create_server()
+	multiplayer.multiplayer_peer = _rtc
+	_next_id = 2
+	_begin(my_name, cls, code, true)
+
+
+func _on_sig_failed(reason: String, s: NetSignal) -> void:
+	if _sig != s:
+		return
+	_sig = null
+	if is_host and on:  # 방은 그대로 두고 잠깐 뒤 다시 들어감
+		_sig_retry_t = 3.0
+		return
+	if _opening or not on:
+		_fail(reason)
+
+
+func _send_sig(d: Dictionary) -> void:
+	if _sig:
+		d["from"] = 1 if is_host or _opening else _my_id
+		_sig.send(d)
+
+
+func _on_sig(d: Dictionary) -> void:
+	var k := str(d.get("k", ""))
+	var from := int(d.get("from", 0))
+	if is_host:
+		if not on:
+			return
+		match k:
+			"hi":  # 새 친구: 번호를 주고 연결 제안(offer)을 만든다
+				var sid := str(d.get("sid", ""))
+				if sid == "":
+					return
+				for id: int in _conns:
+					if _conns[id].sid == sid:  # 대답을 못 받아서 또 물어봄
+						_send_sig({"k": "id", "to": sid, "id": id})
+						return
+				if _conns.size() >= int(GameData.NET.max_players) - 1:
+					_send_sig({"k": "full", "to": sid})
+					return
+				var nid := _next_id
+				_next_id += 1
+				_send_sig({"k": "id", "to": sid, "id": nid})
+				var pc := _new_pc(nid, sid)
+				_rtc.add_peer(pc, nid)
+				pc.create_offer()
+			"sdp":
+				if _conns.has(from) and int(d.get("to", 0)) == 1:
+					_set_remote(from, d)
+			"ice":
+				if _conns.has(from) and int(d.get("to", 0)) == 1:
+					_add_ice(from, d)
+		return
+	match k:
+		"id":
+			if str(d.get("to", "")) == _sid and _my_id == 0 and from == 1:
+				_start_client(int(d.get("id", 0)))
+		"full":
+			if str(d.get("to", "")) == _sid and _my_id == 0:
+				_fail("방이 꽉 찼어요 (최대 %d명)" % int(GameData.NET.max_players))
+		"sdp":
+			if _my_id != 0 and from == 1 and int(d.get("to", 0)) == _my_id:
+				_set_remote(1, d)
+		"ice":
+			if _my_id != 0 and from == 1 and int(d.get("to", 0)) == _my_id:
+				_add_ice(1, d)
+
+
+## 친구: 방장이 번호를 줬다 → 그 번호로 WebRTC 클라이언트가 되어 방장(1)의 제안을 기다림
+func _start_client(id: int) -> void:
+	if id < 2:
+		return
+	_my_id = id
+	_rtc = WebRTCMultiplayerPeer.new()
+	_rtc.create_client(id)
+	var pc := _new_pc(1, "")
+	_rtc.add_peer(pc, 1)
+	multiplayer.multiplayer_peer = _rtc
+	_joining = true
+	_conn_t = float(GameData.NET.connect_timeout)
+	status.emit("방장과 연결하는 중…")
+
+
+## 상대(peer)와 잇는 연결 하나. 만든 설명(SDP)·후보(ICE)는 신호 채널로 상대에게 보낸다
+func _new_pc(peer: int, sid: String) -> WebRTCPeerConnection:
+	var pc := WebRTCPeerConnection.new()
+	pc.initialize({"iceServers": _ice()})
+	_conns[peer] = {"pc": pc, "sid": sid, "t": 0.0, "ice": [], "remote": false, "ok": false}
+	pc.session_description_created.connect(func(type: String, sdp: String) -> void:
+		if not _conns.has(peer) or _conns[peer].pc != pc:
+			return
+		pc.set_local_description(type, sdp)
+		_send_sig({"k": "sdp", "to": peer, "type": type, "sdp": sdp}))
+	pc.ice_candidate_created.connect(func(mid: String, idx: int, cand: String) -> void:
+		if _conns.has(peer) and _conns[peer].pc == pc:
+			_send_sig({"k": "ice", "to": peer, "mid": mid, "idx": idx, "c": cand}))
+	return pc
+
+
+func _set_remote(peer: int, d: Dictionary) -> void:
+	var c: Dictionary = _conns[peer]
+	if c.remote:
+		return
+	var pc: WebRTCPeerConnection = c.pc
+	pc.set_remote_description(str(d.get("type", "")), str(d.get("sdp", "")))  # offer를 받으면 answer를 알아서 만든다
+	c.remote = true
+	for x: Dictionary in c.ice:  # 설명보다 먼저 온 후보
+		pc.add_ice_candidate(str(x.get("mid", "")), int(x.get("idx", 0)), str(x.get("c", "")))
+	c.ice = []
+
+
+func _add_ice(peer: int, d: Dictionary) -> void:
+	var c: Dictionary = _conns[peer]
+	if not c.remote:
+		(c.ice as Array).append(d)
+		return
+	(c.pc as WebRTCPeerConnection).add_ice_candidate(str(d.get("mid", "")), int(d.get("idx", 0)), str(d.get("c", "")))
+
+
+## 매 프레임: 신호 채널, 방 찾기·연결 기다리기, 방장의 다시 들어가기·안 이어진 연결 치우기
+func _poll_sig(dt: float) -> void:
+	var s := _sig  # 콜백에서 _sig가 null이 돼도 poll 도중 사라지지 않게
+	if s:
+		s.poll(dt)
+	var N: Dictionary = GameData.NET
+	if is_host and on:
+		if _sig == null:
+			_sig_retry_t -= dt
+			if _sig_retry_t <= 0:
+				_open_sig()
+		for id: int in _conns.keys():
+			var c: Dictionary = _conns[id]
+			if c.ok:
+				continue
+			c.t = float(c.t) + dt
+			if float(c.t) > float(N.connect_timeout) + 5.0:  # 끝내 안 이어진 친구 자리 비우기
+				_conns.erase(id)
+				if _rtc and _rtc.has_peer(id):
+					_rtc.remove_peer(id)
+		return
+	if on:
+		return
+	if _my_id == 0 and _sig and _sig.state == "ready":
+		_hi_t -= dt
+		if _hi_t <= 0:
+			_hi_t = float(N.hi_every)
+			_sig.send({"k": "hi", "sid": _sid})
+		_find_t -= dt
+		if _find_t <= 0:
+			_fail("방 %s을(를) 찾지 못했어요. 코드를 다시 확인해 주세요." % code)
+	elif _joining:
+		_conn_t -= dt
+		if _conn_t <= 0:
+			_fail(NO_LINK)
 
 
 # ── 사람 들어오고 나가기 ─────────────────────────────────────
 func _on_peer_connected(id: int) -> void:
+	if _conns.has(id):  # 방장: 직접 연결 완료 (더는 기다리지 않음)
+		_conns[id].ok = true
 	if on:  # 새로 온 사람에게 내 소개 (서버가 다른 친구에게도 전해 준다)
 		_hello.rpc_id(id, _my_info())
 		if is_host:
@@ -277,6 +461,8 @@ func _on_peer_connected(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	if is_host:
+		_conns.erase(id)
 	_remove_remote(id)
 	info.erase(id)
 	lobby_changed.emit()
@@ -512,7 +698,7 @@ func _mt(mt: Dictionary) -> void:
 
 # ── 매 프레임 ────────────────────────────────────────────────
 func _physics_process(dt: float) -> void:
-	_poll_udp(dt)
+	_poll_sig(dt)
 	if not on:
 		return
 	for id: int in remotes:
@@ -559,34 +745,6 @@ func _host_tick(dt: float) -> void:
 	if _mt_t <= 0:  # 시간 맞추기 겸 1초마다
 		_mt_t = 1.0
 		_mt.rpc(_mt_dict())
-
-
-## 방장: 방송 보내기 / 친구: 방송 듣고 코드가 맞는 방에 접속 (HTML의 방 코드 대신)
-func _poll_udp(dt: float) -> void:
-	if not _udp:
-		return
-	var N: Dictionary = GameData.NET
-	if is_host and on:
-		_beacon_t -= dt
-		if _beacon_t <= 0:
-			_beacon_t = float(N.beacon_every)
-			var msg := ("%s|%s|%d" % [N.beacon_tag, code, int(N.port)]).to_utf8_buffer()
-			for addr in ["255.255.255.255", "127.0.0.1"]:  # 같은 컴퓨터에서 창 두 개로 시험할 때도 찾게
-				_udp.set_dest_address(addr, int(N.disc_port))
-				_udp.put_packet(msg)
-		return
-	_find_t -= dt
-	while _udp and _udp.get_available_packet_count() > 0:
-		var pkt := _udp.get_packet().get_string_from_utf8()
-		var ip := _udp.get_packet_ip()
-		var parts := pkt.split("|")
-		if parts.size() == 3 and parts[0] == N.beacon_tag and parts[1] == code:
-			_close_udp()
-			_connect_to(ip, my_name, cls, code)
-			return
-	if _find_t <= 0:
-		_close_udp()
-		status.emit("방 %s을(를) 찾지 못했어요. 코드를 확인하거나 방장 IP를 직접 넣어 보세요." % code)
 
 
 # ── 내 상태 보내기 / 남의 상태 따라가기 (HTML mpTick / applyRemote) ──
@@ -641,7 +799,7 @@ func _bots(arr: Array) -> void:
 		e.deaths = int(st[15])
 
 
-## 친구: 방장 쟁탈전 상태 (작아서 믿을 수 있게 보냄 — unreliable은 reliable 사건 뒤로 밀리면 ENet이 버린다)
+## 친구: 방장 쟁탈전 상태 (작아서 믿을 수 있게 보냄 — unreliable은 reliable 사건 뒤로 밀리면 버려질 수 있다)
 @rpc("authority", "reliable")
 func _cm(snap: Array) -> void:
 	if main.mode and main.mode.follower and main.state in ["playing", "paused"]:

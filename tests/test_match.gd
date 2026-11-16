@@ -71,7 +71,7 @@ func _run() -> void:
 		and M._main_signs.friend.face.board.paint.a == 0, "")
 	check("메인: 오늘의 팁은 목록 중 하나", MM.tips.has(M._tip_label.text), M._tip_label.text)
 	check("메인: 화면 전체 그늘 대신 왼쪽만 어둡게", not M.screens.menu.get_meta("bg").visible, "")
-	check("메인: 버전 + 친구대전 안내 (PC)", M._main_foot.text.begins_with(G.VERSION) and M._main_foot.text.contains("와이파이"), M._main_foot.text)
+	check("메인: 버전 + 온라인 친구대전 안내", M._main_foot.text.begins_with(G.VERSION) and M._main_foot.text.contains("온라인"), M._main_foot.text)
 	check("메인: 병과 무리 4명이 움직임", M._crowd.active and M._crowd.models.size() == 4
 		and M._crowd.render_target_update_mode == SubViewport.UPDATE_ALWAYS, "")
 	M._main_signs.ranked.pressed.emit()

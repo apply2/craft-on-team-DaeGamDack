@@ -26,7 +26,7 @@ Three.js로 만든 HTML 프로토타입을 **Godot 4.7**로 옮긴 프로젝트�
 ### 모드
 - **AI대전 개인전** — 봇 7명과 4분 동안, 먼저 20킬이면 끝
 - **AI대전 쟁탈전 (5:5)** — 가운데 우물 광장 거점을 점령하는 3판 2선승
-- **친구대전** — 같은 와이파이에서 방 코드 4자리로 (PC 버전만). 개인전·쟁탈전 둘 다, 빈자리는 봇이 채움
+- **친구대전 (온라인)** — 방 코드 4자리로, 인터넷만 되면 웹·PC 어디서든 (웹과 PC가 섞여도 됨). 개인전·쟁탈전 둘 다, 빈자리는 봇이 채움
 - 봇 난이도: 쉬움 / 보통 / 어려움
 
 ### 특수 아이템
@@ -73,18 +73,32 @@ godot --headless --path . --export-release "Web" export/web/index.html
 cd export/web && python -m http.server 8060   # 브라우저로 http://localhost:8060
 ```
 
-스레드 없는 빌드라 특별한 서버 설정(COOP/COEP) 없이 GitHub Pages·itch.io에 그대로 올릴 수 있습니다.
-웹에서는 친구대전을 쓸 수 없습니다.
+스레드 없는 빌드라 특별한 서버 설정(COOP/COEP) 없이 Vercel·GitHub Pages·itch.io에 그대로 올릴 수 있습니다.
 
-### Windows exe로 내보내기 (친구대전용)
+### 웹으로 올리기 (Vercel, 무료)
+[Node.js](https://nodejs.org/)가 깔려 있어야 합니다. 처음 한 번은 Vercel 로그인을 물어봅니다.
+
+```bash
+npx vercel deploy export/web --prod
+```
+
+끝나면 `https://○○○.vercel.app` 주소가 나옵니다. 이 주소를 친구에게 보내면 됩니다. 다시 올릴 때도 같은 명령을 씁니다.
+
+### 친구대전이 돌아가는 방식
+- 게임 데이터는 **방장 ↔ 친구가 WebRTC로 직접** 주고받습니다. 게임 서버를 따로 띄우지 않습니다.
+- 처음에 서로를 찾을 때만 **Supabase Realtime**(무료)으로 짧은 연결 정보를 주고받습니다. 주소와 공개 키는 `scripts/game_data.gd`의 `NET.supabase_url`·`supabase_key`에 있습니다.
+- 학교·회사 와이파이처럼 막힌 망에서는 직접 연결이 안 될 수 있습니다. 그럴 땐 휴대폰 핫스팟 같은 다른 인터넷으로 해 보세요.
+- 방장이 나가면 방이 닫힙니다.
+
+### Windows exe로 내보내기
 
 ```bash
 godot --headless --path . --export-release "Windows" "export/windows/중세난장판.exe"
 ```
 
-exe 하나에 게임 데이터가 다 들어 있어서 이 파일만 친구에게 주면 됩니다.
+exe에 게임 데이터가 다 들어 있습니다. 옆에 같이 나오는 `libwebrtc_native.windows.template_release.x86_64.dll`(친구대전용)과 **함께** zip으로 묶어서 주세요.
 - 처음 실행할 때 Windows SmartScreen이 막으면 "추가 정보 → 실행"을 누릅니다 (코드 서명을 안 해서).
-- 방을 처음 만들 때 방화벽이 물어보면 **개인 네트워크 허용**을 눌러야 친구가 들어올 수 있습니다 (포트 24680·24681).
+- 방화벽이 물어보면 허용을 눌러 주세요.
 
 ---
 
@@ -111,10 +125,11 @@ project.godot          프로젝트 설정 (렌더러 Compatibility, 물리 Jolt
 scenes/                main.tscn (게임 전체), player.tscn (캐릭터)
 scripts/game_data.gd   ★ 모든 수치·병과·무기·색. 밸런스는 이 파일만 고치면 됨
 scripts/               전투(combat), 캐릭터(player·derp_model), 봇(bot_ai), 맵(world_builder·maps/),
-                       아이템(items), 친구대전(net), HUD·메뉴(hud·menu·ui_kit·ui/), 소리(sfx·music)
+                       아이템(items), 친구대전(net·net_signal), HUD·메뉴(hud·menu·ui_kit·ui/), 소리(sfx·music)
 shaders/               맵 무늬 (벽돌·판자·기와·잔디 …)
 audio/                 배경음악·효과음
 fonts/                 도현·개구·Noto (모두 OFL)
+addons/webrtc_native/  PC 버전 친구대전용 WebRTC (웹은 브라우저 것을 씀)
 tests/                 자동 테스트 · 사진 찍는 스크립트 · 성능 측정
 reference/             원본 HTML 프로토타입, UI 시안
 ```
@@ -133,3 +148,4 @@ reference/             원본 HTML 프로토타입, UI 시안
 
 - 글꼴: [도현](https://fonts.google.com/specimen/Do+Hyeon), [개구](https://fonts.google.com/specimen/Gaegu), Noto Sans — 모두 SIL Open Font License (`fonts/OFL*.txt`)
 - 효과음: 직접 만든 소리 (`audio/sfx/`)
+- PC 친구대전 WebRTC: [godotengine/webrtc-native](https://github.com/godotengine/webrtc-native) 1.2.2 — MIT (`addons/webrtc_native/LICENSE.*`)

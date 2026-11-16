@@ -1,14 +1,16 @@
 extends SceneTree
-## 친구대전(LAN) 자동 테스트 — 한 프로세스에 Main을 둘 띄우고(방장 A, 친구 B) 서로 다른 SceneMultiplayer로 잇는다.
-## 방 코드로 찾기, 대기실, 경기 시작, 위치 따라가기, 투사체(맞은 쪽 판정)·저격총(쏜 쪽 판정)·처치 수,
+## 친구대전(온라인) 자동 테스트 — 한 프로세스에 Main을 둘 띄우고(방장 A, 친구 B) 서로 다른 SceneMultiplayer로 잇는다.
+## 신호는 가짜 Supabase 서버(tests/mock_signal.gd, 포트 24690), 게임 데이터는 진짜 WebRTC(addons/webrtc_native)로 오간다.
+## 서버 설정 없음·없는 방 코드·서버가 안 받아 줌, 방 코드로 찾기, 대기실, 경기 시작, 위치 따라가기, 투사체(맞은 쪽 판정)·저격총(쏜 쪽 판정)·처치 수,
 ## 아이템 줍기 허락, 시간 끝나면 경기 끝, 나가기·방 닫힘을 확인한다.
-## 실행: godot --headless --fixed-fps 60 --path . -s tests/test_net.gd
+## 실행: godot --headless --fixed-fps 60 --path . -s tests/test_net.gd   (처음 받은 저장소면 먼저 godot --headless --editor --path . --quit)
 ## 통과하면 "ALL PASS"와 종료 코드 0, 실패하면 FAIL 줄과 종료 코드 1.
 
 var G: Node
 var A: Node   # 방장 Main
 var B: Node   # 친구 Main
 var fails := 0
+var S: Node   # 가짜 신호 서버
 
 const IDLE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false}
 const FIRE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "fire": true}
@@ -23,6 +25,11 @@ func _initialize() -> void:
 	G.third_person = false
 	G.difficulty = "normal"
 	G.chosen_cls = "archer"
+	S = load("res://tests/mock_signal.gd").new()
+	root.add_child(S)
+	if S.start(24690) != OK:
+		print("FAIL 가짜 신호 서버를 못 엶 (포트 24690)")
+	G.ice_override = []  # 같은 컴퓨터 안이라 STUN 없이
 	A = _make("A")
 	B = _make("B")
 	G.ai_enabled = false
@@ -75,20 +82,48 @@ func _run() -> void:
 	var pa = A.player
 	var pb = B.player
 
-	# ── 방 만들기 ──
+	# ── 서버 설정이 없으면 알려 줌 ──
+	check("WebRTC 쓸 수 있음 (webrtc_native)", na.rtc_ok(), "")
+	G.signal_url_override = "off"
+	var said := [""]
+	na.status.connect(func(t: String) -> void: said[0] = t)
 	na.host_room("방장", "archer")
 	await wait(2)
+	check("서버 설정 없음 → 방 안 열림 + 안내", not na.on and said[0].contains("설정"), said[0])
+	G.signal_url_override = "ws://127.0.0.1:24690"
+
+	# ── 서버가 방 채널을 안 받아 줌 ──
+	S.reject_join = true
+	na.host_room("방장", "archer")
+	await wait_until(func(): return not said[0].contains("여는"), 120)
+	check("채널 거절 → 방 안 열림 + 안내", not na.on and said[0].contains("들어가지 못했"), said[0])
+	S.reject_join = false
+
+	# ── 없는 방 코드 ──
+	var said_b := [""]
+	nb.status.connect(func(t: String) -> void: said_b[0] = t)
+	nb.join_room("친구", "barbarian", "ZZZZ")
+	await wait(10)
+	check("찾는 중 안내", said_b[0].contains("찾는 중"), said_b[0])
+	await wait_until(func(): return not said_b[0].contains("찾는 중"), int(G.NET.find_timeout * 60) + 120)
+	await wait(5)
+	check("없는 방 → 못 찾음 안내, 신호 채널 닫음", not nb.on and said_b[0].contains("찾지 못했") and S.joined_count() == 0, said_b[0])
+	nb.join_room("친구", "barbarian", "AB")
+	check("코드가 4자리가 아니면 안내", said_b[0].contains("4자리"), said_b[0])
+
+	# ── 방 만들기 ──
+	na.host_room("방장", "archer")
+	await wait_until(func(): return na.on, 120)
 	check("방장: 방이 열림", na.on and na.is_host and na.code.length() == 4, "code=%s" % na.code)
+	check("방장은 신호 채널에 남아 있음", S.joined_count() == 1, "n=%d" % S.joined_count())
 	check("방장: 대기실 화면, 봇 빠짐", A.state == "menu" and A.menu.cur_page == "lobby" and A.combat.ents.size() == 1, "ents=%d" % A.combat.ents.size())
 
 	# ── 코드로 찾아 들어가기 ──
 	nb.join_room("  친구  ", "barbarian", na.code.to_lower())
-	var found: bool = await wait_until(func(): return nb.on, 300)
-	if not found:  # 방송이 막힌 환경이면 IP로라도 들어가서 나머지를 시험
-		print("NOTE 방송으로 못 찾음 → 127.0.0.1로 접속")
-		nb.join_room("친구", "barbarian", "127.0.0.1")
-		found = await wait_until(func(): return nb.on, 300)
-	check("친구: 방 코드로 찾아 들어감", found and not nb.is_host and nb.code == na.code, "code=%s" % nb.code)
+	var found: bool = await wait_until(func(): return nb.on, 600)
+	check("친구: 방 코드로 찾아 들어감 (WebRTC 직접 연결)", found and not nb.is_host and nb.code == na.code and nb.me_id() >= 2, "code=%s id=%d" % [nb.code, nb.me_id()])
+	await wait(5)
+	check("연결되면 친구는 신호 채널을 닫음", S.joined_count() == 1, "n=%d" % S.joined_count())
 	await wait_until(func(): return na.remotes.size() == 1 and nb.remotes.size() == 1 and na.info.size() == 1 and nb.info.size() == 1, 120)
 	var la: Array = na.lobby_list()
 	var lb: Array = nb.lobby_list()
@@ -189,13 +224,17 @@ func _run() -> void:
 	check("방장 쪽에서 친구가 사라짐", na.remotes.is_empty() and na.lobby_list().size() == 1, "")
 
 	# ── 방장이 방을 닫으면 친구는 쫓겨남 ──
-	nb.join_room("친구", "archer", "127.0.0.1")
-	await wait_until(func(): return nb.on and na.remotes.size() == 1, 300)
-	check("다시 들어감 (IP로)", nb.on and na.remotes.size() == 1, "")
+	nb.join_room("친구", "archer", na.code)
+	await wait_until(func(): return nb.on and na.remotes.size() == 1, 600)
+	check("다시 들어감 (새 번호)", nb.on and na.remotes.size() == 1 and nb.me_id() == 3, "id=%d" % nb.me_id())
 	na.leave()
 	var kicked: bool = await wait_until(func(): return not nb.on, 300)
 	check("방장이 나가면 친구도 방에서 나옴", kicked and B.state == "menu" and B.menu.cur_page == "main", B.menu.cur_page)
 	check("방장도 봇이 돌아옴", not na.on and A.combat.ents.size() == 8, "ents=%d" % A.combat.ents.size())
+	await wait(5)
+	check("방이 닫히면 신호 채널에 아무도 없음", S.joined_count() == 0, "n=%d" % S.joined_count())
+	print("신호 중계 %d개" % S.sent)
+	S.stop()
 
 	print("ALL PASS" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
