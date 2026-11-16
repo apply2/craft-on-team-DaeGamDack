@@ -19,7 +19,7 @@ func _init(conf: Dictionary) -> void:
 	size = Vector2i(conf.px)
 	transparent_bg = true
 	own_world_3d = true
-	msaa_3d = Viewport.MSAA_2X
+	msaa_3d = Viewport.MSAA_2X if GameData.msaa_now() >= 2 else Viewport.MSAA_DISABLED  # 웹 보통 이하는 끔
 	render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 

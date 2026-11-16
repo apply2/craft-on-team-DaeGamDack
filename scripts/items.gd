@@ -33,6 +33,7 @@ func _ready() -> void:
 		var g := Node3D.new()
 		add_child(g)
 		var h := WeaponModels.make_horse(true)
+		Meshes.merge_tree(h.g, {h.tail: true, h.lance: true})  # 웹 최적화: 움직이지 않는 조각 합치기 (꼬리는 따로 흔들림, 창은 held_lance가 조각을 봄)
 		g.add_child(h.g)
 		hd.model = h
 		hd.group = g
@@ -75,6 +76,7 @@ func _build_gun_item(it: Dictionary, key: String, scl: float, pillar_hex: int, r
 		WeaponModels.make_sniper(gun)
 	else:
 		WeaponModels.make_ak(gun)
+	Meshes.merge_tree(gun)  # 웹 최적화
 	it.pillar = _pillar(g, 0.7, pillar_hex, 0.28)
 	var rmt := StandardMaterial3D.new()
 	rmt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -288,6 +290,7 @@ func spawn_chicken(pos: Vector3, no_pick := 0.0) -> void:
 	cs.position.y = 0.875
 	body.add_child(cs)
 	var c := WeaponModels.make_chicken()
+	Meshes.merge_tree(c.g)  # 웹 최적화: 날개·머리 안쪽 조각끼리 합치기
 	body.add_child(c.g)
 	add_child(body)
 	body.global_position = pos
@@ -404,6 +407,7 @@ func mount(e: PlayerController, hd: Dictionary = {}) -> void:
 	e.sliding = false
 	e.fall_t = 0.0
 	var h := WeaponModels.make_horse(true)
+	Meshes.merge_tree(h.g, {h.tail: true, h.lance: true})  # 웹 최적화: 움직이지 않는 조각 합치기 (꼬리는 따로 흔들림, 창은 held_lance가 조각을 봄)
 	held_lance(h)
 	add_child(h.g)
 	(h.g as Node3D).global_position = e.global_position
@@ -539,6 +543,7 @@ func update_horses(dt: float) -> void:
 			if e.alive and e.mounted > 0:
 				if e.horse.is_empty():
 					var h := WeaponModels.make_horse(true)
+					Meshes.merge_tree(h.g, {h.tail: true, h.lance: true})  # 웹 최적화: 움직이지 않는 조각 합치기 (꼬리는 따로 흔들림, 창은 held_lance가 조각을 봄)
 					held_lance(h)
 					add_child(h.g)
 					e.horse = h

@@ -57,6 +57,29 @@ static func make_arrow(kind: String, mat: Callable = _default_mat) -> Node3D:
 	return g
 
 
+## 날아가는·꽂힌 화살 (웹 최적화): make_arrow의 조각 4개를 메시 하나로 (그리기 4번 → 1번). 작아서 그림자도 끔.
+## 합친 메시는 종류마다 한 번만 만들어 같이 쓴다. 1인칭 손(ViewModel)은 그대로 make_arrow.
+static var _arrow_mesh := {}
+
+
+static func make_arrow_fast(kind: String) -> Node3D:
+	if not _arrow_mesh.has(kind):
+		var src := make_arrow(kind)
+		var items := []
+		for c in src.get_children():
+			var mi := c as MeshInstance3D
+			items.append([mi.mesh, (mi.material_override as StandardMaterial3D).albedo_color, mi.transform])
+		_arrow_mesh[kind] = Meshes.merge(items, true)
+		src.free()
+	var g := Node3D.new()
+	var out := MeshInstance3D.new()
+	out.mesh = _arrow_mesh[kind]
+	out.material_override = Meshes.shared_vc_mat()
+	out.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	g.add_child(out)
+	return g
+
+
 ## 3인칭 캐릭터 손에 든 활 — HTML makeWeapon('bow')
 static func make_bow(parent: Node3D, mat: Callable = _default_mat) -> void:
 	var R := 0.42

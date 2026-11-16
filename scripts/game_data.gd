@@ -424,11 +424,12 @@ const DECO := {
 
 # ── 그래픽 품질 (설정 화면, user://settings.cfg) — 사용자 요청 ──
 # grass: 잔디 비율 (DECO.grass_density에 곱함), clutter: 작은 소품(덩굴·꽃·횃불·현수막·덧문·자갈·들꽃), shadow_dist: 그림자 거리(0 = 끔)
-# msaa = 계단 현상 줄이기 (0 / 2 / 4배). web_msaa = 웹에서 (브라우저는 MSAA가 비싸서 보통까진 끔 — 사용자 "웹에서 렉" 피드백)
+# msaa = 계단 현상 줄이기 (0 / 2 / 4배). web_* = 웹에서 (브라우저는 그리기 호출·MSAA가 비싸서 — 사용자 "웹에서 렉" 피드백)
+# web_shadow_dist: 웹 그림자 거리 (보통 130m → 70m: 그림자 그리기 호출이 100번쯤 줄어듦)
 const GFX := {
-	"low": {"name": "낮음", "grass": 0.0, "clutter": false, "shadow_dist": 0.0, "msaa": 0, "web_msaa": 0},
-	"normal": {"name": "보통", "grass": 0.5, "clutter": true, "shadow_dist": 130.0, "msaa": 2, "web_msaa": 0},
-	"high": {"name": "높음", "grass": 1.0, "clutter": true, "shadow_dist": 220.0, "msaa": 2, "web_msaa": 2},
+	"low": {"name": "낮음", "grass": 0.0, "clutter": false, "shadow_dist": 0.0, "msaa": 0, "web_msaa": 0, "web_shadow_dist": 0.0},
+	"normal": {"name": "보통", "grass": 0.5, "clutter": true, "shadow_dist": 130.0, "msaa": 2, "web_msaa": 0, "web_shadow_dist": 70.0},
+	"high": {"name": "높음", "grass": 1.0, "clutter": true, "shadow_dist": 220.0, "msaa": 2, "web_msaa": 2, "web_shadow_dist": 220.0},
 }
 const GFX_ORDER := ["low", "normal", "high"]
 # 3D 해상도 (설정 화면 "해상도"). 1.0 = 화면 그대로, 0.5 = 가로세로 절반 (그리는 점 1/4). 글자·HUD는 그대로 선명
@@ -503,7 +504,7 @@ const HORSE_SPOTS := [Vector3(-30, 0, 0), Vector3(30, 0, -4), Vector3(2, 0, 30),
 
 # ── 매치·메뉴·HUD (HTML startMatch / startMenuSim / updateHUD / killfeed / banner / toast) ──
 ## 메인 메뉴 (마을 게시판 — reference/ui_design/Main.html, px는 1080 시안 × 0.667)
-const VERSION := "v0.3"
+const VERSION := "v0.4"
 const MAIN_MENU := {
 	"tips": [  # 오늘의 팁 (메인 화면을 열 때마다 하나, \n = 줄 바꿈 자리). 규칙이 바뀌면 같이 고칠 것
 		"달리다가 급하게 돌면\n넘어집니다. 진짜로.",
@@ -1010,6 +1011,11 @@ static func auto_res_scale(px: Vector2i) -> float:
 		if mp * s * s <= float(WEB_PERF.auto_mpix) * 1000000.0:
 			return s
 	return float(RES_SCALES[-1])
+
+
+## 지금 그래픽 품질의 그림자 거리 (웹은 web_shadow_dist, 0 = 그림자 끔)
+func shadow_dist_now() -> float:
+	return float(gfx().web_shadow_dist if OS.has_feature("web") else gfx().shadow_dist)
 
 
 ## 지금 그래픽 품질의 MSAA 배수 (웹은 web_msaa)

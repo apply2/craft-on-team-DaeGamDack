@@ -602,7 +602,7 @@ TABS 느낌 로우폴리 + 굵은 줄눈·또렷한 모양. **겉모양만** 바
   - 오른쪽 위 "오늘의 팁"(못 1, +2.5°): `MAIN_MENU.tips`에서 메인을 열 때마다 하나. 줄 바꿈은 \n으로 직접 (개구가 브라우저보다 넓어서 자동 줄바꿈이면 한 글자만 넘어감).
     규칙에 맞게 고친 것: 활은 "끝까지 당긴 채 3초"(slip_t는 다 당긴 뒤부터 셈), 성수는 "남이 던진" 웅덩이만 느려짐. 규칙이 바뀌면 팁도 고칠 것.
   - 오른쪽 병과 무리: `menu_crowd.gd` (야만인·궁수·음유시인·성직자, 느린 대기 = 몸 좌우·고개 까딱). `Menu._process`가 메인이 보일 때만 `set_active(true)`.
-  - 왼쪽 아래 "v0.3 · 온라인 친구대전 지원".
+  - 왼쪽 아래 "v0.4 · 온라인 친구대전 지원".
   - 사진: `tests/screenshot_ui.gd`가 main·main_hover를 찍고 팁마다 줄 수(OK/WRAP!)를 출력한다.
 - **병과 선택 (완료, 시안 ClassSelect)**: `menu._build_class` — 화면 전체 Control(시안 좌표 1280×720 가운데 맞춤), 배경 `UiKit.Wall`(판자벽). 수치·문구는 `GameData.CLASS_PAGE`.
   - 메뉴 그늘을 끄는 페이지 = `Menu.FULL_PAGES` (main·class).
@@ -690,6 +690,12 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
     웹에서 직접 고른 적이 없으면(`res_scale_saved`) 브라우저 화면 점 수로 자동 (`auto_res_scale` — `WEB_PERF.auto_mpix` 190만 점 이하: 720p 100%, 1080p 85%, 1440p 70%, 4K 50%). 브라우저 화면은 창 전체 × 화면 배율이라 PC 창 1280x720보다 점이 몇 배 많다.
   - **MSAA**는 그래픽 품질에 따라 (`GFX.*.msaa`, 웹은 `web_msaa` — 보통까지 끔). 예전엔 project.godot의 2배가 늘 켜져 있었다.
   - 웹은 `Engine.max_physics_steps_per_frame = WEB_PERF.max_physics_steps`(3): 느린 프레임 뒤에 물리를 8번까지 몰아 돌려 더 느려지는 걸 막음.
+  - **그리기 호출 줄이기 2** (사용자 "PC는 부드러운데 웹만 메뉴부터 30fps 아래" — 브라우저는 그리기 호출 하나하나가 비쌈. 메뉴 약 480 → 400번, 웹 그림자까지 하면 약 300번):
+    - 날아가는·꽂힌 화살 = `WeaponModels.make_arrow_fast` (조각 4개 → 합친 메시 1개, 종류마다 메시 하나를 같이 씀, 그림자 끔). 1인칭 손은 그대로 `make_arrow`.
+    - 맵의 말·닭·진열된 저격총/AK·던진 닭 = `Meshes.merge_tree(노드, skip)` (같은 부모의 움직이지 않는 조각끼리 합침, 정점 색 재질 `Meshes.shared_vc_mat`).
+      말은 꼬리(따로 흔들림)·마상창(`Items.held_lance`가 창끝 조각을 찾음)을 skip. 새 모델에 쓸 땐 따로 움직이는 MeshInstance3D를 skip에 넣을 것.
+    - 웹 그림자 거리 `GFX.*.web_shadow_dist` (보통 70m, 높음 220m) → `GameData.shadow_dist_now()`.
+    - 메뉴 병과 무리·병과 액자·결과 무대·1인칭 손 SubViewport의 MSAA도 `GameData.msaa_now()`를 따름.
 
 ## PC 내보내기 (exe)
 

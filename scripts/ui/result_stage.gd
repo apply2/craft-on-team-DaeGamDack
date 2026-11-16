@@ -25,7 +25,7 @@ func _ready() -> void:
 	size = Vector2i(r.size * 1.5)  # 1080p에서도 또렷하게
 	transparent_bg = true
 	own_world_3d = true
-	msaa_3d = Viewport.MSAA_2X
+	msaa_3d = Viewport.MSAA_2X if GameData.msaa_now() >= 2 else Viewport.MSAA_DISABLED  # 웹 보통 이하는 끔
 	render_target_update_mode = SubViewport.UPDATE_DISABLED
 	var env := Environment.new()
 	env.background_mode = Environment.BG_CLEAR_COLOR
