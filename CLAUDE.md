@@ -683,6 +683,13 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
     **새 HUD·UI 도형을 그릴 땐 draw_* 여러 번 대신 `UiKit.Tris`에 모아 `draw(self)` 한 번.** 볼록 다각형은 `poly`, 오목하면 `Geometry2D.triangulate_polygon` + `raw`.
   - 남은 큰 것: 캐릭터(한 명 15~25번 + 그림자, 삼각형 1.3만~2.5만), 그림자 패스(약 160번), 외곽선·그림자 있는 글자(줄마다 8~20번).
   - CPU(스크립트)는 물리 프레임 한 번에 0.5~1.5ms (봇 AI 절반) — `tests/perf_cpu.gd`. `Performance`의 TIME_* 값은 여러 물리 스텝을 묶어 세서 믿지 말 것.
+- **웹 렉 대응** (사용자 피드백 "웹에서 메뉴부터 뚝뚝 끊김"):
+  - **F3 = 성능 표시** (`scripts/ui/perf_hud.gd`, Main 아래 PerfHud, 저장 안 함): FPS·가장 느린 프레임, 평균 프레임·물리 한 번 시간·한 프레임에 물리 몇 번, 그리기 호출·삼각형, 3D 해상도·MSAA, 그래픽 카드 이름.
+    웹은 브라우저가 "WebKit WebGL"로 가려서 `WEBGL_debug_renderer_info`로 진짜 이름을 물어본다. SwiftShader·llvmpipe 같은 소프트웨어면 "하드웨어 가속이 꺼져 있어요" 경고 (`PERF_HUD.soft_gpu`).
+  - **3D 해상도** (설정 화면 "해상도" 100/85/70/50%, `GameData.RES_SCALES`, `[video] scale`): `Viewport.scaling_3d_scale` (Compatibility는 bilinear만). 글자·HUD는 그대로 선명.
+    웹에서 직접 고른 적이 없으면(`res_scale_saved`) 브라우저 화면 점 수로 자동 (`auto_res_scale` — `WEB_PERF.auto_mpix` 190만 점 이하: 720p 100%, 1080p 85%, 1440p 70%, 4K 50%). 브라우저 화면은 창 전체 × 화면 배율이라 PC 창 1280x720보다 점이 몇 배 많다.
+  - **MSAA**는 그래픽 품질에 따라 (`GFX.*.msaa`, 웹은 `web_msaa` — 보통까지 끔). 예전엔 project.godot의 2배가 늘 켜져 있었다.
+  - 웹은 `Engine.max_physics_steps_per_frame = WEB_PERF.max_physics_steps`(3): 느린 프레임 뒤에 물리를 8번까지 몰아 돌려 더 느려지는 걸 막음.
 
 ## PC 내보내기 (exe)
 

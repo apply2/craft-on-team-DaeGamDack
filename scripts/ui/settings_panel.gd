@@ -14,6 +14,7 @@ var _sens_s: HSlider
 var _sens_o: Label
 var _view_btns := {}
 var _gfx_btns := {}
+var _res_btns := {}   # 3D 해상도 버튼 (RES_SCALES 값 → 버튼)
 var _vol := {}  # 키 → {s: HSlider, o: Label}
 var _body: VBoxContainer  # 나무판 안쪽 (쪽지들)
 
@@ -32,7 +33,7 @@ func _ready() -> void:
 	_body.add_child(top)
 	_build_sens(top)
 	_build_view(top)
-	_build_gfx()
+	_build_res(_build_gfx())
 	_build_volume()
 	if show_keys:
 		_build_keys()
@@ -134,9 +135,10 @@ func _build_view(parent: Node) -> void:
 
 
 ## 그래픽 품질 낮음 / 보통 / 높음 (GameData.GFX — 잔디·작은 소품·그림자)
-func _build_gfx() -> void:
+func _build_gfx() -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
 	_body.add_child(row)
 	var sh := HBoxContainer.new()
 	sh.add_theme_constant_override("separation", 6)
@@ -152,10 +154,31 @@ func _build_gfx() -> void:
 			_sync_view())
 		sh.add_child(b)
 		_gfx_btns[q] = b
+	return row
 
 
-## 시점·그래픽 버튼 중 지금 것을 형광펜으로 (HTML .seg button[aria-pressed])
+## 3D 해상도 100 / 85 / 70 / 50% (GameData.RES_SCALES — 낮추면 덜 선명하지만 빨라짐, 글자·HUD는 그대로). 그래픽과 같은 줄
+func _build_res(row: HBoxContainer) -> void:
+	var sh := HBoxContainer.new()
+	sh.add_theme_constant_override("separation", 6)
+	_panel(row, Vector4(14, 11, 10, 7), -1.0).add_child(sh)
+	_title("해상도", sh)
+	var gap := Control.new()
+	gap.custom_minimum_size.x = 4
+	sh.add_child(gap)
+	for v: float in GameData.RES_SCALES:
+		var b := UiKit.ghost("%d%%" % roundi(v * 100.0), 16, Vector4(12, 6, 12, 6))
+		b.pressed.connect(func() -> void:
+			GameData.set_res_scale(v)
+			_sync_view())
+		sh.add_child(b)
+		_res_btns[v] = b
+
+
+## 시점·그래픽·해상도 버튼 중 지금 것을 형광펜으로 (HTML .seg button[aria-pressed])
 func _sync_view() -> void:
+	for k: float in _res_btns:
+		(_res_btns[k] as UiKit.KitButton).selected = is_equal_approx(k, GameData.res_scale)
 	for k: String in _gfx_btns:
 		(_gfx_btns[k] as UiKit.KitButton).selected = k == GameData.gfx_quality
 	for k: String in _view_btns:

@@ -424,12 +424,22 @@ const DECO := {
 
 # ── 그래픽 품질 (설정 화면, user://settings.cfg) — 사용자 요청 ──
 # grass: 잔디 비율 (DECO.grass_density에 곱함), clutter: 작은 소품(덩굴·꽃·횃불·현수막·덧문·자갈·들꽃), shadow_dist: 그림자 거리(0 = 끔)
+# msaa = 계단 현상 줄이기 (0 / 2 / 4배). web_msaa = 웹에서 (브라우저는 MSAA가 비싸서 보통까진 끔 — 사용자 "웹에서 렉" 피드백)
 const GFX := {
-	"low": {"name": "낮음", "grass": 0.0, "clutter": false, "shadow_dist": 0.0},
-	"normal": {"name": "보통", "grass": 0.5, "clutter": true, "shadow_dist": 130.0},
-	"high": {"name": "높음", "grass": 1.0, "clutter": true, "shadow_dist": 220.0},
+	"low": {"name": "낮음", "grass": 0.0, "clutter": false, "shadow_dist": 0.0, "msaa": 0, "web_msaa": 0},
+	"normal": {"name": "보통", "grass": 0.5, "clutter": true, "shadow_dist": 130.0, "msaa": 2, "web_msaa": 0},
+	"high": {"name": "높음", "grass": 1.0, "clutter": true, "shadow_dist": 220.0, "msaa": 2, "web_msaa": 2},
 }
 const GFX_ORDER := ["low", "normal", "high"]
+# 3D 해상도 (설정 화면 "해상도"). 1.0 = 화면 그대로, 0.5 = 가로세로 절반 (그리는 점 1/4). 글자·HUD는 그대로 선명
+const RES_SCALES := [1.0, 0.85, 0.7, 0.5]
+# 웹 전용: 프레임이 늦어도 물리를 한 프레임에 이만큼까지만 따라잡음 (기본 8 → 느린 프레임 뒤에 물리가 몰려서 더 느려지는 걸 막음)
+# auto_mpix: 웹에서 해상도를 직접 고르기 전엔, 3D로 그리는 점이 이만큼(백만 개)을 넘지 않게 RES_SCALES에서 골라 줌
+#   (브라우저 화면은 창 전체 × 화면 배율이라 PC 창 1280x720보다 점이 몇 배 많을 때가 많다)
+const WEB_PERF := {"max_physics_steps": 3, "auto_mpix": 1.9}
+# 성능 표시 (F3): 숫자 바꾸는 간격, 소프트웨어 그래픽(하드웨어 가속 꺼짐)으로 보는 이름
+const PERF_HUD := {"key": KEY_F3, "every": 0.5, "font": 14,
+	"soft_gpu": ["swiftshader", "llvmpipe", "basic render", "software", "softpipe"]}
 
 # 아이템이 나타나는 자리
 # ── 특수 아이템 (HTML updateChickens / updateSniper / updateAK / updateHorses / lanceCheck) ──
@@ -802,6 +812,8 @@ var settings_path := "user://settings.cfg"  # 테스트는 다른 파일로 바�
 var difficulty := "normal"
 var mode := "ffa"           # 지금 고른 게임 모드 (ffa 개인전 / control 쟁탈전)
 var gfx_quality := "normal"  # 그래픽 품질 (low / normal / high — GFX)
+var res_scale := 1.0         # 3D 해상도 (RES_SCALES 중 하나, [video] scale)
+var res_scale_saved := false # 설정 파일에 해상도가 있었나 (없으면 웹은 화면 크기로 자동)
 
 signal gfx_changed  # 그래픽 품질이 바뀜 (Main: 그림자, 맵: 잔디·소품)
 var chosen_cls := "archer"   # AI대전에서 고른 내 병과
@@ -849,6 +861,11 @@ func load_settings() -> void:
 	var gq: String = cf.get_value("video", "quality", gfx_quality)
 	if GFX.has(gq):
 		gfx_quality = gq
+	if cf.has_section_key("video", "scale"):
+		var rs := float(cf.get_value("video", "scale", res_scale))
+		if RES_SCALES.has(rs):
+			res_scale = rs
+			res_scale_saved = true
 	var d: String = cf.get_value("game", "diff", difficulty)
 	if DIFF.has(d):
 		difficulty = d
@@ -870,6 +887,8 @@ func save_settings() -> void:
 	cf.set_value("game", "third_person", third_person)
 	cf.set_value("game", "nick", nick)
 	cf.set_value("video", "quality", gfx_quality)
+	if res_scale_saved:  # 직접 고른 적이 있을 때만 (웹 자동 해상도는 저장 안 함)
+		cf.set_value("video", "scale", res_scale)
 	for k: String in VOL_DEFAULT:
 		cf.set_value("audio", k, volumes[k])
 	cf.save(settings_path)
@@ -974,6 +993,30 @@ func gfx() -> Dictionary:
 	return GFX[gfx_quality]
 
 
+## 3D 해상도 바꾸기 (설정 화면) — 저장하고 gfx_changed로 알림 (Main이 화면에 적용)
+func set_res_scale(v: float) -> void:
+	if not RES_SCALES.has(v):
+		return
+	res_scale = v
+	res_scale_saved = true
+	save_settings()
+	gfx_changed.emit()
+
+
+## 웹 자동 해상도: 화면 점 수(가로×세로)에서 auto_mpix를 넘지 않는 가장 큰 배율
+static func auto_res_scale(px: Vector2i) -> float:
+	var mp := float(px.x) * float(px.y)
+	for s: float in RES_SCALES:
+		if mp * s * s <= float(WEB_PERF.auto_mpix) * 1000000.0:
+			return s
+	return float(RES_SCALES[-1])
+
+
+## 지금 그래픽 품질의 MSAA 배수 (웹은 web_msaa)
+func msaa_now() -> int:
+	return int(gfx().web_msaa if OS.has_feature("web") else gfx().msaa)
+
+
 ## 같은 색은 머티리얼 하나를 같이 쓴다 (HTML의 lam()). 램버트처럼 무광.
 func mat(hex: int) -> StandardMaterial3D:
 	if not _mat_cache.has(hex):
@@ -1015,6 +1058,7 @@ func _setup_input() -> void:
 		"toggle_view": [KEY_V], "swap": [KEY_Q], "interact": [KEY_E], "scoreboard": [KEY_TAB],
 		"cancel_draw": [KEY_R],  # 활 당기기 취소 (사용자 요청)
 		"debug_hits": [HIT_DEBUG.key],  # 명중 판정 디버그 표시 켜고 끄기
+		"perf_hud": [PERF_HUD.key],     # 성능 표시 (FPS·프레임 시간·그리기 호출) 켜고 끄기
 		"class_1": [KEY_1], "class_2": [KEY_2], "class_3": [KEY_3], "class_4": [KEY_4], "class_5": [KEY_5],  # 병과 고르는 화면에서만
 	}
 	for action: String in keys:

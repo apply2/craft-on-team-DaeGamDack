@@ -587,14 +587,36 @@ func _setup_environment() -> void:
 	sun.look_at_from_position(Vector3(35, 70, 22), Vector3.ZERO)
 	_apply_gfx()
 	GameData.gfx_changed.connect(_apply_gfx)
+	if OS.has_feature("web"):
+		Engine.max_physics_steps_per_frame = int(GameData.WEB_PERF.max_physics_steps)
+		get_viewport().size_changed.connect(_auto_res)
+		_auto_res.call_deferred()
+	var ph := PerfHud.new()
+	ph.name = "PerfHud"
+	add_child(ph)
 
 
-## 그래픽 품질 → 그림자 (낮음 = 끔, 보통 130m, 높음 220m). 잔디·소품은 맵(WorldBuilder.apply_gfx)이 함
+## 그래픽 품질 → 그림자 (낮음 = 끔, 보통 130m, 높음 220m)·MSAA, 설정의 3D 해상도. 잔디·소품은 맵(WorldBuilder.apply_gfx)이 함
 func _apply_gfx() -> void:
 	var d: float = GameData.gfx().shadow_dist
 	sun.shadow_enabled = d > 0.0
 	if d > 0.0:
 		sun.directional_shadow_max_distance = d
+	var vp := get_viewport()
+	var ms := GameData.msaa_now()
+	vp.msaa_3d = Viewport.MSAA_4X if ms >= 4 else (Viewport.MSAA_2X if ms >= 2 else Viewport.MSAA_DISABLED)
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = GameData.res_scale
+
+
+## 웹: 해상도를 직접 고른 적이 없으면 브라우저 화면 크기에 맞춰 3D 해상도를 고름 (GameData.auto_res_scale)
+func _auto_res() -> void:
+	if GameData.res_scale_saved:
+		return
+	var s := GameData.auto_res_scale(DisplayServer.window_get_size())
+	if not is_equal_approx(s, GameData.res_scale):
+		GameData.res_scale = s
+		_apply_gfx()
 
 
 ## 웹에선 Esc를 브라우저가 먼저 가져가 마우스 잠금만 풀린다 → 잠금이 풀리면 일시정지 (HTML pointerlockchange)

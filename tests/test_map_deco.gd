@@ -152,16 +152,48 @@ func _gfx() -> void:
 	check("기본 = 보통 (잔디 절반·소품·그림자 130m)", G.gfx_quality == "normal" and absf(shown.call() - total * 0.5) < w.grass_nodes.size() + 1 and clutter_on.call() and main.sun.shadow_enabled and is_equal_approx(main.sun.directional_shadow_max_distance, 130.0), "%d/%d" % [shown.call(), total])
 	G.set_gfx("low")
 	check("낮음: 잔디 없음·소품 숨김·그림자 끔", shown.call() == 0 and clutter_off.call() and not main.sun.shadow_enabled)
+	var vp: Viewport = main.get_viewport()
+	check("낮음: MSAA 끔", vp.msaa_3d == Viewport.MSAA_DISABLED, str(vp.msaa_3d))
 	G.set_gfx("high")
 	check("높음: 잔디 전부·소품·그림자 220m", shown.call() == total and clutter_on.call() and main.sun.shadow_enabled and is_equal_approx(main.sun.directional_shadow_max_distance, 220.0))
+	check("높음: MSAA 2배", vp.msaa_3d == Viewport.MSAA_2X, str(vp.msaa_3d))
+	G.set_gfx("normal")
+	check("보통: PC는 MSAA 2배, 웹은 끔 (web_msaa)", vp.msaa_3d == Viewport.MSAA_2X and int(G.GFX.normal.web_msaa) == 0, str(vp.msaa_3d))
+	# 3D 해상도
+	check("기본 해상도 100%", is_equal_approx(vp.scaling_3d_scale, 1.0) and is_equal_approx(G.res_scale, 1.0), str(vp.scaling_3d_scale))
+	G.set_res_scale(0.7)
+	check("해상도 70% → 화면에 적용", is_equal_approx(vp.scaling_3d_scale, 0.7) and vp.scaling_3d_mode == Viewport.SCALING_3D_MODE_BILINEAR, str(vp.scaling_3d_scale))
+	G.set_res_scale(0.33)
+	check("목록에 없는 해상도는 무시", is_equal_approx(G.res_scale, 0.7))
+	check("웹 자동 해상도: 1280x720 = 100%, 1920x1080 = 85%, 2560x1440 = 70%, 3840x2160 = 50%",
+		is_equal_approx(G.auto_res_scale(Vector2i(1280, 720)), 1.0) and is_equal_approx(G.auto_res_scale(Vector2i(1920, 1080)), 0.85)
+		and is_equal_approx(G.auto_res_scale(Vector2i(2560, 1440)), 0.7) and is_equal_approx(G.auto_res_scale(Vector2i(3840, 2160)), 0.5),
+		"%s %s %s %s" % [G.auto_res_scale(Vector2i(1280, 720)), G.auto_res_scale(Vector2i(1920, 1080)), G.auto_res_scale(Vector2i(2560, 1440)), G.auto_res_scale(Vector2i(3840, 2160))])
+	# 성능 표시 (F3)
+	var ph = main.get_node("PerfHud")
+	check("성능 표시: 처음엔 꺼짐", not ph.visible)
+	var ev := InputEventAction.new()
+	ev.action = "perf_hud"
+	ev.pressed = true
+	ph._unhandled_input(ev)
+	for i in 40:
+		await process_frame
+	check("F3 → 켜지고 FPS·그리기·해상도 줄", ph.visible and ph.label.text.contains("FPS") and ph.label.text.contains("그리기") and ph.label.text.contains("(70%)"), ph.label.text)
+	check("소프트웨어 그래픽 알아보기", ph.soft_gpu("ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)))") and ph.soft_gpu("llvmpipe (LLVM 15)") and not ph.soft_gpu("ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11)"))
+	ph._unhandled_input(ev)
+	check("F3 한 번 더 → 꺼짐", not ph.visible)
 	# 저장 → 불러오기
 	var old_path: String = G.settings_path
 	G.settings_path = "user://test_settings_gfx.cfg"
 	G.save_enabled = true
 	G.set_gfx("low")
+	G.set_res_scale(0.85)
 	G.gfx_quality = "high"
+	G.res_scale = 1.0
 	G.load_settings()
 	check("설정 파일에 품질 저장 ([video] quality)", G.gfx_quality == "low", G.gfx_quality)
+	check("설정 파일에 해상도 저장 ([video] scale)", is_equal_approx(G.res_scale, 0.85), str(G.res_scale))
+	G.set_res_scale(1.0)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(G.settings_path))
 	G.settings_path = old_path
 	G.save_enabled = false
@@ -172,6 +204,13 @@ func _gfx() -> void:
 	check("설정 패널에 낮음·보통·높음 버튼", sp._gfx_btns.size() == 3 and sp._gfx_btns.normal.text == "보통")
 	(sp._gfx_btns.normal as Button).pressed.emit()
 	check("보통 버튼 → 품질 보통", G.gfx_quality == "normal" and shown.call() > 0)
+	check("설정 패널에 해상도 버튼 4개", sp._res_btns.size() == 4 and sp._res_btns[0.5].text == "50%")
+	(sp._res_btns[0.5] as Button).pressed.emit()
+	check("50% 버튼 → 해상도 50% + 형광펜", is_equal_approx(vp.scaling_3d_scale, 0.5) and sp._res_btns[0.5].selected and not sp._res_btns[1.0].selected)
+	await process_frame
+	var spr: Rect2 = sp.get_child(0).get_global_rect() if sp.get_child_count() > 0 else Rect2()
+	check("설정 판이 화면(1280x720) 안에 들어감", spr.size.x <= 1280.0 and spr.size.y <= 720.0, str(spr.size))
+	(sp._res_btns[1.0] as Button).pressed.emit()
 	sp.queue_free()
 	main.queue_free()
 	await process_frame
