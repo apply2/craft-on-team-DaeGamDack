@@ -775,13 +775,22 @@ const RAGDOLL := {"life": 7.0, "shrink": 0.6, "flash": 0.2, "iters": 6, "damp": 
 const RAGDOLL_KICK := {"sniper": [26.0, 7.0, 3.0], "lance": [22.0, 10.0, 3.0], "ak": [7.0, 2.5, 0.0],
 	"crossbow": [14.0, 4.5, 0.0], "bow": [8.0, 3.0, 0.0], "holy": [1.5, 4.5, 2.5]}
 const DEATH_CAM := {"back": 5.5, "up": 3.2, "follow": 3.0}  # 죽으면 래그돌 골반을 뒤쪽 위에서 봄
-# 친구대전 (LAN, 9단계: HTML MP) — 방장 컴퓨터가 ENet 서버. 방 코드는 UDP 방송으로 찾는다
+# 친구대전 (온라인, 9단계: HTML MP) — 방장 컴퓨터(브라우저)가 WebRTC 서버. 방 코드로 서로를 찾는 신호만 Supabase Realtime으로 (NetSignal)
+# supabase_url·supabase_key: Supabase 프로젝트 주소와 공개용 키(publishable 또는 anon). 게임 안에 들어가도 되는 키만 넣을 것 (service_role·secret 금지)
 const NET := {
-	"port": 24680, "disc_port": 24681, "max_players": 10, "beacon_tag": "JNP1", "beacon_every": 0.5, "find_timeout": 6.0,
+	"supabase_url": "https://mhklvxywxcotrqrexlwi.supabase.co", "supabase_key": "sb_publishable_NPVQGhfR0uB7V_ZGswuqTA_fRshDUto",  # 지역 Mumbai (신호만 오가서 상관없음)
+	"room_prefix": "jnp-",
+	"ice": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}],  # 서로의 공인 주소 알아내기 (무료 STUN)
+	"signal_timeout": 8.0, "heartbeat": 25.0,  # 신호 서버가 이 안에 대답 안 하면 실패 / Supabase는 30초 안에 heartbeat가 없으면 끊음
+	"hi_every": 1.0,          # 친구: 방장이 대답할 때까지 "나 왔어" 다시 보내는 간격
+	"connect_timeout": 15.0,  # 방장이 대답한 뒤 직접 연결(WebRTC)이 이 안에 안 되면 실패 (막힌 와이파이·통신망)
+	"max_players": 10, "find_timeout": 6.0,
 	"send_hz": 30.0, "host_hz": 4.0, "ctrl_hz": 10.0, "name_max": 10,  # ctrl_hz: 쟁탈전 상태(라운드·점령·점수)를 보내는 빈도
 	"follow": 14.0, "snap_dist": 6.0,   # 남의 캐릭터: 받은 위치로 부드럽게 따라감, 6m 넘게 벌어지면 순간이동
 	"dead_wait": 0.5, "revive_guard": 1.0,  # 죽음 사건보다 상태가 먼저 와도 잠깐 기다림 / 죽은 직후 옛 상태로 안 살아남
 }
+var signal_url_override := ""  # 테스트: 신호 서버를 이 주소로 (tests/mock_signal.gd, 예 "ws://127.0.0.1:24690"). "off"면 설정이 없는 것처럼
+var ice_override: Variant = null  # 테스트: STUN 없이 (빈 배열이면 같은 컴퓨터 안에서만 연결)
 var debug_hits := false     # 명중 판정 디버그 표시 (F9로 켜고 끔, HIT_DEBUG). 저장 안 함
 var hitstop_enabled := true   # false면 히트스톱 안 함 (자동 테스트용 — 프레임 수로 시간을 재니까)
 var land_trip_override := -1.0  # 테스트: 0 이상이면 착지 넘어짐 확률을 이걸로

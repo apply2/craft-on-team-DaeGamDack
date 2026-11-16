@@ -3,13 +3,14 @@ extends SceneTree
 ## 대기실 모드·팀 나누기·팀 바꾸기, 빈자리 봇(방장 컴퓨터)·봇 명단·봇 위치 따라가기,
 ## 친구 → 방장 봇 피해(방장 쪽 판정)·방장 봇 → 친구 피해(친구 쪽 판정)·서로 처치 수,
 ## 거점 열림·점령·라운드 끝·다음 라운드·경기 끝(친구는 방장 상태를 따라감), 대기실 복귀·개인전으로 다시 시작을 확인한다.
-## 실행: godot --headless --fixed-fps 60 --path . -s tests/test_net_control.gd   (포트 24680·24681을 씀)
+## 실행: godot --headless --fixed-fps 60 --path . -s tests/test_net_control.gd   (가짜 신호 서버 포트 24691 + WebRTC)
 ## 통과하면 "ALL PASS"와 종료 코드 0, 실패하면 FAIL 줄과 종료 코드 1.
 
 var G: Node
 var A: Node   # 방장 Main
 var B: Node   # 친구 Main
 var fails := 0
+var S: Node   # 가짜 신호 서버 (tests/mock_signal.gd)
 
 const IDLE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false}
 const FIRE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "fire": true}
@@ -23,6 +24,11 @@ func _initialize() -> void:
 	G.third_person = false
 	G.difficulty = "normal"
 	G.chosen_cls = "barbarian"
+	S = load("res://tests/mock_signal.gd").new()
+	root.add_child(S)
+	S.start(24691)
+	G.signal_url_override = "ws://127.0.0.1:24691"
+	G.ice_override = []
 	A = _make("A")
 	B = _make("B")
 	G.ai_enabled = false  # 봇은 세워 두고 직접 움직임
@@ -89,11 +95,11 @@ func _run() -> void:
 	var pb = B.player
 	var TS: int = G.MODES.control.team_size
 
-	# ── 방 만들기·들어가기 (IP로) ──
+	# ── 방 만들기·들어가기 (방 코드로) ──
 	na.host_room("방장", "barbarian")
-	await wait(2)
-	nb.join_room("친구", "barbarian", "127.0.0.1")
-	await wait_until(func(): return nb.on and na.remotes.size() == 1 and nb.remotes.size() == 1, 300)
+	await wait_until(func(): return na.on, 120)
+	nb.join_room("친구", "barbarian", na.code)
+	await wait_until(func(): return nb.on and na.remotes.size() == 1 and nb.remotes.size() == 1, 600)
 	check("친구가 들어옴", nb.on and na.remotes.size() == 1)
 	await wait_until(func(): return nb.team != "", 60)
 	check("방장은 블루, 친구는 사람이 적은 레드로", na.team == "blue" and nb.team == "red", "%s/%s" % [na.team, nb.team])
@@ -244,5 +250,6 @@ func _run() -> void:
 	check("방장이 나가면 둘 다 메뉴, 봇 7명", not na.on and not nb.on and A.combat.ents.size() == 8 and B.combat.ents.size() == 8,
 		"A=%d B=%d" % [A.combat.ents.size(), B.combat.ents.size()])
 
+	S.stop()
 	print("ALL PASS" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)

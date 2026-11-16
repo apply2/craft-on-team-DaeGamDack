@@ -77,7 +77,7 @@ func _ready() -> void:
 	ShaderWarm.run(self, [world, combat, player], combat.warm_mats())  # 메뉴가 뜨는 동안 셰이더를 미리 컴파일
 
 
-## 친구대전 (LAN) 연결 — HTML mpConnect / leaveMP / handlePeers
+## 친구대전 (온라인 — WebRTC + Supabase 신호) 연결 — HTML mpConnect / leaveMP / handlePeers
 func _setup_net() -> void:
 	net = Net.new()
 	net.name = "Net"
@@ -157,9 +157,6 @@ func _render_lobby() -> void:
 	var sub: String
 	if net.is_host:
 		sub = "%d명 · 친구가 다 들어오면 게임 시작을 누르세요" % list.size()
-		var ip := Net.lan_ip()
-		if ip != "":
-			sub += " · 방장 IP %s" % ip
 	elif live:
 		sub = "%d명 · 게임이 진행 중이에요" % list.size()
 	else:

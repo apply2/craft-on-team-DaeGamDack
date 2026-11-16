@@ -81,8 +81,11 @@ audio/                 BGM ogg (루프 음원) + 결과 화면 효과음
 audio/sfx/             사용자가 만든 효과음 21개 (앞뒤 무음 자르고 크기 맞춤 — 다시 가공하지 말 것, 크기는 GameData.SFX_GAIN으로만). 아래 "효과음"
 tests/test_music.gd    병과 → 곡·크로스페이드·같은 그룹 이어서·메뉴 곡·버스·루프·설정 저장/불러오기·볼륨 dB·음소거·설정 패널 자동 테스트
 scripts/sfx.gd         효과음 (오토로드 Sfx). FILES(audio/sfx/ 파일, 무작위·음높이 흔들기) + RECIPES(HTML WebAudio 합성을 PCM으로 구움). 플레이어 32개(쉬는 것부터), play()→번호·stop(번호), 반복 소리 loop()·loop_stop(). 결과 화면 stinger
-scripts/net.gd         친구대전 (Main 아래 Net 노드, HTML MP). ENet 방 만들기·코드로 찾기(UDP 방송)·IP로 들어가기, 상태 30Hz, 사건(f·sn·ak·ln·h·k), 방장 경기 시간·아이템·줍기 허락
-tests/test_net.gd      친구대전: Main 둘을 한 프로세스에 띄워 방·대기실·시작·위치·투사체·저격총·처치 수·줍기 허락·끝·나가기 자동 테스트
+scripts/net.gd         친구대전 (Main 아래 Net 노드, HTML MP). 온라인: WebRTC 방(방장 = peer 1)·방 코드로 들어가기(신호는 NetSignal), 상태 30Hz, 사건(f·sn·ak·ln·h·k), 방장 경기 시간·아이템·줍기 허락
+scripts/net_signal.gd  친구대전 신호 (class NetSignal). Supabase Realtime 방 채널(Phoenix JSON 1.0.0)을 WebSocketPeer로 직접 — join·broadcast·heartbeat
+addons/webrtc_native/  PC용 WebRTC (godotengine/webrtc-native 1.2.2 GDExtension, Windows·Linux x86_64만 넣음). 웹은 브라우저 것을 써서 안 씀 (exclude_tags web)
+tests/mock_signal.gd   테스트용 가짜 신호 서버 (Supabase Realtime 흉내, 127.0.0.1)
+tests/test_net.gd      친구대전: Main 둘을 한 프로세스에 띄워 진짜 WebRTC로 잇고 서버 설정 없음·채널 거절·없는 방·방·대기실·시작·위치·투사체·저격총·처치 수·줍기 허락·끝·나가기 자동 테스트
 tests/test_net_control.gd 친구대전 쟁탈전: 모드·팀 나누기·팀 바꾸기·빈자리 봇·봇 따라가기·봇↔친구 피해·처치 수·거점 열림·점령·라운드·경기 끝·대기실 복귀·개인전 다시 자동 테스트
 tests/test_fx.gd       효과음 합성·소리 나는 곳, 히트스톱, 래그돌(쓰러짐·뼈 길이·무기별 날아감·7초 뒤 사라짐), 흔들림, 붉은 테두리, 피격 방향, 죽음 카메라, 병과 의상 자동 테스트
 fonts/DoHyeon-Regular.ttf  HTML과 같은 '도현' 폰트 (OFL 라이선스)
@@ -196,7 +199,7 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 | ✅ 7 | **특수 아이템**: 닭(잡기·던지기·맞으면 넘어짐), 대물 저격총, AK-47, 기사의 말+마상창 | `updateChickens` 1114, `updateSniper` 1220, `updateAK`, `updateHorses` 1184, `lanceCheck` 1176 |
 | ✅ 7.5 | **쟁탈전** (HTML에 없는 새 모드, 5대5 거점 점령): AI대전 + 친구대전(빈자리 봇). 아래 "쟁탈전 명세" | 없음 (새로 만듦) |
 | ✅ 8 | **연출**: 죽으면 래그돌, 히트스톱, 화면 흔들림, 피격 방향 표시, 병과별 의상 디테일, 효과음 | `makeRagdoll` 664, `sfx` 747 |
-| ✅ 9 | **친구대전 (멀티플레이)** — 아래 "멀티플레이 설계" 참고 | `MP` 1713 이하 |
+| ✅ 9 | **친구대전 (멀티플레이)** — 같은 와이파이(ENet)로 만들었다가 온라인(WebRTC + Supabase 신호)으로 바꿈. 아래 "멀티플레이" | `MP` 1713 이하 |
 | ✅ 10 | 웹 내보내기 + 최적화 | — |
 
 각 단계의 완료 기준: 테스트 통과 + 사용자가 플레이해서 HTML 버전과 느낌이 같다고 확인.
@@ -498,12 +501,20 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 - **석궁 장전 소리** (휠 장전): `Combat._xbow_anim` — 휠 한 칸마다 `xbow_click`, 모션 진행도 `xb_show`가 `XBOW_RELOAD_SND` latch(0.63) → `xbow_latch`, seat(0.86) → `seat`. 3인칭·봇·친구도 들림.
   `xbow_crank.ogg`(시위 끊어 당기기)는 지금 안 쓴다 (휠 장전으로 바뀌며 칸마다 끼릭으로 대신함).
 
-## 멀티플레이 (9단계 — 구현됨, 같은 와이파이만)
+## 멀티플레이 (9단계 — 구현됨, 온라인: WebRTC + Supabase 신호)
 
-사용자와 정한 것: **중계 서버 없이 같은 와이파이(LAN)에서만**. ENet 직접 연결이라 PC 전용이다 (웹 빌드에선 안 됨).
-- 방 만들기: 방장 컴퓨터가 ENet 서버(포트 `NET.port` 24680)가 되고, UDP 24681로 `"JNP1|코드|포트"`를 0.5초마다 방송한다 (255.255.255.255와 127.0.0.1).
-- 참가: 코드 4자리를 넣으면 6초 동안 방송을 듣다가 코드가 맞는 방에 접속한다. 코드 칸에 방장 IP(대기실에 보임)를 넣어도 된다.
-- 처음 방을 만들 때 Windows 방화벽이 Godot 허용을 물어본다. **개인 네트워크 허용**을 눌러야 친구가 들어온다.
+처음엔 같은 와이파이 ENet(PC 전용)이었다. 사용자 요청으로 **온라인**으로 바꿨다 — 웹·PC 어디서든, 웹과 PC가 섞여도 된다. 무료로 가볍게 (서버를 따로 안 띄움).
+- **구조**: 방장 컴퓨터(브라우저)가 `WebRTCMultiplayerPeer.create_server()` = peer 1, 친구는 `create_client(번호)`. ENet 때처럼 별 모양 (친구끼리는 방장이 중계 — server relay).
+  RPC·상태·사건 코드는 ENet 때 그대로다. 바뀐 건 연결 만들기뿐.
+- **신호** (`NetSignal`, `scripts/net_signal.gd`): Supabase Realtime의 방 채널 `realtime:jnp-코드`에 들어가서 broadcast로만 주고받는다 (DB 안 씀).
+  - 순서: 친구 `hi`(sid, `hi_every`마다 다시) → 방장 `id`(sid, 번호 2,3,… 늘기만 함) → 방장이 offer `sdp` → 친구 answer `sdp` ↔ 서로 `ice`. 모든 신호에 from·to.
+  - 설명(SDP)보다 먼저 온 ICE 후보는 모아 뒀다가 넣는다. 친구는 연결되면 채널을 닫고, 방장은 방이 열린 동안 남아 있다 (끊기면 3초 뒤 다시 들어감).
+  - 꽉 찼으면(`max_players`) `full`. 방장이 대답 안 하면 `find_timeout` 뒤 "찾지 못했어요", 번호를 받고 `connect_timeout` 안에 안 이어지면 `Net.NO_LINK` 안내.
+  - Supabase 무료: 동시 접속 200·초당 메시지 100 — 신호만 오가서 충분하다 (테스트 한 판에 신호 약 20개).
+- **설정**: `GameData.NET.supabase_url`·`supabase_key`(publishable 공개 키 — 게임에 들어가도 됨, service_role·secret 키는 절대 넣지 말 것), STUN `NET.ice`(구글 무료).
+  - Supabase 프로젝트 지역은 Mumbai (신호만 지나가서 게임 중 렉과 상관없음). Realtime 설정에서 공개 채널(public access)이 켜져 있어야 한다.
+  - TURN(중계 서버)은 없다 → 학교·회사 와이파이 같은 막힌 망에선 직접 연결이 안 될 수 있다. 자주 그러면 그때 TURN을 붙이거나 전용 서버로.
+- **PC 버전**: Godot 본체엔 WebRTC가 없어서 `addons/webrtc_native`(GDExtension)가 맡는다. Windows exe로 내보내면 exe 옆에 `libwebrtc_native...dll`이 같이 나온다 → **둘을 같이** 줘야 한다. 없으면 `Net.NO_RTC` 안내.
 - 대기실(menu `lobby` 페이지): 방 코드, 모드(방장이 고름), 사람 목록(병과·방장·게임 중·쟁탈전이면 팀), 내 병과, 팀 바꾸기(쟁탈전), 게임 시작(방장) / 진행 중인 게임 참가(친구).
 - 친구대전 개인전엔 봇·닭이 없다 (쟁탈전은 빈자리를 방장 봇이 채움 — 위 "친구대전 쟁탈전"). 일시정지해도 게임은 안 멈춘다. 20킬·시간 종료는 방장이 판단해 알린다.
 - 결과 화면: 한 판 더 = 방장만 (친구는 자동으로 들어감), 병과 다시 고르기 = 대기실, 메인 메뉴 = 방 나가기.
@@ -511,12 +522,12 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 - Combat `damage()`는 친구대전에서 **내 캐릭터만** 깎는다. 남을 맞히면 그쪽 컴퓨터가 판정해 "h"/"k" 사건을 보낸다. 처치 수는 죽인 사람이 "k"를 받고 스스로 센다.
 - 아이템은 방장만 생성·떨어뜨림. 친구가 닿으면 `net.request` → 방장이 `grants`에 적어 `_it`로 알려줌 (HTML seq/grant).
 - **HTML과 다른 점**: 방장이 나가면 방이 끝난다 (HTML은 다음 사람이 방장을 이어받음).
-- 수치는 `GameData.NET`.
+- 수치는 `GameData.NET`. 테스트: `GameData.signal_url_override`(가짜 서버 주소, "off" = 설정 없음)·`ice_override`(빈 배열 = STUN 없이).
 
 ### 처음 설계 메모
 
 HTML 버전은 claude.ai의 방(room) 기능 위에서 돌아서 **Godot에선 쓸 수 없다.** 새로 만든다.
-- 웹 빌드는 `WebSocketMultiplayerPeer`를 쓴다 (PC 전용이면 `ENetMultiplayerPeer`).
+- (옛 메모) 웹 빌드는 `WebSocketMultiplayerPeer`를 쓴다 — 실제로는 WebRTC로 정했다 (위).
 - 방 코드 4자리로 들어가려면 **사람을 이어주는 중계 서버가 필요하다.** 선택지는 Nakama 같은 오픈소스 서버를 직접 띄우거나 W4 Cloud 같은 서비스를 쓰는 것이다.
   - 어떤 걸 쓸지는 그 단계에서 사용자와 정한다.
 - 권한 구조는 HTML과 같게 한다.
@@ -591,7 +602,7 @@ TABS 느낌 로우폴리 + 굵은 줄눈·또렷한 모양. **겉모양만** 바
   - 오른쪽 위 "오늘의 팁"(못 1, +2.5°): `MAIN_MENU.tips`에서 메인을 열 때마다 하나. 줄 바꿈은 \n으로 직접 (개구가 브라우저보다 넓어서 자동 줄바꿈이면 한 글자만 넘어감).
     규칙에 맞게 고친 것: 활은 "끝까지 당긴 채 3초"(slip_t는 다 당긴 뒤부터 셈), 성수는 "남이 던진" 웅덩이만 느려짐. 규칙이 바뀌면 팁도 고칠 것.
   - 오른쪽 병과 무리: `menu_crowd.gd` (야만인·궁수·음유시인·성직자, 느린 대기 = 몸 좌우·고개 까딱). `Menu._process`가 메인이 보일 때만 `set_active(true)`.
-  - 왼쪽 아래 "v0.3 · 같은 와이파이 친구대전 지원" (웹에선 버전만).
+  - 왼쪽 아래 "v0.3 · 온라인 친구대전 지원".
   - 사진: `tests/screenshot_ui.gd`가 main·main_hover를 찍고 팁마다 줄 수(OK/WRAP!)를 출력한다.
 - **병과 선택 (완료, 시안 ClassSelect)**: `menu._build_class` — 화면 전체 Control(시안 좌표 1280×720 가운데 맞춤), 배경 `UiKit.Wall`(판자벽). 수치·문구는 `GameData.CLASS_PAGE`.
   - 메뉴 그늘을 끄는 페이지 = `Menu.FULL_PAGES` (main·class).
@@ -656,7 +667,7 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
 ```
 - 웹 템플릿은 `%APPDATA%/Godot/export_templates/4.7.2.stable/`에 web_nothreads_release/debug.zip만 깔려 있다 (전체 1.3GB 대신 필요한 것만 받음).
 - 스레드 없는(nothreads) 빌드라 COOP/COEP 헤더가 필요 없다 → GitHub Pages·itch.io에 그대로 올리면 된다.
-- 웹에선 친구대전(ENet·UDP)을 못 쓴다 → 누르면 "친구대전은 PC 버전에서만 할 수 있어요." 알림.
+- 웹에서도 친구대전이 된다 (WebRTC는 브라우저 것). 올리는 곳: Vercel (`npx vercel deploy export/web --prod`) 또는 GitHub Pages·itch.io — README "웹으로 올리기".
 - 웹에선 Esc를 브라우저가 가져가 마우스 잠금만 풀린다 → 잠금이 풀리면 일시정지 (`main._check_web_lock`, HTML pointerlockchange).
 - 웹엔 시스템 폰트가 없어서 폰트에 없는 글자는 □로 나온다. UI 글자를 새로 넣으면 도현·대체 폰트에 있는지 확인할 것.
 - 최적화: 움직이지 않는 맵 조각은 `world_builder._merge_static()`이, 캐릭터의 관절별 조각은 `derp_model._merge()`가 `Meshes.merge()`로 정점 색 메시 하나로 합친다.
@@ -673,12 +684,12 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
   - 남은 큰 것: 캐릭터(한 명 15~25번 + 그림자, 삼각형 1.3만~2.5만), 그림자 패스(약 160번), 외곽선·그림자 있는 글자(줄마다 8~20번).
   - CPU(스크립트)는 물리 프레임 한 번에 0.5~1.5ms (봇 AI 절반) — `tests/perf_cpu.gd`. `Performance`의 TIME_* 값은 여러 물리 스텝을 묶어 세서 믿지 말 것.
 
-## PC 내보내기 (친구대전용 exe)
+## PC 내보내기 (exe)
 
 ```bash
 godot --headless --path . --export-release "Windows" "export/windows/중세난장판.exe"
 ```
-- exe 하나에 게임 데이터가 다 들어 있다 (`binary_format/embed_pck`). 이 파일만 친구에게 주면 된다.
+- exe 하나에 게임 데이터가 다 들어 있다 (`binary_format/embed_pck`). 친구대전용 `libwebrtc_native.windows.template_release.x86_64.dll`이 옆에 같이 나오니 **exe와 dll을 같이** 준다 (zip으로 묶기).
 - 윈도 템플릿은 `windows_release_x86_64.exe`·`_console.exe`만 받아 두었다 (웹 템플릿과 같은 폴더).
 - 코드 서명·아이콘 바꾸기(rcedit)는 안 함 → 처음 실행할 때 Windows SmartScreen이 "알 수 없는 게시자"라고 막을 수 있다 ("추가 정보 → 실행").
 
@@ -702,8 +713,8 @@ godot --headless --fixed-fps 60 --path . -s tests/test_bot.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_match.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_items.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_fx.gd
-godot --headless --fixed-fps 60 --path . -s tests/test_net.gd   # 포트 24680·24681을 씀
-godot --headless --fixed-fps 60 --path . -s tests/test_net_control.gd   # 같은 포트
+godot --headless --fixed-fps 60 --path . -s tests/test_net.gd   # 가짜 신호 서버 포트 24690 + 진짜 WebRTC (1~2분)
+godot --headless --fixed-fps 60 --path . -s tests/test_net_control.gd   # 포트 24691
 godot --headless --fixed-fps 60 --path . -s tests/test_bard.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_bard_fx.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_music.gd
@@ -714,6 +725,7 @@ godot --headless --fixed-fps 60 --path . -s tests/test_ui_kit.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_result_fx.gd
 ```
 
+처음 받은 저장소(.godot 없음)는 먼저 `godot --headless --editor --path . --quit`를 한 번 돌려야 webrtc_native 확장이 등록된다 (안 하면 test_net이 "WebRTC 쓸 수 있음"에서 실패).
 새 `class_name` 스크립트를 추가하면 한 번 `godot --headless --editor --path . --quit`로 클래스 목록을 갱신해야 다른 스크립트가 찾는다.
 
 테스트에서 `await physics_frame` 한 번만 누르고 바로 떼면 캐릭터가 입력을 읽기 전에 떼질 수 있다. 한 번 쏘기는 2프레임 누른다.

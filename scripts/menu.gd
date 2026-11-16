@@ -10,7 +10,7 @@ signal menu_requested(page: String)  # 메뉴로 (page: main / class)
 signal again_requested            # 결과 화면 → 한 판 더
 signal next_class_picked(cls: String)  # 일시정지 화면에서 다음 부활 병과
 signal friend_create(nick: String)               # 친구대전: 방 만들기
-signal friend_join(nick: String, code: String)   # 친구대전: 코드(또는 방장 IP)로 참가
+signal friend_join(nick: String, code: String)   # 친구대전: 방 코드로 참가
 signal lobby_leave                                # 대기실: 방 나가기
 signal lobby_start                                # 대기실: 게임 시작 (방장) / 진행 중인 게임 참가
 signal lobby_class(cls: String)                   # 대기실: 내 병과
@@ -234,7 +234,7 @@ func _build_main() -> void:
 	_build_tip(pg)
 	# 왼쪽 아래 작은 글씨: 버전 (+ PC면 친구대전 안내)
 	var F: Dictionary = M.foot
-	var foot := UiKit.label(GameData.VERSION + ("" if OS.has_feature("web") else " · 같은 와이파이 친구대전 지원"), int(F.font), UiKit.c("cream"), pg)
+	var foot := UiKit.label(GameData.VERSION + " · 온라인 친구대전 지원", int(F.font), UiKit.c("cream"), pg)
 	foot.add_theme_color_override("font_outline_color", UiKit.c("ink"))
 	foot.add_theme_constant_override("outline_size", UiKit.outline_for(int(F.font)))
 	foot.anchor_top = 1.0
@@ -289,9 +289,6 @@ func _build_nav(pg: Control) -> void:
 	ai.pressed.connect(open_diff_page)
 	var fr := _nav_sign(nav, "friend", "wood", "people", "친구대전", "친구를 넘어뜨리자")
 	fr.pressed.connect(func() -> void:
-		if OS.has_feature("web"):  # 같은 와이파이 직접 연결(ENet·UDP)은 브라우저에서 못 함
-			toast("친구대전은 PC 버전에서만 할 수 있어요.")
-			return
 		_friend_status.text = ""
 		_nick.text = GameData.nick
 		show_page("friend"))
@@ -961,7 +958,7 @@ func _build_exit() -> void:
 	vb.add_child(b)
 
 
-# ── 친구대전 (같은 와이파이) — HTML pgFriend / pgLobby ─────────
+# ── 친구대전 (온라인) — HTML pgFriend / pgLobby ─────────
 func _build_friend() -> void:
 	var pg := _sheet(screens.menu, true)
 	pages.friend = pg
@@ -982,7 +979,7 @@ func _build_friend() -> void:
 	var jr := HBoxContainer.new()
 	jr.add_theme_constant_override("separation", 10)
 	col.add_child(jr)
-	var code := _field("코드 4자리", 15)  # 방장 IP를 직접 넣을 수도 있어서 길게 받음
+	var code := _field("코드 4자리", 4)
 	code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	code.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	jr.add_child(code)
@@ -996,7 +993,7 @@ func _build_friend() -> void:
 	var do_join := func() -> void: friend_join.emit(nick.text, code.text.strip_edges().to_upper())
 	join.pressed.connect(do_join)
 	code.text_submitted.connect(func(_t: String) -> void: do_join.call())
-	var hint := _ink_sub("같은 와이파이(공유기)에 연결된 친구끼리만 들어올 수 있어요. 코드로 못 찾으면 대기실에 보이는 방장 IP를 코드 칸에 넣어 보세요. 개인전엔 봇과 닭이 없고, 쟁탈전은 빈자리를 봇이 채워요.", vb, 13)
+	var hint := _ink_sub("인터넷만 되면 웹·PC 어디서든 같은 코드로 들어올 수 있어요. 방장이 나가면 방이 닫혀요. 개인전엔 봇과 닭이 없고, 쟁탈전은 빈자리를 봇이 채워요.", vb, 13)
 	hint.add_theme_color_override("font_color", UiKit.c("faded"))
 
 
