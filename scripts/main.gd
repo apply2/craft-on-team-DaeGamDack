@@ -23,6 +23,7 @@ var bots: Array[PlayerController] = []
 var state := "menu"
 var sun: DirectionalLight3D
 var _lobby_t := 0.0
+var _mp_end_t := 0.0      # 친구대전: 경기가 끝나고 지난 시간 (결과 화면 → 대기실 자동 복귀)
 var _was_locked := false  # 웹: 지난 프레임에 마우스가 잠겨 있었나
 var _warmed_ctrl := false  # 쟁탈전 맵 셰이더를 미리 데웠나
 var time_left: float = GameData.MATCH_TIME
@@ -433,11 +434,7 @@ func _start_control() -> void:
 # ── 경기 흐름 ────────────────────────────────────────────────
 ## HTML startMatch: 다 치우고, 모두 0킬 0죽음으로 다시 스폰, 4분 시작
 func start_match() -> void:
-	if net and net.on:  # 결과 화면 '한 판 더' (HTML againBtn)
-		if net.is_host:
-			net.host_start()
-		else:
-			menu.toast("방장이 다시 시작하면 자동으로 들어가요")
+	if net and net.on:  # 친구대전은 대기실에서 방장이 [게임 시작]으로만 (결과 화면 '한 판 더'는 숨김)
 		return
 	if GameData.mode == "control":
 		_start_control()
@@ -519,6 +516,8 @@ func end_match() -> void:
 		return
 	_set_state("ended")
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_mp_end_t = 0.0
+	menu.set_end_mp(net.on)
 	if mode:
 		menu.open_end_control(mode.match_winner, mode.wins, combat.score_rows(), player)
 		return
@@ -562,6 +561,13 @@ func _process(dt: float) -> void:
 		if _lobby_t <= 0:
 			_lobby_t = 0.5
 			_render_lobby()
+		if state == "ended":  # 결과 화면 몇 초 → 모두 대기실 (방장이 정하고 알림, 친구는 알림이 늦으면 스스로)
+			_mp_end_t += dt / maxf(Engine.time_scale, 0.01)  # 결과 화면 느린 화면에도 실제 시간대로
+			var t := _mp_end_t
+			var back := GameData.lobby_return()
+			menu.end_countdown(back - t)
+			if t >= back + (0.0 if net.is_host else float(GameData.NET.lobby_grace)):
+				go_lobby()
 	elif state == "playing" and mode == null:
 		time_left -= dt / maxf(Engine.time_scale, 0.01)  # 히트스톱 중에도 시계는 실제 시간대로
 		if time_left <= 0:

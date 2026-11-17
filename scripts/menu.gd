@@ -1144,6 +1144,9 @@ var _end_me_at := Vector2.ZERO
 var _end_stage: SubViewport   # 왼쪽 3D 무대 (result_stage.gd)
 var _end_props: Control       # 시상대·발판 (무대 뒤)
 var _end_again: Button
+var _end_pick: Button
+var _end_mm: Button
+var _end_count: Label       # 친구대전: "대기실로 돌아가는 중 · N초"
 var _end_btns: Array[Button] = []
 var _end_gray: ColorRect      # 패배: 뒤 게임 화면 회색
 var _sun: Sunburst            # 승리: 금빛 햇살
@@ -1302,11 +1305,16 @@ func _build_end() -> void:
 	hb.offset_top = float(BT.top)
 	hb.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	lay.add_child(hb)
+	_end_count = UiKit.caption(UiKit.label("", int(BT.font), UiKit.c("parch"), hb)) as Label
+	_end_count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_end_count.visible = false
 	var mm := UiKit.ghost("메인 메뉴", int(BT.font), BT.pad)
+	_end_mm = mm
 	mm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	mm.pressed.connect(func() -> void: menu_requested.emit("main"))
 	hb.add_child(mm)
 	var pick := UiKit.ghost("병과 다시 고르기", int(BT.font), BT.pad)
+	_end_pick = pick
 	pick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	pick.pressed.connect(func() -> void: menu_requested.emit("class"))
 	hb.add_child(pick)
@@ -1321,6 +1329,19 @@ func _build_end() -> void:
 	_end_front.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_end_front)
 	Sfx.stinger_done.connect(_on_stinger_done)
+
+
+## 친구대전 결과 화면: '한 판 더'·'병과 다시 고르기' 숨김 (몇 초 뒤 모두 대기실로), '메인 메뉴' → '방 나가기'
+func set_end_mp(on: bool) -> void:
+	_end_again.visible = not on
+	_end_pick.visible = not on
+	_end_mm.text = "방 나가기" if on else "메인 메뉴"
+	_end_count.visible = on
+
+
+## 남은 초 (친구대전 결과 화면)
+func end_countdown(sec: float) -> void:
+	_end_count.text = "대기실로 돌아가는 중 · %d초" % ceili(maxf(0.0, sec))
 
 
 ## 1280×720 시안 좌표판 (화면 가운데 맞춤)

@@ -29,6 +29,7 @@ func _initialize() -> void:
 	S.start(24691)
 	G.signal_url_override = "ws://127.0.0.1:24691"
 	G.ice_override = []
+	G.end_wait_override = 1.0  # 결과 화면 → 대기실 (원래 10초)
 	A = _make("A")
 	B = _make("B")
 	G.ai_enabled = false  # 봇은 세워 두고 직접 움직임
@@ -268,10 +269,9 @@ func _run() -> void:
 	var ended: bool = await wait_until(func(): return A.state == "ended" and B.state == "ended", 120)
 	check("2선승 → 둘 다 결과 화면", ended and B.mode.match_winner == "red", "%s/%s" % [A.state, B.state])
 
-	# ── 대기실로 → 봇이 빠짐 ──
-	A.go_menu("class")
-	B.go_menu("class")
-	await wait_until(func(): return nb.remotes.size() == 1, 60)
+	# ── 몇 초 뒤 저절로 대기실로 → 봇 캐릭터는 쉬고 자리는 그대로 ──
+	await wait_until(func(): return A.menu.cur_page == "lobby" and B.menu.cur_page == "lobby" and nb.remotes.size() == 1, 240)
+	check("결과 화면 뒤 둘 다 대기실", A.state == "menu" and B.state == "menu" and A.menu.cur_page == "lobby" and B.menu.cur_page == "lobby")
 	check("대기실: 방장 봇이 쉬고 친구 쪽 봇도 사라짐", A.combat.ents.size() == 2 and B.combat.ents.size() == 2 and nb.remotes.size() == 1,
 		"A=%d B=%d" % [A.combat.ents.size(), B.combat.ents.size()])
 	check("개인전 맵으로 돌아옴", A.world == A.world_ffa and B.world == B.world_ffa)

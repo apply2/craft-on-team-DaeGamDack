@@ -75,7 +75,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(func() -> void: _fail(NO_LINK))
-	multiplayer.server_disconnected.connect(func() -> void: _close("방장이 방을 닫았어요"))
+	multiplayer.server_disconnected.connect(func() -> void: _close("방장이 나가서 방이 닫혔어요"))
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 
@@ -955,11 +955,14 @@ func _mt(mt: Dictionary) -> void:
 	last_mt = mt
 	var st := str(mt.get("st", "lobby"))
 	var ep := int(mt.get("ep", 0))
-	if st == "play" and ep > seen_epoch and (main.state == "menu" or main.state == "ended") and main.menu.cur_page != "friend":
+	if st == "play" and ep > seen_epoch and main.state == "menu" and main.menu.cur_page == "lobby":  # 대기실에 있을 때만 (결과 화면에선 안 끌려감)
 		seen_epoch = ep
 		start_requested.emit(float(mt.get("rem", GameData.MATCH_TIME)))
 	elif st == "end" and main.state in ["playing", "paused"] and ep == seen_epoch:
 		end_requested.emit()
+	elif st == "lobby" and main.state in ["ended", "playing", "paused"] and ep == seen_epoch and ep > 0:  # 방장이 대기실로 돌아감 → 모두
+		main.go_lobby()
+		return
 	if main.state in ["playing", "paused"] and mt.has("rem") and absf(main.time_left - float(mt.rem)) > 1.5:
 		main.time_left = float(mt.rem)
 	lobby_changed.emit()

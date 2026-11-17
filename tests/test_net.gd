@@ -30,6 +30,7 @@ func _initialize() -> void:
 	if S.start(24690) != OK:
 		print("FAIL 가짜 신호 서버를 못 엶 (포트 24690)")
 	G.ice_override = []  # 같은 컴퓨터 안이라 STUN 없이
+	G.end_wait_override = 1.5  # 결과 화면 → 대기실 (원래 10초)
 	A = _make("A")
 	B = _make("B")
 	G.ai_enabled = false
@@ -222,10 +223,14 @@ func _run() -> void:
 	B.start_match()
 	await wait(10)
 	check("결과 화면에서 바로 다음 판으로 안 감", A.state == "ended" and B.state == "ended", "%s/%s" % [A.state, B.state])
-	A.go_lobby()
-	B.go_lobby()
+	check("친구대전 결과 화면: '한 판 더'·'병과 다시 고르기' 숨김, 카운트다운", not A.menu._end_again.visible and not B.menu._end_pick.visible
+		and B.menu._end_count.visible and B.menu._end_mm.text == "방 나가기", B.menu._end_count.text)
+	var back_lobby: bool = await wait_until(func(): return A.menu.cur_page == "lobby" and B.menu.cur_page == "lobby" and A.state == "menu" and B.state == "menu", 240)
+	check("몇 초 뒤 둘 다 같은 방 대기실로 (연결 유지)", back_lobby and na.on and nb.on and na.remotes.size() == 1, "%s/%s" % [A.menu.cur_page, B.menu.cur_page])
 	await wait_until(func(): return not na.lobby_list()[1].rdy, 60)
-	check("대기실로 오면 준비가 풀림", not na.can_start())
+	check("대기실로 오면 준비가 풀림, 병과는 그대로", not na.can_start() and na.lobby_list()[1].cls == "crossbow" and nb.cls == "crossbow")
+	await wait(30)
+	check("대기실에서 저절로 시작하지 않음", A.state == "menu" and B.state == "menu")
 	nb.ask("ready", true)
 	await wait_until(func(): return na.can_start(), 60)
 	A.menu.lobby_start.emit()
