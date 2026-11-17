@@ -108,7 +108,11 @@ func _setup_net() -> void:
 		player.next_cls = k
 		net.set_cls(k))
 	menu.lobby_mode.connect(func(k: String) -> void: net.set_room_mode(k))
-	menu.lobby_team.connect(func() -> void: net.switch_team())
+	menu.lobby_act.connect(func(op: String, arg: Variant) -> void:
+		if op == "team":
+			net.move_team(str(arg))
+		else:
+			net.ask(op, arg))
 
 
 func _save_nick(nick: String) -> void:
@@ -151,22 +155,13 @@ func go_lobby() -> void:
 func _render_lobby() -> void:
 	if not net.on or state != "menu" or menu.cur_page != "lobby":
 		return
-	var list := net.lobby_list()
-	var live := net.live_match()
 	var md := net.mode_now()
-	var sub: String
-	if net.is_host:
-		sub = "%d명 · 친구가 다 들어오면 게임 시작을 누르세요" % list.size()
-	elif live:
-		sub = "%d명 · 게임이 진행 중이에요" % list.size()
-	else:
-		sub = "%d명 · 방장이 시작하기를 기다리는 중" % list.size()
-	if md == "control":  # 빈자리는 봇
-		var n := net.human_counts()
-		var ts := int(GameData.MODES.control.team_size)
-		sub += " · 빈자리 봇: 블루 %d · 레드 %d" % [maxi(0, ts - int(n.blue)), maxi(0, ts - int(n.red))]
-	var btn := "게임 시작" if net.is_host else ("진행 중인 게임 참가" if live else "")
-	menu.render_lobby(net.code, list, sub, btn, md, net.is_host)
+	menu.render_lobby({
+		"code": net.code, "list": net.lobby_list(), "md": md, "map": str(net.room.get("map", GameData.room_map(md))),
+		"host": net.is_host, "cap": net.room_cap(), "team_cap": net.team_cap(), "my_team": net.team, "cls": net.cls,
+		"ready": net.ready_counts(), "me_ready": net.my_ready(), "can_start": net.can_start(), "live": net.live_match(),
+		"mst": net.mst if net.is_host else str(net.last_mt.get("st", "lobby")),
+	})
 
 
 ## 친구대전 경기 시작 (HTML mpStart) — 나만 스폰. 친구는 각자 컴퓨터에서 스폰한다

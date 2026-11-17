@@ -636,6 +636,22 @@ const UI := {
 	"dust": 0xc9a77c,      # 어두운 판 위 흐린 글자 (옛 mute 자리)
 	"sky": 0x9cc0f2,       # 어두운 곳에서 보이는 밝은 파랑 (석궁 장전 고리 등, 옛 steel 자리)
 }
+## 친구대전 대기실 (사용자 요청 — 커스텀 게임식, 게시판 색 + 정갈한 배치). ui/lobby_theme.tres는 이 값으로 만든다:
+##   godot --headless --path . -s tests/make_lobby_theme.gd   (값을 바꾸면 다시 돌릴 것 — test_ui_kit가 같은지 확인)
+## 색은 UI 키 (["키", 불투명도]), px는 1280×720 기준
+const LOBBY_UI := {
+	"font": {"title": 28, "body": 18, "small": 14},  # 글자 크기 세 단계뿐
+	"bg": ["ink", 0.9],                # 화면 바탕 (뒤 맵이 살짝 비침)
+	"panel": "parch", "slot": "cream", # 판 2톤: 큰 판 양피지, 자리 밝은 양피지
+	"line": ["ink", 0.3],              # 자리 테두리
+	"accent": "marker",                # 강조 하나: 내 자리·준비·고른 병과·누름
+	"radius": 6, "border": 2, "pad": 12, "gap": 14,
+	"btn_pad": [14, 7], "small_pad": [9, 4],
+	"margin": [24, 16],                # 화면 가장자리 (좌우, 위아래)
+	"slot_h": 50, "slot_gap": 6, "team_bar": 6,  # 쟁탈전 자리 왼쪽 팀 색 띠
+	"side_w": 260, "class_h": 56, "emblem": 30,
+	"title_outline": 6,
+}
 ## UiKit 판·버튼 모양 (px는 1280×720 기준 = 시안 1920×1080 값 × 0.667)
 const UI_KIT := {
 	"wood": {"line": 3.0, "drop": 5.0, "radius": 7.0, "drop_a": 1.0},    # 시안 외곽선 4 · 그림자 8

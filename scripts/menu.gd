@@ -15,13 +15,13 @@ signal lobby_leave                                # 대기실: 방 나가기
 signal lobby_start                                # 대기실: 게임 시작 (방장) / 진행 중인 게임 참가
 signal lobby_class(cls: String)                   # 대기실: 내 병과
 signal lobby_mode(mode: String)                   # 대기실: 모드 (방장만 — 개인전 / 쟁탈전)
-signal lobby_team                                 # 대기실: 팀 바꾸기 (쟁탈전)
+signal lobby_act(op: String, arg: Variant)        # 대기실: 그 밖의 요청 (ready·team·map·bot_add·bot_del·bot_set — Net.ask)
 
 const SETTINGS_SCENE := preload("res://scenes/ui/settings_panel.tscn")
 const MENU_CROWD := preload("res://scripts/ui/menu_crowd.gd")
 const MODEL_STAGE := preload("res://scripts/ui/model_stage.gd")
 const RESULT_STAGE := preload("res://scripts/ui/result_stage.gd")
-const FULL_PAGES := ["main", "class"]  # 화면 전체를 자기 배경으로 쓰는 페이지 (메뉴 그늘 끔)
+const FULL_PAGES := ["main", "class", "lobby"]  # 화면 전체를 자기 배경으로 쓰는 페이지 (메뉴 그늘 끔)
 const PAGES := ["main", "diff", "mode", "class", "settings", "exit", "friend", "lobby"]
 
 var cur_page := "main"
@@ -52,15 +52,7 @@ var _pause_set: VBoxContainer   # 일시정지 → 설정
 var _friend_status: Label
 var _nick: LineEdit
 var _code_in: LineEdit
-var _lobby_code: Label
-var _lobby_sub: Label
-var _lobby_list: VBoxContainer
-var _lobby_cards: GridContainer
-var _lobby_btn: Button
-var _lobby_modes := {}  # 모드 키 → 버튼
-var _lobby_mode_note: Label
-var _lobby_team_btn: Button
-var _lobby_sig := ""   # 대기실 목록이 바뀌었을 때만 다시 그림
+var lobby: LobbyPage
 var _crowd: SubViewport      # 메인 메뉴 오른쪽 병과 무리 (menu_crowd.gd)
 var _tip_label: Label         # 오늘의 팁 (개구)
 var _main_foot: Label         # 왼쪽 아래 버전 글씨
@@ -1001,166 +993,41 @@ func friend_status(text: String) -> void:
 	_friend_status.text = text
 
 
-## 대기실: 방 코드 · 사람 목록 · 내 병과 · 게임 시작
+## 대기실 (커스텀 게임식 — scripts/ui/lobby_page.gd). 누른 것은 아래 신호로 Main에 전함
 func _build_lobby() -> void:
-	var pg := _sheet(screens.menu)
-	pages.lobby = pg
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 12)
-	pg.add_child(hb)
-	var left := HBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(left)
-	var back := UiKit.back("← 방 나가기")
-	back.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	back.pressed.connect(func() -> void: lobby_leave.emit())
-	left.add_child(back)
-	var title := HBoxContainer.new()
-	title.add_theme_constant_override("separation", 14)
-	hb.add_child(title)
-	_head2("방 코드", title)
-	var chip := UiKit.Board.new("parch", Vector4(16, 0, 16, 4))
-	chip.paint = UiKit.c("marker")
-	chip.nails = 1
-	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title.add_child(UiKit.tilted(chip, 2.0))
-	_lobby_code = UiKit.label("", 44, UiKit.c("ink"), chip)
-	UiKit.trim_font(_lobby_code, 44, 0.15)
-	var right := Control.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(right)
-	var vb := _big_board(pg, 900)
-	_lobby_sub = _ink_sub("친구에게 코드를 알려주세요", vb)
-	# 모드 고르기 (방장만 누를 수 있음, 친구는 보기만)
-	var mrow := HBoxContainer.new()
-	mrow.alignment = BoxContainer.ALIGNMENT_CENTER
-	mrow.add_theme_constant_override("separation", 10)
-	vb.add_child(mrow)
-	UiKit.label("모드", 16, UiKit.c("brown"), mrow)
-	for k: String in ["ffa", "control"]:
-		var mb := UiKit.ghost(GameData.MODE_NAMES.get(k, k) + (" 5:5" if k == "control" else ""), 16, Vector4(16, 6, 16, 6))
-		mb.pressed.connect(func() -> void: lobby_mode.emit(k))
-		mrow.add_child(mb)
-		_lobby_modes[k] = mb
-	_lobby_mode_note = UiKit.label("", 14, UiKit.c("faded"), mrow)
-	var body := HBoxContainer.new()
-	body.add_theme_constant_override("separation", 18)
-	vb.add_child(body)
-	var lcol := VBoxContainer.new()
-	lcol.add_theme_constant_override("separation", 6)
-	lcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lcol.size_flags_stretch_ratio = 1
-	body.add_child(lcol)
-	UiKit.label("들어온 사람", 15, UiKit.c("brown"), lcol)
-	_lobby_list = VBoxContainer.new()
-	_lobby_list.add_theme_constant_override("separation", 4)
-	lcol.add_child(_lobby_list)
-	var ccol := VBoxContainer.new()
-	ccol.add_theme_constant_override("separation", 6)
-	ccol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ccol.size_flags_stretch_ratio = 1.3
-	body.add_child(ccol)
-	UiKit.label("내 병과", 15, UiKit.c("brown"), ccol)
-	_lobby_cards = GridContainer.new()
-	_lobby_cards.columns = 2
-	_lobby_cards.add_theme_constant_override("h_separation", 12)
-	_lobby_cards.add_theme_constant_override("v_separation", 12)
-	ccol.add_child(_lobby_cards)
-	var act := _actions(vb)
-	_lobby_team_btn = UiKit.ghost("팀 바꾸기")
-	_lobby_team_btn.pressed.connect(func() -> void: lobby_team.emit())
-	act.add_child(_lobby_team_btn)
-	_lobby_btn = UiKit.primary("게임 시작")
-	_lobby_btn.pressed.connect(func() -> void: lobby_start.emit())
-	act.add_child(_lobby_btn)
+	lobby = LobbyPage.new()
+	(screens.menu as Control).add_child(lobby)
+	pages.lobby = lobby
+	lobby.act.connect(_on_lobby_act)
 
 
-func open_lobby(cls: String) -> void:
-	_fill_cards(_lobby_cards, cls, true, func(k: String) -> void:
-		GameData.chosen_cls = k
-		GameData.save_settings()
-		lobby_class.emit(k))
-	_lobby_sig = ""
+func _on_lobby_act(op: String, arg: Variant) -> void:
+	match op:
+		"leave":
+			lobby_leave.emit()
+		"start":
+			lobby_start.emit()
+		"cls":
+			GameData.chosen_cls = str(arg)
+			GameData.save_settings()
+			lobby_class.emit(str(arg))
+		"mode":
+			lobby_mode.emit(str(arg))
+		"copy":
+			DisplayServer.clipboard_set(lobby._code.text)
+			toast("방 코드를 복사했어요")
+		_:
+			lobby_act.emit(op, arg)
+
+
+func open_lobby(_cls: String) -> void:
+	lobby.reset()
 	show_page("lobby")
 
 
-## HTML renderLobby: list = [{name, cls, host, st, team}], btn = 버튼 글자 (없으면 숨김)
-## md = 방 모드 (control이면 팀별로 나눠 보이고 '팀 바꾸기'), host = 내가 방장 (모드를 바꿀 수 있음)
-func render_lobby(code: String, list: Array, sub: String, btn: String, md := "ffa", host := false) -> void:
-	_lobby_code.text = code if code != "" else "IP"
-	_lobby_sub.text = sub
-	_lobby_btn.visible = btn != ""
-	_lobby_btn.text = btn
-	var ctrl := md == "control"
-	_lobby_team_btn.visible = ctrl
-	for k: String in _lobby_modes:
-		var mb: Button = _lobby_modes[k]
-		var on := k == md
-		mb.disabled = not host
-		mb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if host else Control.CURSOR_ARROW
-		mb.visible = host or on
-		(mb as UiKit.KitButton).selected = on  # 고른 모드 = 형광펜
-	_lobby_mode_note.text = "" if host else "방장이 정해요"
-	if ctrl:  # 블루 먼저, 같은 팀끼리
-		list = list.duplicate()
-		list.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-			return (0 if a.get("team", "") == "blue" else 1) < (0 if b.get("team", "") == "blue" else 1))
-	var sig := str(list) + md
-	if sig == _lobby_sig:
-		return
-	_lobby_sig = sig
-	for ch in _lobby_list.get_children():
-		ch.queue_free()
-	var T: Dictionary = GameData.MODES.control.teams
-	for p: Dictionary in list:
-		var tm := str(p.get("team", ""))
-		var has_team := ctrl and T.has(tm)
-		var row := PanelContainer.new()
-		row.add_theme_stylebox_override("panel", UiKit.box(Color(1, 1, 1, 0.35), UiKit.c("ink", 0.25), 1, 4, Vector4(8, 3, 8, 4)))
-		_lobby_list.add_child(row)
-		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", 8)
-		row.add_child(hb)
-		if has_team:  # 팀 = 방패 색 + 글자
-			var sh := TeamShield.new()
-			sh.col = GameData.col(T[tm].body)
-			sh.left = tm == "blue"
-			sh.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			hb.add_child(sh)
-			var tl := UiKit.label(str(T[tm].short), 15, Color(str(T[tm].ink)), hb)
-			tl.custom_minimum_size.x = 30
-		var nm := UiKit.label(str(p.name), 17, UiKit.c("ink"), hb)
-		nm.clip_text = true
-		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		UiKit.label(GameData.CLASSES[p.cls].name, 13, UiKit.c("brown"), hb)
-		if p.st == "play":
-			UiKit.label("게임 중", 13, UiKit.c("faded"), hb)
-		if p.host:
-			var em := UiKit.Board.new("parch", Vector4(6, 0, 6, 1))
-			em.paint = UiKit.c("marker")
-			em.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			UiKit.label("방장", 13, UiKit.c("ink"), em)
-			hb.add_child(em)
-
-
-## 대기실 팀 표시: 작은 방패 (블루 = 오른쪽 아래 귀퉁이 둥글게, 레드 = 거울 — HUD 방패와 같은 규칙)
-class TeamShield extends Control:
-	var col := Color.WHITE
-	var left := true
-
-	func _init() -> void:
-		custom_minimum_size = Vector2(18, 20)
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	func _draw() -> void:
-		var w := size.x
-		var h := size.y
-		var pts := PackedVector2Array([Vector2(1, 1), Vector2(w - 1, 1), Vector2(w - 1, h * 0.55), Vector2(w / 2.0, h - 1), Vector2(1, h * 0.55)])
-		draw_colored_polygon(pts, col)
-		var ol := pts.duplicate()
-		ol.append(pts[0])
-		draw_polyline(ol, UiKit.c("ink"), 2.0, true)
+## view = Main._render_lobby가 만든 대기실 상태 (LobbyPage.render 참고)
+func render_lobby(view: Dictionary) -> void:
+	lobby.render(view)
 
 
 ## 글자 칸: 양피지 바탕 + 잉크 테두리 (누르면 형광펜 테)
