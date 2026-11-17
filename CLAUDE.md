@@ -75,6 +75,8 @@ scripts/music.gd       배경음악 (오토로드 Music). AudioStreamPlayer 둘�
 scripts/ui/model_stage.gd 병과 화면 큰 액자·카드 그림 (SubViewport에 DerpModel 하나. set_active로 계속 그림, portrait(k)로 한 번 찍기)
 scripts/ui/result_stage.gd 결과 화면 왼쪽 3D 무대 (직교 카메라 — 배치 px ↔ m 그대로, RESULT_UI.stage.ppm). setup([{cls, team, at, yaw, lie, mood}])
 scripts/ui/menu_crowd.gd  메인 메뉴 오른쪽 병과 무리 (SubViewport·투명 배경·자기 World3D에 DerpModel 4개, 가짜 플레이어 Pose로 animate). 메인이 안 보이면 렌더·애니메이션 끔
+scripts/ui/lobby_page.gd   친구대전 대기실 (커스텀 게임식 — 아래 "대기실"). 스타일은 ui/lobby_theme.tres만, 누른 건 act(op, arg) 신호
+scripts/ui/lobby_theme.gd  대기실 Theme 만들기 (GameData.LOBBY_UI·UI → Theme). ui/lobby_theme.tres = 저장본 (tests/make_lobby_theme.gd로 다시 만듦)
 scripts/ui/settings_panel.gd + scenes/ui/settings_panel.tscn  설정 본문 (감도·시점·볼륨 3개·조작키). 메인 메뉴 설정·일시정지 설정이 같이 씀
 default_bus_layout.tres  오디오 버스 Master ─ Music · SFX
 audio/                 BGM ogg (루프 음원) + 결과 화면 효과음
@@ -109,7 +111,8 @@ reference/arrow-arena.html 원본
 reference/ui_design/    UI 시안 "마을 게시판 스타일" (README.md·Guide.jpg 먼저. .jpg = 완성 모습, .html = 좌표·크기·색. 1920×1080 기준 → 게임은 ×0.667). .gdignore로 임포트 안 함
 tests/test_ui_kit.gd   UI 재료: 팔레트·HUD 상수·개구·Board 재질 3개·이정표·seed 나뭇결·기울기 한도·버튼 3종(Button 그대로)·고름·마우스 올림·설정 패널 자동 테스트
 tests/screenshot_hud.gd 경기 화면 HUD 사진 hud_<tag>_control·ffa·death_<가로>.png + 가운데 40% 겹침 검사 (화면 있어야 함: godot --path . --resolution 1920x1080 -s tests/screenshot_hud.gd -- mode=control)
-tests/screenshot_ui.gd  UI 사진 ui_<tag>_main·settings·diff·mode·class·exit·friend·lobby·toast·pause·pause_settings·kit.png (화면 있어야 함: godot --path . --resolution 1280x720 -s tests/screenshot_ui.gd -- tag=after)
+tests/make_lobby_theme.gd  ui/lobby_theme.tres 다시 만들기 (LOBBY_UI·UI 색을 바꾸면 돌릴 것: godot --headless --path . -s tests/make_lobby_theme.gd)
+tests/screenshot_ui.gd  UI 사진 ui_<tag>_main·settings·diff·mode·class·exit·friend·lobby_control·lobby_ffa·toast·pause·pause_settings·kit.png (화면 있어야 함: godot --path . --resolution 1280x720 -s tests/screenshot_ui.gd -- tag=after)
 tests/screenshot_captions.gd 자막(배경 없는 글자) 사진 cap_<tag>_sky·ground·wall(_death)_<가로>.png (화면 있어야 함: godot --path . --resolution 1280x720 -s tests/screenshot_captions.gd)
 tests/screenshot_result.gd 결과 화면 사진 result_<tag>_ffa_win·ffa_lose·ctrl_win·ctrl_lose_<가로>.png (화면 있어야 함, 시안 Result*.jpg와 비교)
 ```
@@ -427,12 +430,10 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 - **BGM**: 개인전과 같은 규칙 (음유시인이면 match_bard).
 
 ### 친구대전 쟁탈전 (구현됨, 사용자 요청)
-- **대기실**: 방장이 모드 버튼(개인전 / 쟁탈전 5:5)으로 고른다 (`Net.room_mode`, `_mt`의 `md`로 친구에게. 친구는 `mode_now()`). 최대 10명 (`NET.max_players`).
-  방장은 블루, 들어오는 친구는 방장이 사람이 적은 팀에 넣어 줌 (`_assign_team`). '팀 바꾸기'는 상대 팀 사람이 5명 미만일 때만. 팀은 `_hello`의 `t`.
-  목록은 팀 색 테두리로 블루 먼저, 아래 문구에 "빈자리 봇: 블루 N · 레드 M".
-- **빈자리 봇**: 방장 컴퓨터의 봇 (`Main.mp_pick_bots` — 팀마다 5 - 사람 수). 봇 id는 음수 (`b.peer = -(i+1)`, `Main.bot_by_id`).
+- **대기실**: 아래 "멀티플레이 → 대기실" (방장이 모드·팀·봇 자리를 room으로 관리). 쟁탈전은 블루|레드 팀마다 5칸.
+- **봇**: 방장 컴퓨터의 봇 (`Main.mp_pick_bots` — **대기실 봇 자리대로**, 예전처럼 빈자리를 저절로 채우지 않음). 봇 id는 음수 (`b.peer = -(i+1)`, `Main.bot_by_id`).
   방장이 명단 `_roster`([[id, 이름, 병과, 팀]], reliable, 시작 알림보다 먼저)와 상태 `_bots`(30Hz, 4명씩 나눠서 — MTU)를 보낸다. 친구 쪽에선 봇이 `is_remote` 캐릭터.
-  대기실로 돌아가면 빈 명단을 보내 친구 쪽 봇을 지우고, 방장 봇은 `_bench`.
+  대기실로 돌아가면 빈 명단을 보내 친구 쪽 봇 캐릭터를 지우고, 방장 봇은 `_bench` (봇 자리는 room에 그대로).
 - **판정**: '내 컴퓨터가 판정하는 캐릭터' = `not is_remote` (나 + 방장이면 봇). `damage()`는 `mp() and v.is_remote`면 안 깎는다.
   사건은 `net.event(x, 누구)` → `_ev(x, who)`: 봇 일이면 봇 id를 같이 보냄 (방장만 보낼 수 있음). 표적 id는 `Net.mine(id)`로 내 캐릭터·내 봇을 찾음.
   처치 수: 죽인 쪽이 `not is_remote`면 그 컴퓨터가 셈 (방장 봇 처치는 방장이). 팡파레 사건은 내 봇도 맞음.
@@ -440,7 +441,7 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
   바뀐 것(거점 열림·점령·빼앗김·연장전·라운드 끝·경기 끝)을 보고 배너·뿔나팔을 직접 띄우고, 새 라운드면 내 캐릭터만 스폰룸으로(`_begin_round`는 is_remote를 건너뜀).
   거점 인원은 방장이 받은 위치로 셈. 스폰룸 회복·공격 금지·부활 5초·거점 시간(cap_time)은 각자. 경기 끝은 방장이 `phase == "over"`를 보고 알림 (킬·시간 제한 없음).
 - 말 두 마리: 두 번째 말은 `"hb"`로 보이고 줍기 허락도 따로. 말 등장은 `combat.mode`가 있으면 두 마리 (예전엔 `GameData.mode`를 봤음).
-- 경기 중에 들어온 친구는 봇을 다시 나누지 않는다 (그 팀이 6명이 될 수 있음).
+- 경기 중에 들어온 친구는 봇을 다시 나누지 않는다 (그 팀이 6명이 될 수 있음). 대기실 자리에선 봇 하나가 빠지고 다음 판부터 반영.
 
 ## 오디오 (BGM·볼륨 — 사용자 요청으로 추가, HTML엔 BGM 없음)
 
@@ -515,9 +516,20 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
   - Supabase 프로젝트 지역은 Mumbai (신호만 지나가서 게임 중 렉과 상관없음). Realtime 설정에서 공개 채널(public access)이 켜져 있어야 한다.
   - TURN(중계 서버)은 없다 → 학교·회사 와이파이 같은 막힌 망에선 직접 연결이 안 될 수 있다. 자주 그러면 그때 TURN을 붙이거나 전용 서버로.
 - **PC 버전**: Godot 본체엔 WebRTC가 없어서 `addons/webrtc_native`(GDExtension)가 맡는다. Windows exe로 내보내면 exe 옆에 `libwebrtc_native...dll`이 같이 나온다 → **둘을 같이** 줘야 한다. 없으면 `Net.NO_RTC` 안내.
-- 대기실(menu `lobby` 페이지): 방 코드, 모드(방장이 고름), 사람 목록(병과·방장·게임 중·쟁탈전이면 팀), 내 병과, 팀 바꾸기(쟁탈전), 게임 시작(방장) / 진행 중인 게임 참가(친구).
-- 친구대전 개인전엔 봇·닭이 없다 (쟁탈전은 빈자리를 방장 봇이 채움 — 위 "친구대전 쟁탈전"). 일시정지해도 게임은 안 멈춘다. 20킬·시간 종료는 방장이 판단해 알린다.
-- 결과 화면: 한 판 더 = 방장만 (친구는 자동으로 들어감), 병과 다시 고르기 = 대기실, 메인 메뉴 = 방 나가기.
+- **대기실** (사용자 요청 — 오버워치·롤 커스텀 게임식, `scripts/ui/lobby_page.gd`):
+  - **방장이 진짜 상태 `Net.room`**({ver, md, map, slots: [{id, bot, n, c, t, rdy, diff}]})을 들고, 바뀔 때마다 `_room`으로 통째로 모두에게. 친구는 `Net.ask(op, arg)` → `_req` → 방장 `_apply_req`가 검사해서 반영.
+    누구나: hi(들어올 때 이름·병과)·cls·team·ready. 방장만(친구가 보내면 무시): mode·map·bot_add(팀)·bot_del(id)·bot_set([id, 병과("" = 무작위), 난이도]). 거절은 `_notice` → 그 사람 화면 알림.
+    팀·모드·봇·준비는 대기실(`mst == "lobby"`)에서만, 병과는 언제나 (다음 부활부터).
+  - 자리: 개인전 최대 `NET.max_players`(10, 사람+봇), 쟁탈전 팀마다 `team_size`(5). 들어올 때 꽉 찼으면 봇 하나를 빼고 자리를 줌 (쟁탈전은 사람이 적은 팀, 그 팀 봇부터). 사람만 10이면 신호 단계에서 `full`. 나가면 자리 비움.
+    모드를 쟁탈전으로 바꾸면 사람 먼저·봇 다음으로 적은 팀에 번갈아 넣음 (방장 = 블루). 개인전으로 바꾸면 팀만 지움 (봇 그대로).
+  - **준비**: 방장 말고 모든 사람이 준비해야 `host_start` (버튼 "게임 시작 (준비 N/M)"). 대기실로 돌아오면 준비만 초기화.
+  - 봇은 방장만 넣고 뺌 (+ 봇 추가 / X), 봇마다 병과(랜덤 = 죽을 때 35% 바꿈, 고르면 `bot_cls_fixed`)·난이도(`player.bot_diff` → `BotAI.diff_of`). AI는 방장 컴퓨터에서만. **친구대전 개인전에도 봇**을 넣을 수 있다 (닭은 없음).
+  - 맵은 `GameData.ROOM_MAPS` (모드마다 지금은 하나씩 — 맵이 늘면 여기에 더하면 드롭다운에 나옴).
+  - 그리기: Main `_render_lobby`가 view(dict)를 만들어 `menu.render_lobby(view)` → `LobbyPage.render`. 자리 목록이 바뀌었을 때만 다시 만든다.
+- 일시정지해도 게임은 안 멈춘다. 20킬·시간 종료는 방장이 판단해 알린다.
+- **경기가 끝나면** (사용자 요청): 결과 화면 `NET.lobby_return`(10초, "대기실로 돌아가는 중 · N초") → 방장이 `go_lobby` + `_mt{st: lobby}` → 친구도 대기실 (알림이 늦으면 +`lobby_grace` 3초에 스스로).
+  연결·팀·봇·병과는 그대로, 준비만 초기화. 다음 판은 방장이 대기실에서 [게임 시작]을 눌러야만. 결과 화면의 '한 판 더'·'병과 다시 고르기'는 친구대전에선 숨김, '메인 메뉴' → '방 나가기'.
+  클라는 시작을 못 일으킴: `start_match`(친구대전)는 아무것도 안 하고, `_mt` 자동 시작은 대기실 페이지에 있을 때만. 테스트는 `GameData.end_wait_override`로 시간을 줄임.
 - 남의 캐릭터는 `is_remote`(player.gd `_physics_process`를 안 돎), Net `_apply_remote`가 받은 상태를 따라간다.
 - Combat `damage()`는 친구대전에서 **내 캐릭터만** 깎는다. 남을 맞히면 그쪽 컴퓨터가 판정해 "h"/"k" 사건을 보낸다. 처치 수는 죽인 사람이 "k"를 받고 스스로 센다.
 - 아이템은 방장만 생성·떨어뜨림. 친구가 닿으면 `net.request` → 방장이 `grants`에 적어 `_it`로 알려줌 (HTML seq/grant).
@@ -642,7 +654,10 @@ TABS 느낌 로우폴리 + 굵은 줄눈·또렷한 모양. **겉모양만** 바
 - **남은 화면 (완료)**: 수치는 `GameData.PAGE_UI`. 제목은 모두 매달린 나무 간판(`_head2`), 내용은 양피지 큰 판 + 못 4(`_big_board`).
   - 일시정지: 판 안에 병과 카드 5장(작은 양피지 카드 `_fill_cards`, 못 1, 고름 = 형광펜 테) + 금칠 계속하기 + 양피지 설정·메뉴로 나가기. 일시정지 → 설정은 설정 패널 그대로.
   - 나가기 안내(웹): "도망 성공!" + 정확한 안내 + 금칠 "다시 하러 가기". 친구대전: 양피지 글자 칸(`_field`), 금칠 방 만들기, 양피지 참가.
-  - 대기실: 나무 "방 코드" + 형광펜 쪽지 코드, 판 안에 모드·사람 목록(쟁탈전이면 팀 = 작은 방패 `TeamShield` 색 + "블루"/"레드" 글자, 방장 = 형광펜 꼬리표)·내 병과 카드·팀 바꾸기·금칠 게임 시작.
+  - 대기실 (**예외 — 사용자 요청으로 "게시판 색 + 정갈한 배치"**): 기울기·못·밧줄 없이 Container로 반듯하게, 나무판은 제목 간판 하나만. 색은 게시판 팔레트(`GameData.UI`) 그대로.
+    스타일은 `ui/lobby_theme.tres` 하나 (`LobbyTheme.build()` ← `GameData.LOBBY_UI`, 글자 크기 3단계 title·body·small). 노드엔 `theme_type_variation`만 쓰고 `add_theme_*_override` 안 함.
+    `test_ui_kit`가 저장본 = GameData 값인지, 색이 전부 팔레트인지 확인. 수치를 바꾸면 `tests/make_lobby_theme.gd`를 다시 돌릴 것.
+    주의: Label 변형과 Button 변형 이름이 겹치면 Label이 Button의 stylebox를 그린다 (그래서 버튼은 `SmallButton`).
   - 알림(toast): 아래 가운데 양피지 쪽지 + 못 1, 나타날 때 위에서 살짝 떨어지며 못을 축으로 흔들림 (`PAGE_UI.toast.wobble`).
 - 옛 `UiKit.class_card`(어두운 병과 카드)는 지웠다. `score_table`·`team_table`(크림 글자)은 Tab 점수판(나무판)만 쓴다.
 

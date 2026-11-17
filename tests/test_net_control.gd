@@ -29,6 +29,7 @@ func _initialize() -> void:
 	S.start(24691)
 	G.signal_url_override = "ws://127.0.0.1:24691"
 	G.ice_override = []
+	G.end_wait_override = 1.0  # 결과 화면 → 대기실 (원래 10초)
 	A = _make("A")
 	B = _make("B")
 	G.ai_enabled = false  # 봇은 세워 두고 직접 움직임
@@ -101,25 +102,62 @@ func _run() -> void:
 	nb.join_room("친구", "barbarian", na.code)
 	await wait_until(func(): return nb.on and na.remotes.size() == 1 and nb.remotes.size() == 1, 600)
 	check("친구가 들어옴", nb.on and na.remotes.size() == 1)
-	await wait_until(func(): return nb.team != "", 60)
-	check("방장은 블루, 친구는 사람이 적은 레드로", na.team == "blue" and nb.team == "red", "%s/%s" % [na.team, nb.team])
-	await wait_until(func(): return na.team_of(na.remotes.keys()[0]) == "red", 60)
-	check("방장 대기실에도 친구 팀이 보임", na.lobby_list()[1].team == "red", str(na.lobby_list()))
+	await wait_until(func(): return na.slots().size() == 2 and nb.slots().size() == 2, 60)
+	check("처음엔 개인전, 팀 없음", na.mode_now() == "ffa" and nb.mode_now() == "ffa" and na.team == "" and nb.team == "")
 
 	# ── 모드: 방장이 쟁탈전으로 ──
-	check("처음엔 개인전", na.mode_now() == "ffa" and nb.mode_now() == "ffa")
 	na.set_room_mode("control")
-	await wait_until(func(): return nb.mode_now() == "control", 60)
+	await wait_until(func(): return nb.mode_now() == "control" and nb.team != "", 60)
 	check("방장이 쟁탈전을 고르면 친구도 쟁탈전", nb.mode_now() == "control")
+	check("방장은 블루, 친구는 사람이 적은 레드로", na.team == "blue" and nb.team == "red", "%s/%s" % [na.team, nb.team])
+	check("방장 대기실에도 친구 팀이 보임", na.lobby_list()[1].team == "red", str(na.lobby_list()))
 	nb.switch_team()
 	await wait_until(func(): return na.team_of(na.remotes.keys()[0]) == "blue", 60)
 	check("팀 바꾸기 → 블루 (방장 목록에도)", nb.team == "blue" and na.team_counts().blue == 2, str(na.team_counts()))
 	nb.switch_team()
 	await wait_until(func(): return na.team_of(na.remotes.keys()[0]) == "red", 60)
 	check("다시 레드", nb.team == "red" and na.team_counts().red == 1)
+
+	# ── 봇 자리 (방장만 넣고 뺌, 꽉 찬 팀엔 안 됨) ──
+	nb.ask("bot_add", "red")
+	await wait(10)
+	check("친구는 봇을 못 넣음", na.slots().size() == 2, "n=%d" % na.slots().size())
+	for i in TS - 1:
+		na.ask("bot_add", "blue")
+		na.ask("bot_add", "red")
+	await wait_until(func(): return nb.slots().size() == TS * 2, 60)
+	check("방장이 봇을 넣으면 친구 화면에도 %d자리" % (TS * 2), nb.slots().size() == TS * 2 and nb.team_counts().blue == TS and nb.team_counts().red == TS, str(nb.team_counts()))
+	na.ask("bot_add", "red")
+	check("꽉 찬 팀엔 봇 추가 안 됨", na.slots().size() == TS * 2)
+	check("꽉 찬 팀으로는 이동 안 됨", not nb.move_team("blue"))
+	var bots_of := func(n, t: String) -> Array: return n.slots().filter(func(s): return s.bot and s.t == t)
+	var blue_bot: int = int(bots_of.call(na, "blue")[0].id)
+	na.ask("bot_set", [blue_bot, "crossbow", "hard"])
+	nb.ask("bot_set", [blue_bot, "bard", "easy"])  # 친구 요청은 무시
+	await wait_until(func(): return str(nb.slot_of(blue_bot).get("c", "")) == "crossbow", 60)
+	check("봇 병과·난이도 설정 (친구 화면에도, 친구 요청은 무시)", nb.slot_of(blue_bot).c == "crossbow" and nb.slot_of(blue_bot).diff == "hard")
+	var red_bot: int = int(bots_of.call(na, "red")[0].id)
+	na.ask("bot_del", red_bot)
+	await wait_until(func(): return nb.slots().size() == TS * 2 - 1, 60)
+	check("봇 빼기 (X)", nb.slot_of(red_bot).is_empty() and nb.team_counts().red == TS - 1)
+
+	# ── 친구가 나갔다가 꽉 찬 방에 다시 들어오면 그 팀 봇이 자리를 비켜 줌 ──
+	B.go_menu("main")
+	await wait_until(func(): return na.slots().size() == TS * 2 - 2, 120)
+	check("친구가 나가면 자리가 비워짐", na.slots().size() == TS * 2 - 2 and na.human_counts().red == 0)
+	na.ask("bot_add", "red")
+	na.ask("bot_add", "red")
+	check("레드도 봇으로 꽉 참", na.slots().size() == TS * 2 and na.team_counts().red == TS)
+	nb.join_room("친구", "barbarian", na.code)
+	await wait_until(func(): return nb.on and nb.team != "", 600)
+	await wait_until(func(): return na.slots().size() == TS * 2 and na.human_counts().red == 1, 60)
+	check("꽉 찬 방에 들어오면 사람이 적은 팀(레드) 봇 하나가 빠짐", nb.team == "red" and na.slots().size() == TS * 2 and bots_of.call(na, "red").size() == TS - 1,
+		"team=%s n=%d" % [nb.team, na.slots().size()])
 	var B_ID: int = nb.me_id()
 
-	# ── 시작: 빈자리 봇 ──
+	# ── 시작: 대기실 봇 자리대로 ──
+	nb.ask("ready", true)
+	await wait_until(func(): return na.can_start(), 60)
 	A.menu.lobby_start.emit()
 	await wait_until(func(): return A.state == "playing" and B.state == "playing", 90)
 	check("방장이 시작하면 둘 다 경기", A.state == "playing" and B.state == "playing", "%s/%s" % [A.state, B.state])
@@ -134,7 +172,9 @@ func _run() -> void:
 	check("친구 쪽도 10명 (봇은 친구 캐릭터처럼)", B.combat.ents.size() == TS * 2 and nb.remotes.keys().filter(func(id): return id < 0).size() == (TS - 1) * 2,
 		"n=%d" % B.combat.ents.size())
 	check("팀: 친구 레드, 방장 블루 (서로 화면에서도)", pb.team == "red" and pa.team == "blue" and na.remotes[B_ID].team == "red" and nb.remotes[1].team == "blue")
-	var bot = a_bots.filter(func(e): return e.team == "blue")[0]
+	var setb = A.bot_by_id(blue_bot)
+	check("방장이 고른 봇 병과·난이도대로", setb.cls == "crossbow" and setb.bot_diff == "hard" and setb.bot_cls_fixed, "%s %s" % [setb.cls, setb.bot_diff])
+	var bot = a_bots.filter(func(e): return e.team == "blue" and e != setb)[0]
 	var rbot = nb.remotes.get(bot.peer)
 	check("친구 화면의 봇: 이름·팀이 같음", rbot != null and rbot.ent_name == bot.ent_name and rbot.team == "blue")
 	await wait_until(func(): return B.mode.round_no == 1, 60)
@@ -229,21 +269,25 @@ func _run() -> void:
 	var ended: bool = await wait_until(func(): return A.state == "ended" and B.state == "ended", 120)
 	check("2선승 → 둘 다 결과 화면", ended and B.mode.match_winner == "red", "%s/%s" % [A.state, B.state])
 
-	# ── 대기실로 → 봇이 빠짐 ──
-	A.go_menu("class")
-	B.go_menu("class")
-	await wait_until(func(): return nb.remotes.size() == 1, 60)
+	# ── 몇 초 뒤 저절로 대기실로 → 봇 캐릭터는 쉬고 자리는 그대로 ──
+	await wait_until(func(): return A.menu.cur_page == "lobby" and B.menu.cur_page == "lobby" and nb.remotes.size() == 1, 240)
+	check("결과 화면 뒤 둘 다 대기실", A.state == "menu" and B.state == "menu" and A.menu.cur_page == "lobby" and B.menu.cur_page == "lobby")
 	check("대기실: 방장 봇이 쉬고 친구 쪽 봇도 사라짐", A.combat.ents.size() == 2 and B.combat.ents.size() == 2 and nb.remotes.size() == 1,
 		"A=%d B=%d" % [A.combat.ents.size(), B.combat.ents.size()])
 	check("개인전 맵으로 돌아옴", A.world == A.world_ffa and B.world == B.world_ffa)
+	check("대기실 봇 자리·팀은 그대로", na.slots().size() == TS * 2 and nb.team == "red" and na.team_counts().blue == TS, str(na.team_counts()))
 
 	# ── 개인전으로 다시 ──
 	na.set_room_mode("ffa")
 	await wait_until(func(): return nb.mode_now() == "ffa", 60)
+	nb.ask("ready", true)
+	await wait_until(func(): return na.can_start(), 60)
 	A.menu.lobby_start.emit()
 	await wait_until(func(): return A.state == "playing" and B.state == "playing", 90)
-	check("개인전으로 다시 시작: 봇 없음·팀 없음", A.mode == null and B.mode == null and A.combat.ents.size() == 2 and B.combat.ents.size() == 2
-		and pa.team == "" and pb.team == "" and na.remotes[B_ID].team == "", "A=%d" % A.combat.ents.size())
+	await wait_until(func(): return B.combat.ents.size() == TS * 2, 60)
+	check("개인전으로 다시 시작: 봇 %d명 그대로, 팀 없음" % (TS * 2 - 2), A.mode == null and B.mode == null and A.combat.ents.size() == TS * 2 and B.combat.ents.size() == TS * 2
+		and pa.team == "" and pb.team == "" and na.remotes[B_ID].team == "" and A.combat.ents.all(func(e): return e.team == ""), "A=%d B=%d" % [A.combat.ents.size(), B.combat.ents.size()])
+	check("개인전 봇도 방장 쪽에서 살아 있음", A.combat.ents.filter(func(e): return e.is_bot and e.alive).size() == TS * 2 - 2)
 
 	na.leave()
 	await wait_until(func(): return not nb.on, 300)

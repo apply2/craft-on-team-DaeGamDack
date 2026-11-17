@@ -636,6 +636,22 @@ const UI := {
 	"dust": 0xc9a77c,      # 어두운 판 위 흐린 글자 (옛 mute 자리)
 	"sky": 0x9cc0f2,       # 어두운 곳에서 보이는 밝은 파랑 (석궁 장전 고리 등, 옛 steel 자리)
 }
+## 친구대전 대기실 (사용자 요청 — 커스텀 게임식, 게시판 색 + 정갈한 배치). ui/lobby_theme.tres는 이 값으로 만든다:
+##   godot --headless --path . -s tests/make_lobby_theme.gd   (값을 바꾸면 다시 돌릴 것 — test_ui_kit가 같은지 확인)
+## 색은 UI 키 (["키", 불투명도]), px는 1280×720 기준
+const LOBBY_UI := {
+	"font": {"title": 28, "body": 18, "small": 14},  # 글자 크기 세 단계뿐
+	"bg": ["ink", 0.9],                # 화면 바탕 (뒤 맵이 살짝 비침)
+	"panel": "parch", "slot": "cream", # 판 2톤: 큰 판 양피지, 자리 밝은 양피지
+	"line": ["ink", 0.3],              # 자리 테두리
+	"accent": "marker",                # 강조 하나: 내 자리·준비·고른 병과·누름
+	"radius": 6, "border": 2, "pad": 12, "gap": 14,
+	"btn_pad": [14, 7], "small_pad": [9, 4],
+	"margin": [24, 16],                # 화면 가장자리 (좌우, 위아래)
+	"slot_h": 50, "slot_gap": 6, "team_bar": 6,  # 쟁탈전 자리 왼쪽 팀 색 띠
+	"side_w": 260, "class_h": 56, "emblem": 30,
+	"title_outline": 6,
+}
 ## UiKit 판·버튼 모양 (px는 1280×720 기준 = 시안 1920×1080 값 × 0.667)
 const UI_KIT := {
 	"wood": {"line": 3.0, "drop": 5.0, "radius": 7.0, "drop_a": 1.0},    # 시안 외곽선 4 · 그림자 8
@@ -799,7 +815,15 @@ const NET := {
 	"send_hz": 30.0, "host_hz": 4.0, "ctrl_hz": 10.0, "name_max": 10,  # ctrl_hz: 쟁탈전 상태(라운드·점령·점수)를 보내는 빈도
 	"follow": 14.0, "snap_dist": 6.0,   # 남의 캐릭터: 받은 위치로 부드럽게 따라감, 6m 넘게 벌어지면 순간이동
 	"dead_wait": 0.5, "revive_guard": 1.0,  # 죽음 사건보다 상태가 먼저 와도 잠깐 기다림 / 죽은 직후 옛 상태로 안 살아남
+	"lobby_return": 10.0,     # 경기가 끝나고 결과 화면을 이만큼 보여 준 뒤 모두 대기실로 (방장이 알림)
+	"lobby_grace": 3.0,       # 친구: 방장 알림이 늦으면 lobby_return + 이만큼 뒤에 스스로 대기실로
 }
+## 친구대전 대기실 맵 목록 (모드마다. 지금은 하나씩 — 맵이 늘면 여기에 더함)
+const ROOM_MAPS := {
+	"ffa": [{"key": "village", "name": "마을 광장"}],
+	"control": [{"key": "well", "name": "성곽 우물 광장"}],
+}
+var end_wait_override := -1.0  # 테스트: 0 이상이면 결과 화면 → 대기실 시간을 이걸로
 var signal_url_override := ""  # 테스트: 신호 서버를 이 주소로 (tests/mock_signal.gd, 예 "ws://127.0.0.1:24690"). "off"면 설정이 없는 것처럼
 var ice_override: Variant = null  # 테스트: STUN 없이 (빈 배열이면 같은 컴퓨터 안에서만 연결)
 var debug_hits := false     # 명중 판정 디버그 표시 (F9로 켜고 끔, HIT_DEBUG). 저장 안 함
@@ -1045,6 +1069,28 @@ static func held_scale(key: String, mine := false) -> float:
 
 func bot_classes() -> Array:
 	return CLASS_ORDER.filter(func(k: String) -> bool: return not CLASSES[k].get("wip", false))
+
+
+func room_maps(md: String) -> Array:
+	return ROOM_MAPS.get(md, ROOM_MAPS.ffa)
+
+
+## 이 모드의 기본 맵 키
+func room_map(md: String) -> String:
+	return str((room_maps(md)[0] as Dictionary).key)
+
+
+func room_map_name(key: String) -> String:
+	for md: String in ROOM_MAPS:
+		for m: Dictionary in ROOM_MAPS[md]:
+			if m.key == key:
+				return str(m.name)
+	return key
+
+
+## 결과 화면 → 대기실 시간 (친구대전)
+func lobby_return() -> float:
+	return end_wait_override if end_wait_override >= 0 else float(NET.lobby_return)
 
 
 func class_hp(cls: String) -> int:

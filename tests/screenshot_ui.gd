@@ -72,12 +72,26 @@ func _run() -> void:
 	M.menu.friend_status("방을 찾는 중...")
 	await snap("friend")
 	M.menu.open_lobby("archer")
-	M.menu.render_lobby("K7QX", [
-		{"name": "허풍쟁이 기사", "cls": "archer", "host": true, "st": "lobby", "team": "blue"},
-		{"name": "감자 농부", "cls": "cleric", "host": false, "st": "lobby", "team": "red"},
-		{"name": "늪지 마녀", "cls": "bard", "host": false, "st": "play", "team": "blue"}],
-		"친구에게 코드를 알려주세요 · 빈자리 봇: 블루 3 · 레드 4", "게임 시작", "control", true)
-	await snap("lobby")
+	var P := func(id: int, n: String, c: String, t: String, bot := false, rdy := false, diff := "") -> Dictionary:
+		return {"id": id, "name": n, "cls": c, "host": id == 1, "me": id == 1, "bot": bot, "rdy": rdy or id == 1, "diff": diff, "st": "", "team": t}
+	var ctrl_list := [P.call(1, "허풍쟁이 기사 (나)", "archer", "blue"), P.call(2, "감자 농부", "cleric", "red", false, true),
+		P.call(3, "늪지 마녀", "bard", "blue"), P.call(-1, "멍청이 1호", "", "red", true, true, "normal"),
+		P.call(-2, "돌대가리", "crossbow", "blue", true, true, "hard")]
+	var view := {"code": "K7QX", "list": ctrl_list, "md": "control", "map": "well", "host": true, "cap": 10, "team_cap": 5,
+		"my_team": "blue", "cls": "archer", "ready": Vector2i(1, 2), "me_ready": true, "can_start": false, "live": false, "mst": "lobby"}
+	M.menu.render_lobby(view)
+	await snap("lobby_control")
+	var ffa_list := ctrl_list.map(func(p: Dictionary) -> Dictionary:
+		var q := p.duplicate()
+		q.team = ""
+		return q)
+	ffa_list[0].me = false  # 친구 화면: 방장은 남, 내 자리는 감자 농부
+	ffa_list[0].name = "허풍쟁이 기사"
+	ffa_list[1].me = true
+	ffa_list[1].name = "감자 농부 (나)"
+	view.merge({"list": ffa_list, "md": "ffa", "map": "village", "host": false, "my_team": "", "cls": "cleric", "me_ready": true}, true)
+	M.menu.render_lobby(view)
+	await snap("lobby_ffa")
 	M.menu.show_page("main")
 	M.menu.toast("추후 업데이트 될 내용입니다.")
 	await frames(30)

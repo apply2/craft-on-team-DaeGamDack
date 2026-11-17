@@ -13,8 +13,9 @@ extends Node
 ##   - 방장이 경기 시간·종료, 저격총·AK·말 등장과 줍기 허락을 맡는다.
 ## 사건(발사·명중·처치)은 따로 믿을 수 있게(reliable) 보낸다.
 ## HTML과 다른 점: 방장이 나가면 방이 끝난다 (HTML은 다음 사람이 방장을 이어받음).
-## 쟁탈전 (사용자 요청): 방장이 대기실에서 모드를 고른다 (room_mode). 사람은 블루/레드를 고르고(처음엔 방장이 적은 쪽에 넣어 줌),
-##   빈자리는 방장 컴퓨터의 봇이 채운다. 봇은 음수 id(-1, -2 …)로 부르고, 방장이 명단(_roster)과 상태(_bots)를 보낸다.
+## 대기실 (사용자 요청 — 커스텀 게임식): 방장이 진짜 상태 room(모드·맵·자리·팀·병과·준비·봇)을 들고 바뀔 때마다 모두에게 보낸다.
+##   친구는 ask(op)로 요청만 하고 방장이 검사해서 반영한다. 시작은 방장만, 모두 준비했을 때만.
+## 쟁탈전: 사람은 블루/레드 (처음엔 방장이 적은 쪽에 넣어 줌), 방장이 넣은 봇 자리는 방장 컴퓨터의 봇이 맡는다. 봇은 음수 id(-1, -2 …)로 부르고, 방장이 명단(_roster)과 상태(_bots)를 보낸다.
 ##   방장 봇이 맞는 판정·처치 수는 방장 컴퓨터가 한다 (봇의 '맞은 쪽' = 방장). 사건은 누구 일인지(who)를 같이 보낸다.
 ##   라운드·점령·점수는 방장 ControlMode가 정하고 snapshot을 _cm으로 보낸다 (친구는 follower).
 
@@ -38,8 +39,7 @@ var code := ""
 var my_name := ""
 var cls := "archer"
 var remotes := {}         # peer id → PlayerController
-var info := {}            # peer id → {n, c, st, k, d, t}
-var room_mode := "ffa"    # 방장: 이 방의 모드 (ffa / control). 친구는 mode_now()로 방장 것을 읽는다
+var info := {}            # peer id → {n, c, st, k, d} (이름·처치 수 소개. 자리·팀은 room)
 var team := ""            # 쟁탈전에서 내 팀 (blue / red)
 var bot_roster: Array = []  # 쟁탈전 빈자리 봇 [[id(음수), 이름, 병과, 팀], …] — 방장이 정해서 보냄
 var last_mt := {}         # 방장이 보낸 경기 상태 {st, ep, rem}
@@ -75,7 +75,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(func() -> void: _fail(NO_LINK))
-	multiplayer.server_disconnected.connect(func() -> void: _close("방장이 방을 닫았어요"))
+	multiplayer.server_disconnected.connect(func() -> void: _close("방장이 나가서 방이 닫혔어요"))
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 
@@ -202,14 +202,15 @@ func _on_connected() -> void:
 		_sig = null
 	_begin(my_name, cls, code, false)
 	_hello_all()
+	ask("hi", {"n": my_name, "c": cls})  # 방장에게 자리 달라고
 
 
-func _begin(nick: String, c: String, room: String, host: bool) -> void:
+func _begin(nick: String, c: String, room_code: String, host: bool) -> void:
 	on = true
 	is_host = host
 	my_name = _nick(nick)
 	cls = c
-	code = room
+	code = room_code
 	last_mt = {}
 	seen_epoch = 0
 	mst = "lobby"
@@ -219,8 +220,10 @@ func _begin(nick: String, c: String, room: String, host: bool) -> void:
 	seq_seen = {}
 	req = {}
 	got = {}
-	room_mode = "ffa"
-	team = "blue" if host else ""  # 친구는 방장이 적은 팀에 넣어 준다 (_assign_team)
+	team = ""
+	room = {}
+	if host:
+		_room_new()
 	bot_roster = []
 	combat.net = self
 	status.emit("")
@@ -264,6 +267,7 @@ func _shutdown() -> void:
 	for p: int in remotes.keys():
 		_remove_remote(p)
 	info.clear()
+	room = {}
 	bot_roster = []
 	_conns.clear()
 	if multiplayer.multiplayer_peer and not multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
@@ -456,6 +460,7 @@ func _on_peer_connected(id: int) -> void:
 	if on:  # 새로 온 사람에게 내 소개 (서버가 다른 친구에게도 전해 준다)
 		_hello.rpc_id(id, _my_info())
 		if is_host:
+			_room.rpc_id(id, room)
 			_roster.rpc_id(id, bot_roster)
 			_mt.rpc_id(id, _mt_dict())
 
@@ -465,6 +470,9 @@ func _on_peer_disconnected(id: int) -> void:
 		_conns.erase(id)
 	_remove_remote(id)
 	info.erase(id)
+	if is_host and not slot_of(id).is_empty():  # 자리를 비우고 모두에게 알림
+		(room.slots as Array).erase(slot_of(id))
+		_push_room()
 	lobby_changed.emit()
 
 
@@ -474,9 +482,10 @@ func _hello_all() -> void:
 
 func _my_info() -> Dictionary:
 	var st := "play" if main.state == "playing" or main.state == "paused" else "lobby"
-	return {"n": my_name, "c": cls, "st": st, "k": player.kills, "d": player.deaths, "t": team}
+	return {"n": my_name, "c": cls, "st": st, "k": player.kills, "d": player.deaths}
 
 
+## 이름·처치 수 소개 (경기 중 캐릭터 이름표·점수판용). 대기실 자리·팀·병과는 room이 정한다
 @rpc("any_peer", "reliable")
 func _hello(d: Dictionary) -> void:
 	var id := multiplayer.get_remote_sender_id()
@@ -485,68 +494,318 @@ func _hello(d: Dictionary) -> void:
 	e.ent_name = str(d.get("n", "친구")).substr(0, int(GameData.NET.name_max))
 	e.kills = int(d.get("k", 0))
 	e.deaths = int(d.get("d", 0))
-	var t := str(d.get("t", ""))
-	if is_host and t == "":  # 새로 온 친구: 사람이 적은 팀으로
-		t = _emptier_team(id)
-		d.t = t
-		_assign_team.rpc_id(id, t)
+	var t := team_of(id)
 	if t != "" and main.mode and e.team != t:  # 쟁탈전 중에 들어옴: 팀 색으로
 		_set_remote_team(e, t)
 	lobby_changed.emit()
 
 
-@rpc("authority", "reliable")
-func _assign_team(t: String) -> void:
-	team = t
-	send_info()
+# ── 대기실 상태 (room) ───────────────────────────────────────
+## 방장이 진짜 상태를 들고, 바뀔 때마다 통째로 모두에게 보낸다 (_room). 친구는 요청(_req)만 보내고 방장이 검사해서 반영.
+## room = {ver, md: ffa/control, map, slots: [{id, bot, n, c, t, rdy, diff}]}
+##   id: 사람 = peer id(1 = 방장), 봇 = 음수 (Main.bot_by_id). c "" = 봇 병과 무작위. diff = 봇 난이도. rdy = 준비 (방장·봇은 늘 준비)
+var room := {}
 
 
-## 쟁탈전 팀별 사람 수 (나 포함, skip은 빼고)
-func team_counts(skip := 0) -> Dictionary:
+static func _slot(id: int, n: String, c: String, t: String, bot := false, diff := "") -> Dictionary:
+	return {"id": id, "bot": bot, "n": n, "c": c, "t": t, "rdy": bot, "diff": diff}
+
+
+func _room_new() -> void:
+	room = {"ver": 0, "md": "ffa", "map": GameData.room_map("ffa"), "slots": [_slot(1, my_name, cls, "")]}
+
+
+func slots() -> Array:
+	return room.get("slots", [])
+
+
+func slot_of(id: int) -> Dictionary:
+	for s: Dictionary in slots():
+		if int(s.id) == id:
+			return s
+	return {}
+
+
+## 이 방 모드의 최대 인원 (사람 + 봇)
+func room_cap() -> int:
+	if mode_now() == "control":
+		return int(GameData.MODES.control.team_size) * 2
+	return int(GameData.NET.max_players)
+
+
+func team_cap() -> int:
+	return int(GameData.MODES.control.team_size)
+
+
+## 팀별 자리 수 (사람 + 봇)
+func team_counts() -> Dictionary:
 	var n := {"blue": 0, "red": 0}
-	if team in n:
-		n[team] += 1
-	for id: int in info:
-		var t := str((info[id] as Dictionary).get("t", ""))
-		if id != skip and t in n:
-			n[t] += 1
+	for s: Dictionary in slots():
+		if str(s.t) in n:
+			n[s.t] += 1
 	return n
 
 
-func _emptier_team(skip := 0) -> String:
-	var n := team_counts(skip)
-	return "red" if n.red < n.blue else "blue"
+## 팀별 사람 수
+func human_counts() -> Dictionary:
+	var n := {"blue": 0, "red": 0}
+	for s: Dictionary in slots():
+		if not s.bot and str(s.t) in n:
+			n[s.t] += 1
+	return n
 
 
-## 대기실 '팀 바꾸기' — 상대 팀 사람이 team_size보다 적을 때만
-func switch_team() -> bool:
-	var other := "red" if team == "blue" else "blue"
-	if int(team_counts()[other]) >= int(GameData.MODES.control.team_size):
-		status.emit("%s이 꽉 찼어요" % ControlMode.team_name(other))
+## 준비한 사람 / 준비해야 하는 사람 (방장·봇 빼고)
+func ready_counts() -> Vector2i:
+	var r := Vector2i.ZERO
+	for s: Dictionary in slots():
+		if not s.bot and int(s.id) != 1:
+			r.y += 1
+			if s.rdy:
+				r.x += 1
+	return r
+
+
+func my_ready() -> bool:
+	return bool(slot_of(me_id()).get("rdy", false))
+
+
+## 방장: 지금 시작할 수 있나 (대기실이고 모두 준비)
+func can_start() -> bool:
+	var r := ready_counts()
+	return is_host and mst == "lobby" and r.x == r.y
+
+
+## 방장: room이 바뀌었다 → 모두에게
+func _push_room() -> void:
+	if not is_host:
+		return
+	room.ver = int(room.get("ver", 0)) + 1
+	if on:
+		_room.rpc(room)
+	_take_room()
+
+
+@rpc("authority", "reliable")
+func _room(r: Dictionary) -> void:
+	room = r
+	_take_room()
+
+
+func _take_room() -> void:
+	var s := slot_of(me_id())
+	if not s.is_empty():
+		team = str(s.t)
+	lobby_changed.emit()
+
+
+## 대기실 요청 (방장은 바로 처리, 친구는 방장에게 보냄)
+##   누구나: hi {n, c} · cls 병과 · team 팀 · ready 준비
+##   방장만: mode · map · bot_add 팀 · bot_del id · bot_set [id, 병과("" = 무작위), 난이도]
+func ask(op: String, arg: Variant = null) -> void:
+	if not on:
+		return
+	if is_host:
+		_apply_req(1, op, arg)
+	else:
+		_req.rpc_id(1, op, arg)
+
+
+@rpc("any_peer", "reliable")
+func _req(op: String, arg: Variant) -> void:
+	if is_host:
+		_apply_req(multiplayer.get_remote_sender_id(), op, arg)
+
+
+func _apply_req(from: int, op: String, arg: Variant) -> void:
+	var lobby := mst == "lobby"
+	var s := slot_of(from)
+	match op:
+		"hi":
+			if arg is Dictionary:
+				_join_slot(from, str(arg.get("n", "")), str(arg.get("c", "")))
+		"cls":
+			if s.is_empty() or not GameData.CLASSES.has(str(arg)):
+				return
+			s.c = str(arg)
+		"ready":
+			if s.is_empty() or from == 1 or not lobby:
+				return
+			s.rdy = bool(arg)
+		"team":
+			var t := str(arg)
+			if s.is_empty() or mode_now() != "control" or not t in ["blue", "red"] or s.t == t:
+				return
+			if not lobby:
+				_deny(from, "경기 중엔 팀을 바꿀 수 없어요")
+				return
+			if int(team_counts()[t]) >= team_cap():
+				_deny(from, "%s이 꽉 찼어요" % ControlMode.team_name(t))
+				return
+			s.t = t
+		_:
+			if from != 1 or not lobby:  # 아래는 방장만, 대기실에서만
+				return
+			match op:
+				"mode":
+					if not _set_mode(str(arg)):
+						return
+				"map":
+					if not GameData.room_maps(mode_now()).any(func(m: Dictionary) -> bool: return m.key == str(arg)):
+						return
+					room.map = str(arg)
+				"bot_add":
+					if not _add_bot(str(arg)):
+						return
+				"bot_del":
+					var b := slot_of(int(arg))
+					if b.is_empty() or not b.bot:
+						return
+					(room.slots as Array).erase(b)
+				"bot_set":
+					if not arg is Array or (arg as Array).size() < 3:
+						return
+					var b := slot_of(int(arg[0]))
+					var c := str(arg[1])
+					var d := str(arg[2])
+					if b.is_empty() or not b.bot or not (c == "" or GameData.bot_classes().has(c)) or not GameData.DIFF.has(d):
+						return
+					b.c = c
+					b.diff = d
+				_:
+					return
+	_push_room()
+
+
+## 거절 안내 (요청한 사람 화면에 알림)
+func _deny(to: int, text: String) -> void:
+	if to == me_id():
+		main.menu.toast(text)
+	elif on:
+		_notice.rpc_id(to, text)
+
+
+@rpc("authority", "reliable")
+func _notice(text: String) -> void:
+	main.menu.toast(text)
+
+
+## 방장: 새로 온 사람 자리. 꽉 찼으면 봇 하나를 빼고 그 자리를 준다 (쟁탈전은 사람이 적은 팀, 그 팀 봇부터)
+func _join_slot(id: int, n: String, c: String) -> void:
+	n = n.strip_edges().substr(0, int(GameData.NET.name_max))
+	if n == "":
+		n = "친구"
+	if not GameData.CLASSES.has(c):
+		c = "archer"
+	var s := slot_of(id)
+	if not s.is_empty():
+		s.n = n
+		s.c = c
+		return
+	var t := ""
+	if mode_now() == "control":
+		t = _place_team()
+		if t == "":
+			return
+	elif slots().size() >= room_cap() and not _drop_bot(""):
+		return
+	(room.slots as Array).append(_slot(id, n, c, t))
+
+
+func _place_team() -> String:
+	var h := human_counts()
+	var order := ["blue", "red"] if int(h.blue) <= int(h.red) else ["red", "blue"]
+	var n := team_counts()
+	for t: String in order:
+		if int(n[t]) < team_cap():
+			return t
+	for t: String in order:
+		if _drop_bot(t):
+			return t
+	return ""
+
+
+## 봇 하나 빼기 (t = 팀, "" = 아무 봇). 마지막에 넣은 봇부터
+func _drop_bot(t: String) -> bool:
+	var arr: Array = room.slots
+	for i in range(arr.size() - 1, -1, -1):
+		var s: Dictionary = arr[i]
+		if s.bot and (t == "" or s.t == t):
+			arr.remove_at(i)
+			return true
+	return false
+
+
+## 방장: 모드 바꾸기. 쟁탈전이면 사람 먼저, 봇은 그다음으로 사람이 적은 팀에 번갈아 넣고 넘치는 봇은 뺀다
+func _set_mode(k: String) -> bool:
+	if not (k == "ffa" or GameData.MODES.has(k)) or room.md == k:
 		return false
-	team = other
-	send_info()
+	room.md = k
+	room.map = GameData.room_map(k)
+	for s: Dictionary in slots():
+		s.t = ""
+	if k == "control":
+		for bot_pass: bool in [false, true]:
+			for s: Dictionary in slots():
+				if bool(s.bot) != bot_pass:
+					continue
+				var n := team_counts()
+				var t := "blue" if int(n.blue) <= int(n.red) else "red"
+				if int(n[t]) < team_cap():
+					s.t = t
+		room.slots = slots().filter(func(x: Dictionary) -> bool: return x.t != "")
+	return true
+
+
+## 방장: 봇 넣기 (쟁탈전은 그 팀에 자리가 있을 때만)
+func _add_bot(t: String) -> bool:
+	if mode_now() == "control":
+		if not t in ["blue", "red"] or int(team_counts()[t]) >= team_cap():
+			return false
+	else:
+		t = ""
+		if slots().size() >= room_cap():
+			return false
+	for i in main.bots.size():
+		var id: int = -(i + 1)
+		if slot_of(id).is_empty():
+			(room.slots as Array).append(_slot(id, (main.bots[i] as PlayerController).ent_name, "", t, true, GameData.difficulty))
+			return true
+	return false
+
+
+## 대기실 '팀 바꾸기' — 상대 팀에 자리가 있을 때만
+func switch_team() -> bool:
+	return move_team("red" if team == "blue" else "blue")
+
+
+func move_team(t: String) -> bool:
+	if mode_now() != "control" or t == team:
+		return false
+	if int(team_counts().get(t, 0)) >= team_cap():
+		main.menu.toast("%s이 꽉 찼어요" % ControlMode.team_name(t))
+		return false
+	ask("team", t)
 	return true
 
 
 ## 방장: 대기실에서 모드 고르기
 func set_room_mode(k: String) -> void:
-	if not is_host or not (k == "ffa" or GameData.MODES.has(k)):
-		return
-	room_mode = k
-	_mt.rpc(_mt_dict())
-	lobby_changed.emit()
+	if is_host:
+		ask("mode", k)
 
 
 ## 이 방의 모드 (방장이 고른 것)
 func mode_now() -> String:
-	return room_mode if is_host else str(last_mt.get("md", "ffa"))
+	if room.has("md"):
+		return str(room.md)
+	return str(last_mt.get("md", "ffa"))
 
 
 func team_of(peer: int) -> String:
 	if peer == me_id():
 		return team
-	return str(info.get(peer, {}).get("t", ""))
+	return str(slot_of(peer).get("t", ""))
 
 
 func _set_remote_team(e: PlayerController, t: String) -> void:
@@ -568,6 +827,7 @@ func send_info() -> void:
 
 func set_cls(c: String) -> void:
 	cls = c
+	ask("cls", c)
 	send_info()
 
 
@@ -604,17 +864,16 @@ func _remove_remote(id: int) -> void:
 	e.queue_free()
 
 
-## 대기실 목록 (HTML renderLobby)
+## 대기실 목록 (room 순서): [{id, name, cls("" = 무작위 봇), host, me, bot, rdy, diff, st, team}]
 func lobby_list() -> Array:
 	var me_st := "play" if main.state == "playing" or main.state == "paused" else ""
-	var list: Array = [{"name": my_name + " (나)", "cls": cls, "host": is_host, "st": me_st}]
-	var ids: Array = info.keys()
-	ids.sort()
-	for id: int in ids:
-		var d: Dictionary = info[id]
-		var c := str(d.get("c", "archer"))
-		list.append({"name": str(d.get("n", "친구")), "cls": c if GameData.CLASSES.has(c) else "archer", "host": id == 1, "st": str(d.get("st", "")), "team": str(d.get("t", ""))})
-	list[0].team = team
+	var me := me_id()
+	var list: Array = []
+	for s: Dictionary in slots():
+		var id := int(s.id)
+		var st := me_st if id == me else ("" if s.bot else str(info.get(id, {}).get("st", "")))
+		list.append({"id": id, "name": str(s.n) + (" (나)" if id == me else ""), "cls": str(s.c), "host": id == 1, "me": id == me,
+			"bot": bool(s.bot), "rdy": bool(s.rdy) or id == 1, "diff": str(s.diff), "st": st, "team": str(s.t)})
 	return list
 
 
@@ -624,31 +883,41 @@ func live_match() -> bool:
 
 # ── 경기 시작·끝 (방장) ──────────────────────────────────────
 func _mt_dict() -> Dictionary:
-	return {"st": mst, "ep": epoch, "rem": maxf(0.0, roundf(rem)), "md": room_mode}
+	return {"st": mst, "ep": epoch, "rem": maxf(0.0, roundf(rem)), "md": mode_now()}
 
 
-func host_start() -> void:
+## 방장만, 대기실에서, 모두 준비했을 때만 시작한다
+func host_start() -> bool:
 	if not is_host:
-		return
+		return false
+	if not can_start():
+		if mst == "lobby":
+			main.menu.toast("모두 준비해야 시작할 수 있어요")
+		return false
 	epoch += 1
 	seen_epoch = epoch
 	mst = "play"
 	rem = GameData.MATCH_TIME
 	grants = {}
-	bot_roster = main.mp_pick_bots() if room_mode == "control" else []  # 쟁탈전: 빈자리를 봇으로
+	bot_roster = main.mp_pick_bots()  # 대기실 봇 자리대로 (방장 컴퓨터에서 AI가 돈다)
 	_roster.rpc(bot_roster)  # 시작 알림보다 먼저 (친구가 봇을 만들어 두게)
 	_mt.rpc(_mt_dict())
 	start_requested.emit(rem)
 	_host_t = 0.0
+	return true
 
 
 ## 결과 화면·대기실로 돌아감 (HTML goLobby)
 func to_lobby() -> void:
 	if is_host:
 		mst = "lobby"
+		for s: Dictionary in slots():  # 다음 판은 다시 준비부터
+			if not s.bot:
+				s.rdy = false
 		if not bot_roster.is_empty():
 			bot_roster = []
 			_roster.rpc(bot_roster)
+		_push_room()
 		_mt.rpc(_mt_dict())
 	send_info()
 
@@ -686,11 +955,14 @@ func _mt(mt: Dictionary) -> void:
 	last_mt = mt
 	var st := str(mt.get("st", "lobby"))
 	var ep := int(mt.get("ep", 0))
-	if st == "play" and ep > seen_epoch and (main.state == "menu" or main.state == "ended") and main.menu.cur_page != "friend":
+	if st == "play" and ep > seen_epoch and main.state == "menu" and main.menu.cur_page == "lobby":  # 대기실에 있을 때만 (결과 화면에선 안 끌려감)
 		seen_epoch = ep
 		start_requested.emit(float(mt.get("rem", GameData.MATCH_TIME)))
 	elif st == "end" and main.state in ["playing", "paused"] and ep == seen_epoch:
 		end_requested.emit()
+	elif st == "lobby" and main.state in ["ended", "playing", "paused"] and ep == seen_epoch and ep > 0:  # 방장이 대기실로 돌아감 → 모두
+		main.go_lobby()
+		return
 	if main.state in ["playing", "paused"] and mt.has("rem") and absf(main.time_left - float(mt.rem)) > 1.5:
 		main.time_left = float(mt.rem)
 	lobby_changed.emit()

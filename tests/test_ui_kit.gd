@@ -208,6 +208,7 @@ func _run() -> void:
 	host.queue_free()
 	await frames(2)
 	_font_coverage()
+	_lobby_theme()
 	print("ALL PASS" if fails == 0 else "%d FAILED" % fails)
 	quit()
 
@@ -266,3 +267,49 @@ func _collect(out: Array[String], dir: String, ext: String) -> void:
 			out.append(dir + "/" + f)
 	for d in DirAccess.get_directories_at(dir):
 		_collect(out, dir + "/" + d, ext)
+
+
+## 친구대전 대기실 Theme: 저장된 ui/lobby_theme.tres가 GameData 값으로 만든 것과 같은지 (색·크기를 바꾸고 make_lobby_theme를 안 돌렸으면 실패)
+func _lobby_theme() -> void:
+	var saved: Theme = load("res://ui/lobby_theme.tres")
+	var fresh: Theme = load("res://scripts/ui/lobby_theme.gd").build()
+	var diff: Array = []
+	for type in fresh.get_type_list():
+		for n in fresh.get_color_list(type):
+			if not saved.has_color(n, type) or not saved.get_color(n, type).is_equal_approx(fresh.get_color(n, type)):
+				diff.append("%s.%s" % [type, n])
+		for n in fresh.get_font_size_list(type):
+			if saved.get_font_size(n, type) != fresh.get_font_size(n, type):
+				diff.append("%s.%s" % [type, n])
+		for n in fresh.get_constant_list(type):
+			if saved.get_constant(n, type) != fresh.get_constant(n, type):
+				diff.append("%s.%s" % [type, n])
+		for n in fresh.get_stylebox_list(type):
+			var a = fresh.get_stylebox(n, type)
+			var b = saved.get_stylebox(n, type) if saved.has_stylebox(n, type) else null
+			if b == null or a.get_class() != b.get_class():
+				diff.append("%s.%s" % [type, n])
+			elif a is StyleBoxFlat:
+				for k in ["bg_color", "border_color"]:
+					if not (a.get(k) as Color).is_equal_approx(b.get(k)):
+						diff.append("%s.%s.%s" % [type, n, k])
+				for k in ["border_width_left", "border_width_top", "corner_radius_top_left", "content_margin_left", "content_margin_top"]:
+					if a.get(k) != b.get(k):
+						diff.append("%s.%s.%s" % [type, n, k])
+		if fresh.get_type_variation_base(type) != saved.get_type_variation_base(type):
+			diff.append("%s 기반" % type)
+	check("대기실 Theme(.tres) = GameData 값 (다르면 make_lobby_theme 다시)", diff.is_empty(), str(diff.slice(0, 8)))
+	# 색은 팔레트 키에서만 (게시판 색)
+	var pal: Array = []
+	for k in G.UI:
+		pal.append(G.col(G.UI[k]))
+	var off: Array = []
+	for type in fresh.get_type_list():
+		for n in fresh.get_stylebox_list(type):
+			var sb = fresh.get_stylebox(n, type)
+			if sb is StyleBoxFlat:
+				for k in ["bg_color", "border_color"]:
+					var c: Color = sb.get(k)
+					if c.a > 0 and not pal.any(func(x: Color) -> bool: return Color(x, c.a).is_equal_approx(c)):
+						off.append("%s.%s" % [type, n])
+	check("대기실 Theme 색은 전부 GameData.UI 팔레트", off.is_empty(), str(off))

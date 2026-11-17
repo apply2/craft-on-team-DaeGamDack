@@ -1184,7 +1184,7 @@ func kill(v: PlayerController, a: PlayerController, kind: String, head: bool, di
 		kill_mark.emit(head)
 		Sfx.play("kill")
 		toast.emit(("헤드샷 처치 · " if head else "처치 · ") + v.ent_name)
-	if v.is_bot and randf() < GameData.BOT_RECLASS:
+	if v.is_bot and not v.bot_cls_fixed and randf() < GameData.BOT_RECLASS:
 		v.next_cls = GameData.bot_classes().pick_random()
 	killed.emit(v, a, kind, head)  # 킬피드·사망 화면·20킬 종료는 Main이 받는다
 

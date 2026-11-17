@@ -84,8 +84,7 @@ func pick_class(k: String) -> void:
 	GameData.chosen_cls = k
 	GameData.save_settings()
 	if hud.combat and hud.combat.mp():  # 친구대전: 대기실 병과도 같이
-		hud.combat.net.cls = k
-		hud.combat.net.send_info()
+		hud.combat.net.set_cls(k)
 
 
 func _unhandled_input(event: InputEvent) -> void:

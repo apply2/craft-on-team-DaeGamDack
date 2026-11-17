@@ -30,6 +30,7 @@ func _initialize() -> void:
 	if S.start(24690) != OK:
 		print("FAIL 가짜 신호 서버를 못 엶 (포트 24690)")
 	G.ice_override = []  # 같은 컴퓨터 안이라 STUN 없이
+	G.end_wait_override = 1.5  # 결과 화면 → 대기실 (원래 10초)
 	A = _make("A")
 	B = _make("B")
 	G.ai_enabled = false
@@ -124,15 +125,28 @@ func _run() -> void:
 	check("친구: 방 코드로 찾아 들어감 (WebRTC 직접 연결)", found and not nb.is_host and nb.code == na.code and nb.me_id() >= 2, "code=%s id=%d" % [nb.code, nb.me_id()])
 	await wait(5)
 	check("연결되면 친구는 신호 채널을 닫음", S.joined_count() == 1, "n=%d" % S.joined_count())
-	await wait_until(func(): return na.remotes.size() == 1 and nb.remotes.size() == 1 and na.info.size() == 1 and nb.info.size() == 1, 120)
+	await wait_until(func(): return na.remotes.size() == 1 and nb.remotes.size() == 1 and na.slots().size() == 2 and nb.slots().size() == 2, 120)
 	var la: Array = na.lobby_list()
 	var lb: Array = nb.lobby_list()
 	check("대기실 목록 2명", la.size() == 2 and lb.size() == 2, "%s / %s" % [la, lb])
-	check("이름·병과·방장 표시", la[1].name == "친구" and la[1].cls == "barbarian" and lb[1].host and not lb[0].host and lb[0].name == "친구 (나)", str(lb))
+	check("이름·병과·방장 표시 (방장이 보낸 자리 순서)", la[1].name == "친구" and la[1].cls == "barbarian" and lb[0].host and not lb[1].host and lb[1].name == "친구 (나)", str(lb))
 	check("친구 쪽도 봇 빠짐", B.combat.ents.size() == 2 and A.combat.ents.size() == 2, "A=%d B=%d" % [A.combat.ents.size(), B.combat.ents.size()])
 	nb.set_cls("crossbow")
 	await wait_until(func(): return na.lobby_list()[1].cls == "crossbow", 60)
 	check("병과 바꾸면 방장 목록도 바뀜", na.lobby_list()[1].cls == "crossbow")
+
+	# ── 준비·시작 권한 ──
+	A.menu.lobby_start.emit()
+	await wait(10)
+	check("친구가 준비 안 하면 방장도 시작 못 함", A.state == "menu" and B.state == "menu" and not na.can_start(), "%s/%s" % [A.state, B.state])
+	nb.ask("ready", true)
+	await wait_until(func(): return na.can_start() and nb.my_ready(), 60)
+	check("친구 준비 → 방장·친구 목록에 준비", na.lobby_list()[1].rdy and nb.lobby_list()[1].rdy)
+	B.start_match()
+	nb.host_start()
+	nb.ask("mode", "control")  # 방장만 할 수 있는 요청은 무시됨
+	await wait(10)
+	check("친구는 시작·모드 바꾸기를 못 함", A.state == "menu" and B.state == "menu" and na.mode_now() == "ffa", "%s/%s %s" % [A.state, B.state, na.mode_now()])
 
 	# ── 경기 시작 ──
 	A.menu.lobby_start.emit()
@@ -204,10 +218,24 @@ func _run() -> void:
 	var ended: bool = await wait_until(func(): return A.state == "ended" and B.state == "ended", 120)
 	check("시간 끝 → 둘 다 결과 화면", ended, "%s/%s" % [A.state, B.state])
 
-	# ── 한 판 더 (방장) → 둘 다 다시 경기 ──
+	# ── 결과 화면에서 '한 판 더'를 눌러도 시작 안 됨 → 대기실에서 준비 → 다시 시작 ──
 	A.start_match()
+	B.start_match()
+	await wait(10)
+	check("결과 화면에서 바로 다음 판으로 안 감", A.state == "ended" and B.state == "ended", "%s/%s" % [A.state, B.state])
+	check("친구대전 결과 화면: '한 판 더'·'병과 다시 고르기' 숨김, 카운트다운", not A.menu._end_again.visible and not B.menu._end_pick.visible
+		and B.menu._end_count.visible and B.menu._end_mm.text == "방 나가기", B.menu._end_count.text)
+	var back_lobby: bool = await wait_until(func(): return A.menu.cur_page == "lobby" and B.menu.cur_page == "lobby" and A.state == "menu" and B.state == "menu", 240)
+	check("몇 초 뒤 둘 다 같은 방 대기실로 (연결 유지)", back_lobby and na.on and nb.on and na.remotes.size() == 1, "%s/%s" % [A.menu.cur_page, B.menu.cur_page])
+	await wait_until(func(): return not na.lobby_list()[1].rdy, 60)
+	check("대기실로 오면 준비가 풀림, 병과는 그대로", not na.can_start() and na.lobby_list()[1].cls == "crossbow" and nb.cls == "crossbow")
+	await wait(30)
+	check("대기실에서 저절로 시작하지 않음", A.state == "menu" and B.state == "menu")
+	nb.ask("ready", true)
+	await wait_until(func(): return na.can_start(), 60)
+	A.menu.lobby_start.emit()
 	await wait_until(func(): return A.state == "playing" and B.state == "playing", 60)
-	check("방장이 '한 판 더' 누르면 친구도 들어옴", A.state == "playing" and B.state == "playing", "%s/%s" % [A.state, B.state])
+	check("다시 준비하면 둘째 판 시작", A.state == "playing" and B.state == "playing", "%s/%s" % [A.state, B.state])
 	check("처치 수 0부터", pa.kills == 0 and pb.deaths == 0, "")
 
 	# ── 친구 나가기 ── (방장 화면에 친구의 성수병·웅덩이가 남아 있는 채로 나감)
