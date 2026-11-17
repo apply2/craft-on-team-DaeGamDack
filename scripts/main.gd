@@ -162,7 +162,7 @@ func _render_lobby() -> void:
 	else:
 		sub = "%d명 · 방장이 시작하기를 기다리는 중" % list.size()
 	if md == "control":  # 빈자리는 봇
-		var n := net.team_counts()
+		var n := net.human_counts()
 		var ts := int(GameData.MODES.control.team_size)
 		sub += " · 빈자리 봇: 블루 %d · 레드 %d" % [maxi(0, ts - int(n.blue)), maxi(0, ts - int(n.red))]
 	var btn := "게임 시작" if net.is_host else ("진행 중인 게임 참가" if live else "")
@@ -250,7 +250,7 @@ func _mp_start_control() -> void:
 
 ## 방장: 쟁탈전 빈자리를 봇으로 채움 (팀마다 team_size - 사람 수). 명단 [[id, 이름, 병과, 팀], …]
 func mp_pick_bots() -> Array:
-	var n := net.team_counts()
+	var n := net.human_counts()
 	var ts := int(GameData.MODES.control.team_size)
 	var out: Array = []
 	var i := 0

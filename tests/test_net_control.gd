@@ -101,16 +101,15 @@ func _run() -> void:
 	nb.join_room("친구", "barbarian", na.code)
 	await wait_until(func(): return nb.on and na.remotes.size() == 1 and nb.remotes.size() == 1, 600)
 	check("친구가 들어옴", nb.on and na.remotes.size() == 1)
-	await wait_until(func(): return nb.team != "", 60)
-	check("방장은 블루, 친구는 사람이 적은 레드로", na.team == "blue" and nb.team == "red", "%s/%s" % [na.team, nb.team])
-	await wait_until(func(): return na.team_of(na.remotes.keys()[0]) == "red", 60)
-	check("방장 대기실에도 친구 팀이 보임", na.lobby_list()[1].team == "red", str(na.lobby_list()))
+	await wait_until(func(): return na.slots().size() == 2 and nb.slots().size() == 2, 60)
+	check("처음엔 개인전, 팀 없음", na.mode_now() == "ffa" and nb.mode_now() == "ffa" and na.team == "" and nb.team == "")
 
 	# ── 모드: 방장이 쟁탈전으로 ──
-	check("처음엔 개인전", na.mode_now() == "ffa" and nb.mode_now() == "ffa")
 	na.set_room_mode("control")
-	await wait_until(func(): return nb.mode_now() == "control", 60)
+	await wait_until(func(): return nb.mode_now() == "control" and nb.team != "", 60)
 	check("방장이 쟁탈전을 고르면 친구도 쟁탈전", nb.mode_now() == "control")
+	check("방장은 블루, 친구는 사람이 적은 레드로", na.team == "blue" and nb.team == "red", "%s/%s" % [na.team, nb.team])
+	check("방장 대기실에도 친구 팀이 보임", na.lobby_list()[1].team == "red", str(na.lobby_list()))
 	nb.switch_team()
 	await wait_until(func(): return na.team_of(na.remotes.keys()[0]) == "blue", 60)
 	check("팀 바꾸기 → 블루 (방장 목록에도)", nb.team == "blue" and na.team_counts().blue == 2, str(na.team_counts()))
@@ -120,6 +119,8 @@ func _run() -> void:
 	var B_ID: int = nb.me_id()
 
 	# ── 시작: 빈자리 봇 ──
+	nb.ask("ready", true)
+	await wait_until(func(): return na.can_start(), 60)
 	A.menu.lobby_start.emit()
 	await wait_until(func(): return A.state == "playing" and B.state == "playing", 90)
 	check("방장이 시작하면 둘 다 경기", A.state == "playing" and B.state == "playing", "%s/%s" % [A.state, B.state])
@@ -240,6 +241,8 @@ func _run() -> void:
 	# ── 개인전으로 다시 ──
 	na.set_room_mode("ffa")
 	await wait_until(func(): return nb.mode_now() == "ffa", 60)
+	nb.ask("ready", true)
+	await wait_until(func(): return na.can_start(), 60)
 	A.menu.lobby_start.emit()
 	await wait_until(func(): return A.state == "playing" and B.state == "playing", 90)
 	check("개인전으로 다시 시작: 봇 없음·팀 없음", A.mode == null and B.mode == null and A.combat.ents.size() == 2 and B.combat.ents.size() == 2
