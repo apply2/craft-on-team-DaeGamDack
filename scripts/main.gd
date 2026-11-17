@@ -132,6 +132,8 @@ func enter_mp() -> void:
 ## 방에서 나옴: 봇을 다시 넣고 메인 메뉴 (HTML leaveMP)
 func leave_mp() -> void:
 	for b in bots:
+		b.bot_diff = ""  # AI대전은 전체 난이도 하나
+		b.bot_cls_fixed = false
 		b.process_mode = Node.PROCESS_MODE_PAUSABLE
 		combat.register(b)
 	go_menu("main")
@@ -171,8 +173,12 @@ func mp_start(rem: float) -> void:
 		return
 	get_tree().paused = false
 	_use_ffa()
+	var mine := {}  # 방장: 대기실에서 넣은 봇 (mp_pick_bots가 꺼내 둠)
+	if net.is_host:
+		for r: Array in net.bot_roster:
+			mine[bot_by_id(int(r[0]))] = true
 	for b in bots:
-		if combat.ents.has(b):
+		if combat.ents.has(b) and not mine.has(b):
 			_bench(b)
 	for e: PlayerController in net.remotes.values():
 		if e.team != "":
@@ -189,6 +195,10 @@ func mp_start(rem: float) -> void:
 		e.kills = 0
 		e.deaths = 0
 	combat.spawn(player)
+	for b: PlayerController in mine:
+		b.kills = 0
+		b.deaths = 0
+		combat.spawn(b)
 	_set_state("playing")
 	menu.show_screen("")
 	hud.banner("친구대전 시작!", "%s · %d킬을 먼저 따내면 승리" % [GameData.CLASSES[player.cls].name, GameData.KILL_LIMIT])
@@ -243,29 +253,35 @@ func _mp_start_control() -> void:
 	net.send_info()
 
 
-## 방장: 쟁탈전 빈자리를 봇으로 채움 (팀마다 team_size - 사람 수). 명단 [[id, 이름, 병과, 팀], …]
+## 방장: 대기실 봇 자리(room)대로 봇을 꺼냄 — 팀·병과(""면 무작위)·난이도. 명단 [[id, 이름, 병과, 팀], …]
+## 자리에 없는 봇은 쉬게 한다. 개인전·쟁탈전 같음
 func mp_pick_bots() -> Array:
-	var n := net.human_counts()
-	var ts := int(GameData.MODES.control.team_size)
 	var out: Array = []
-	var i := 0
-	for t: String in ["blue", "red"]:
-		for k in maxi(0, ts - int(n[t])):
-			if i >= bots.size():
-				break
-			var b := bots[i]
-			i += 1
-			_unbench(b)
-			set_team(b, t)
-			b.alive = false
-			if b.model:
-				b.model.visible = false
-			b.cls = GameData.bot_classes().pick_random()
-			b.next_cls = b.cls
-			out.append([b.peer, b.ent_name, b.cls, t])
-	while i < bots.size():
-		_bench(bots[i])
-		i += 1
+	var used := {}
+	for s: Dictionary in net.slots():
+		if not s.bot:
+			continue
+		var b := bot_by_id(int(s.id))
+		if b == null:
+			continue
+		used[b] = true
+		_unbench(b)
+		set_team(b, str(s.t))
+		b.alive = false
+		if b.model:
+			b.model.visible = false
+		var c := str(s.c)
+		b.bot_cls_fixed = GameData.CLASSES.has(c)
+		b.cls = c if b.bot_cls_fixed else GameData.bot_classes().pick_random()
+		b.next_cls = b.cls
+		b.bot_diff = str(s.diff)
+		b.kills = 0
+		b.deaths = 0
+		b.cap_time = 0.0
+		out.append([b.peer, b.ent_name, b.cls, str(s.t)])
+	for b in bots:
+		if not used.has(b):
+			_bench(b)
 	return out
 
 
@@ -350,8 +366,10 @@ func _use_ffa() -> void:
 			if e.model and not e.alive:
 				e.model.visible = false
 	for i in bots.size():
+		if net and net.on:  # 친구대전: 봇은 대기실 자리대로 (mp_pick_bots·go_lobby가 정함)
+			continue
 		if i < GameData.BOT_COUNT:
-			if not combat.ents.has(bots[i]) and not (net and net.on):
+			if not combat.ents.has(bots[i]):
 				_unbench(bots[i])
 		else:
 			_bench(bots[i])

@@ -899,7 +899,7 @@ func host_start() -> bool:
 	mst = "play"
 	rem = GameData.MATCH_TIME
 	grants = {}
-	bot_roster = main.mp_pick_bots() if mode_now() == "control" else []  # 쟁탈전: 빈자리를 봇으로
+	bot_roster = main.mp_pick_bots()  # 대기실 봇 자리대로 (방장 컴퓨터에서 AI가 돈다)
 	_roster.rpc(bot_roster)  # 시작 알림보다 먼저 (친구가 봇을 만들어 두게)
 	_mt.rpc(_mt_dict())
 	start_requested.emit(rem)

@@ -78,9 +78,14 @@ func on_hit(a: PlayerController) -> void:
 	react = minf(react, float(GameData.BOT.hit_react))
 
 
+## 이 봇의 난이도 (친구대전은 봇마다, AI대전은 전체 하나)
+static func diff_of(e: PlayerController) -> Dictionary:
+	return GameData.DIFF.get(e.bot_diff, GameData.DIFF[GameData.difficulty])
+
+
 func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 	var B: Dictionary = GameData.BOT
-	var D: Dictionary = GameData.DIFF[GameData.difficulty]
+	var D: Dictionary = diff_of(e)
 	var epos := e.global_position
 	think -= dt
 	strafe_t -= dt
@@ -315,7 +320,7 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 	# 석궁 휠 장전: 난이도별로 초당 xbow_wind칸 굴림
 	var wind := false
 	if e.wep == "crossbow" and e.xb_wind < int(GameData.WEAPONS.crossbow.notches) and e.cd <= 0:
-		wind_acc += dt * float(GameData.DIFF[GameData.difficulty].xbow_wind)
+		wind_acc += dt * float(diff_of(e).xbow_wind)
 		if wind_acc >= 1.0:
 			wind_acc -= 1.0
 			wind = true
