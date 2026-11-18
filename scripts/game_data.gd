@@ -210,7 +210,8 @@ const WEAPONS := {
 	# min_charge: 최소 당김 (0.08→0.15). 이보다 빨리 놓으면 min_charge까지 마저 당긴 뒤 최소 세기로 쏜다
 	# dmg·speed는 차지 비율 0→1로 보간 (35~55 → 15~50: 0.45초마다 연사하니 한 발은 약하게. 속도 42→28로 약할수록 크게 휨)
 	# 끝까지 당긴 채 sway_start초가 지나면 후들거림(진폭 sway_k×초, 최대 sway_max), slip_t초가 되면 손이 미끄러짐
-	"bow": {"name": "활", "dmg_min": 15, "dmg_max": 50, "nock": 0.3, "full": 1.0, "speed_min": 28, "speed_max": 72,
+	"bow": {"name": "활", "dmg_min": 20, "dmg_max": 55,  # 밸런스 버프 15~50 → 20~55
+		 "nock": 0.3, "full": 1.0, "speed_min": 28, "speed_max": 72,
 		"grav": 14, "kb": 6.5, "up": 3.4, "radius": 0.05, "min_charge": 0.15,
 		"sway_start": 1.0, "sway_k": 0.05, "sway_max": 0.11, "slip_t": 3.0, "slip_yaw": 0.6, "slip_pitch": [-0.35, 0.55]},
 	# 사용자 요청 휠 장전 (예전: 쏜 뒤 4초 자동 장전): 쏜 뒤 마우스 휠을 notches칸 굴려야 다시 쏜다.
