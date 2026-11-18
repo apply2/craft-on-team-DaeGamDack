@@ -104,7 +104,7 @@ func _run() -> void:
 	var B: Dictionary = G.WEAPONS.bow
 	check("궁수 무기 = 활", p.wep == "bow" and p.model.weapons.has("bow"), "wep=%s" % p.wep)
 
-	check("수치: 끝까지 1초·화살 거는 데 0.3초·최소 0.15초·피해 20~55", B.full == 1.0 and B.nock == 0.3 and B.min_charge == 0.15 and B.dmg_min == 20 and B.dmg_max == 55, "")
+	check("수치: 끝까지 1초·화살 거는 데 0.3초·최소 0.15초·피해 15~50", B.full == 1.0 and B.nock == 0.3 and B.min_charge == 0.15 and B.dmg_min == 15 and B.dmg_max == 50, "")
 	check("차지 비율: 최소에서 0, 끝까지면 1", G.bow_t(B.min_charge) == 0.0 and G.bow_t(B.full) == 1.0 and near(G.bow_t(0.575), 0.5, 0.001), "")
 
 	# ── 너무 짧게 놓으면 최소(0.15초)까지 마저 당긴 뒤 최소 세기로 ──
@@ -113,7 +113,7 @@ func _run() -> void:
 	await collect(12)
 	check("최소까지 마저 당기고 한 발", new_shots.size() == 1 and not p.charging, "n=%d" % new_shots.size())
 	if new_shots.size() == 1:
-		check("최소 세기: 피해 20·속도 28", new_shots[0].dmg == float(B.dmg_min) and near((new_shots[0].vel as Vector3).length(), float(B.speed_min), 0.6),
+		check("최소 세기: 피해 15·속도 28", new_shots[0].dmg == float(B.dmg_min) and near((new_shots[0].vel as Vector3).length(), float(B.speed_min), 0.6),
 			"dmg=%.0f v=%.1f" % [new_shots[0].dmg, (new_shots[0].vel as Vector3).length()])
 	await wait(30)
 
@@ -125,7 +125,7 @@ func _run() -> void:
 		var t: float = G.bow_t(36 * DT)
 		var v: Vector3 = pr.vel
 		check("속도 = 28~72 중 당긴 만큼", near(v.length(), lerpf(B.speed_min, B.speed_max, t), 0.6), "v=%.1f 기대 %.1f" % [v.length(), lerpf(B.speed_min, B.speed_max, t)])
-		check("피해 = 20~55 중 당긴 만큼", pr.dmg == roundf(lerpf(B.dmg_min, B.dmg_max, t)), "dmg=%.0f 기대 %.0f" % [pr.dmg, roundf(lerpf(B.dmg_min, B.dmg_max, t))])
+		check("피해 = 15~50 중 당긴 만큼", pr.dmg == roundf(lerpf(B.dmg_min, B.dmg_max, t)), "dmg=%.0f 기대 %.0f" % [pr.dmg, roundf(lerpf(B.dmg_min, B.dmg_max, t))])
 		check("화살 모양은 날아가는 방향을 봄", (pr.mesh as Node3D).global_basis.z.normalized().dot(v.normalized()) > 0.99, "")
 	check("다음 화살 거는 데 0.3초", near(p.cd, float(B.nock) - DT, 0.03), "cd=%.3f" % p.cd)
 	check("쏘면 반동 (몸·화면)", p.rec_v > 0 and p.v_rec_v > 0, "rec_v=%.2f v_rec_v=%.2f" % [p.rec_v, p.v_rec_v])
@@ -174,7 +174,7 @@ func _run() -> void:
 	p.scripted_input = IDLE
 	await wait(40)
 
-	# ── 끝까지 당겨서 몸에 맞힘: 55 피해, 몸에 꽂힘 ──
+	# ── 끝까지 당겨서 몸에 맞힘: 50 피해, 몸에 꽂힘 ──
 	put(p, SHOOTER, "archer", EAST_YAW)
 	p.pitch = -0.08  # 몸통 높이로
 	put(dm, TARGET)
@@ -183,7 +183,7 @@ func _run() -> void:
 	check("끝까지 당기면 최대 속도 72", new_shots.size() == 1 and near((new_shots[0].vel as Vector3).length(), 72.0, 0.6), "n=%d" % new_shots.size())
 	var arrow: Node3D = new_shots[0].mesh if new_shots.size() > 0 else null
 	await wait(10)
-	check("몸에 맞아 55 피해", near(dm.hp, 100.0 - float(B.dmg_max)), "hp=%.1f" % dm.hp)
+	check("몸에 맞아 50 피해", near(dm.hp, 100.0 - float(B.dmg_max)), "hp=%.1f" % dm.hp)
 	check("넉백 (동쪽으로 밀림)", dm.velocity.x > 2.0, "v=%s" % dm.velocity)
 	check("화살이 몸에 꽂힘", arrow != null and is_instance_valid(arrow) and arrow.get_parent() == dm.model.body, "parent=%s" % (arrow.get_parent() if arrow and is_instance_valid(arrow) else null))
 	check("맞은 화살은 날아가는 목록에서 빠짐", C.projectiles.is_empty(), "n=%d" % C.projectiles.size())
@@ -199,7 +199,7 @@ func _run() -> void:
 		q.vel = Vector3(72, 0, 0)
 		q.grav = 0.0
 	await wait(10)
-	check("헤드샷 82.5 (55×1.5)", near(dm.hp, 100.0 - float(B.dmg_max) * 1.5), "hp=%.1f" % dm.hp)
+	check("헤드샷 75 (50×1.5)", near(dm.hp, 100.0 - float(B.dmg_max) * 1.5), "hp=%.1f" % dm.hp)
 	check("투구 날아감", not dm.helmet, "helmet=%s" % dm.helmet)
 	var harrow: Node3D = new_shots[0].mesh if new_shots.size() > 0 else null
 	check("화살이 머리에 꽂힘", harrow != null and is_instance_valid(harrow) and harrow.get_parent() == dm.model.head, "")
