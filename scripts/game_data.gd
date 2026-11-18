@@ -166,7 +166,7 @@ const CLASSES := {
 	#   speed: 사용자 요청 0.65 → 0.7
 	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.7, "hp": 130,  # 사용자 요청 200 → 150 → 130 (밸런스)
 		"no_sprint": true, "accel": 6.0, "jump": 0.4, "hit_r": 1.4, "slow_resist": 0.5,
-		"color": 0xb09868, "leg": 0x5a4632, "arm": 0xb09868, "foot": 0x2e241c, "pips": [1, 4, 4, 1],  # 누빈 천 갑옷(갬비슨) 색 — 겉모습은 CANNON_LOOK
+		"color": 0x5f7a3a, "leg": 0x5a4632, "arm": 0x5f7a3a, "foot": 0x2e241c, "pips": [1, 4, 4, 1],  # 누빈 천 갑옷(갬비슨) 색 — 겉모습은 CANNON_LOOK
 		"desc": "느리고 크지만 한 방이 세다. 포탄은 터지며 주변을 날리고, 발밑에 쏘면 높이 뛴다."},
 	# 사용자 요청 새 병과 (HTML에 없음): 대낮이라 몸에 불이 붙은 드라큘라. 틀니로 물어 피를 채워야 버팀 (화상은 BURN)
 	#   regen 0: 자연 회복 없음 (화상 초당 10을 상쇄하지 않게 — 사용자 확인). 성수 웅덩이·스폰룸 회복은 받음
@@ -180,10 +180,10 @@ const CLASSES := {
 const CANNON_LOOK := {
 	"iron": 0x4f463e, "ring": 0x7d7872, "bore": 0x151311, "touch": 0x1a1715,  # 녹슨 회갈색 철 / 더 밝은 쇠고리 / 포구 안 / 점화 구멍
 	"wood": 0x7a5230, "wood_d": 0x5b3a22, "wood_end": 0xb48d5c, "bark": 0x4a3220, "rope": 0xc9ab6e,
-	"gambeson": 0xb09868, "quilt": 0x8c7650, "apron": 0x6e4527, "strap": 0x4e3220,
+	"gambeson": 0x5f7a3a, "quilt": 0x46602a, "apron": 0x6e4527, "strap": 0x4e3220,
 	"hat": 0x7d8389, "hat_d": 0x5c6167, "band": 0x8a3a2c,
 	"staff": 0x6b4a2c, "fork": 0x3a3633, "match": 0xff7a1e,
-	"barrel_r": 0.17, "barrel_len": 0.8, "rings": 5,  # 3인칭 포신 굵기(8각 기둥 안쪽 반지름)·길이 (예전 0.13·1.0)
+	"barrel_r": 0.155, "barrel_len": 0.92, "rings": 5,  # 3인칭 포신 굵기(8각 기둥 안쪽 반지름)·길이 (사용자 요청 0.17·0.8 → 조금 가늘고 길게)
 	# 발사: 점화 구멍 불꽃 + 포구 연기 / 폭발: 돌 파편 + 흙먼지 (주황 섬광은 예전보다 줄임). 개수 = 효과 노드 수 (웹 그리기 호출)
 	"fx": {"spark": 0xffc04a, "spark_n": 5, "spark_size": 0.1,
 		"smoke": 0xd8d2c6, "smoke_n": 7, "smoke_size": 0.5, "smoke_life": 1.2, "smoke_speed": 3.0, "fp_ahead": 3.5, "fp_alpha": 0.3,
@@ -455,7 +455,7 @@ const MODES := {
 			"crossbow": {0x4d72b8: "body", 0x263f78: "dark", 0x3a62a8: "accent"},                   # 등 방패 그림
 			"cleric": {0xeee6d2: "pale", 0x7a52b8: "accent", "helm_gold": "accent"},                 # 영대·모자 띠
 			"bard": {0x7a3fa8: "body", 0xf4ecd6: "accent", 0xd94a3a: "accent"},                     # 조끼·모자 깃털
-			"cannoneer": {0xb09868: "body", 0x8c7650: "dark", 0x8a3a2c: "dark"},                    # 갬비슨·누빈 줄·철모 띠
+			"cannoneer": {0x5f7a3a: "body", 0x46602a: "dark", 0x8a3a2c: "dark"},                    # 갬비슨·누빈 줄·철모 띠
 			"vampire": {0xb3122a: "accent"},                                                         # 망토 안감
 		},
 		# 봇

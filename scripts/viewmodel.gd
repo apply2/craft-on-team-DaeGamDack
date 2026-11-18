@@ -170,12 +170,12 @@ func _build() -> void:
 	var L: Dictionary = GameData.CANNON_LOOK
 	var cw := _group("cannon", CN_POS)
 	cw.rotation = Vector3(CN_TILT, CN_YAW, 0)
-	var cr := 0.13
-	var cl := 0.6
+	var cr := 0.12
+	var cl := 0.68
 	_rx(_part(Meshes.prism(), L.iron, Vector3(cr, cl, cr), Vector3(0, 0, -cl * 0.5 + 0.03), cw), PI / 2)
 	_rx(_part(Meshes.prism(), L.iron, Vector3(cr * 0.9, 0.1, cr * 0.9), Vector3(0, 0, 0.07), cw), PI / 2)  # 뒤 마개
 	for k in 5:
-		_rx(_part(Meshes.prism(), L.ring, Vector3(cr * 1.25, 0.07, cr * 1.25), Vector3(0, 0, -0.02 - k * 0.12), cw), PI / 2)
+		_rx(_part(Meshes.prism(), L.ring, Vector3(cr * 1.25, 0.07, cr * 1.25), Vector3(0, 0, -0.02 - k * 0.14), cw), PI / 2)
 	_rx(_part(Meshes.prism(), L.ring, Vector3(cr * 1.38, 0.08, cr * 1.38), Vector3(0, 0, -cl + 0.02), cw), PI / 2)  # 두꺼운 포구 테
 	_rx(_part(Meshes.cyl(), L.bore, Vector3(cr * 0.82, 0.01, cr * 0.82), Vector3(0, 0, -cl - 0.025), cw), PI / 2)  # 굵은 구경
 	_part(Meshes.box(), L.ring, Vector3(0.04, 0.016, 0.04), Vector3(0, cr + 0.008, -0.08), cw)   # 점화 구멍 받침
