@@ -40,6 +40,7 @@ var barrel: Node3D = null       # 포병 포신 (= weapons.cannon, 조준 높이
 var _wheel_rot := 0.0
 var jaws := {}                  # 흡혈귀 틀니 {g, up, lo} — 물면 딱 다물림 (WeaponModels.make_teeth)
 var cape: Node3D = null         # 흡혈귀 망토 (달리면 뒤로 펄럭)
+var meat: Node3D = null         # 야만인 고기 (왼손, 먹을 때만 보임 — scripts/meat.gd)
 
 # 애니메이션 상태 (HTML 엔티티의 wob/nk/eye 필드)
 var phase := 0.0
@@ -531,6 +532,13 @@ func _build_head_extras(mouth: MeshInstance3D, tongue: MeshInstance3D) -> void:
 ## 오른손에 드는 무기 — HTML makeWeapon(). 병과 무기 + 주울 수 있는 저격총·닭·AK (든 것만 보임)
 ## 마상창은 말 모양에 붙어 있다 (WeaponModels.make_horse)
 func _build_weapons(K: Dictionary) -> void:
+	if K.weapon == "stone":  # 야만인: 왼손에 고기 (우클릭으로 먹을 때만 보임). 손 끝에서 고기가 위(입) 쪽으로
+		var mg := _group(Vector3(0, -0.44, 0), arm_l)
+		mg.rotation = Vector3(PI, 0, 0)
+		meat = WeaponModels.make_meat(mg, _mat)
+		meat.scale = Vector3.ONE * 1.3
+		mg.visible = false
+		meat = mg
 	for key: String in [K.weapon, "sniper", "chicken", "ak"]:
 		if key == "cannon":  # 대포는 손이 아니라 포가 위에 (모델 뿌리)
 			weapons[key] = _build_carriage()
@@ -791,6 +799,15 @@ func animate(p, dt: float) -> void:
 		upper.rotation.x = 0.15 + wob.x
 	if not jaws.is_empty() or cape:
 		_anim_vampire(p, wep, hs, fa)
+	if meat:  # 야만인 고기 먹기: 왼팔로 고기를 입에 대고 우걱우걱 (넘어져 있으면 안 함)
+		var et: float = p.eat_t if "eat_t" in p else 0.0  # 메뉴 무리·병과 액자의 가짜 자세(Pose)엔 없음
+		var eating: bool = et > 0 and fa < 0.5
+		meat.visible = eating
+		if eating:
+			var ek: float = 1.0 - et / float(GameData.WEAPONS.meat.eat_t)  # 0 → 1
+			var up := minf(1.0, ek * 6.0)  # 빨리 들어 올림
+			var chew := sin(ek * TAU * 3.0) * 0.12
+			arm_l.rotation = arm_l.rotation.lerp(Vector3(-2.2 + chew, 0, -0.75), up)
 	for key: String in weapons:
 		(weapons[key] as Node3D).visible = key == wep
 	p.fire_anim = maxf(0.0, p.fire_anim - dt * (GameData.THROW_ANIM if thrower else GameData.FIRE_ANIM))

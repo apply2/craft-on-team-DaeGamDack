@@ -127,7 +127,8 @@ func _run() -> void:
 	check("막대 길이 = 병과 중 최대값 대비", absf(M._ci.hp.k - float(G.CLASSES[other].hp) / hp_max) < 0.01, "k=%.3f" % M._ci.hp.k)
 	# 능력치 계산: 걷기 = 기본 × 병과, 달리기 ×1.35, 돌멩이 사거리 = 15m 상한, 트럼펫 = 12m
 	var sb: Dictionary = G.class_stats("barbarian")
-	check("야만인 7.4 / 10.0 m/s", "%.1f / %.1f" % [sb.walk, sb.run] == "7.4 / 10.0", "%.2f %.2f" % [sb.walk, sb.run])
+	var bw: float = G.BASE_SPEED * float(G.CLASSES.barbarian.speed)
+	check("야만인 걷기 / 달리기 = 기본 × 병과 / ×달리기 (지금 6.7 / 9.0 m/s)", is_equal_approx(sb.walk, bw) and is_equal_approx(sb.run, bw * G.SPRINT) and "%.1f / %.1f" % [sb.walk, sb.run] == "6.7 / 9.0", "%.2f %.2f" % [sb.walk, sb.run])
 	check("사거리: 돌멩이 ≤15m(상한)·트럼펫 12m·석궁이 가장 멂", sb.range > 10.0 and sb.range <= 15.0
 		and is_equal_approx(G.class_stats("bard").range, 12.0) and G.class_stats("crossbow").range_k == 1.0,
 		"%.1f %.1f" % [sb.range, G.class_stats("bard").range])

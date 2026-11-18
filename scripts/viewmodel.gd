@@ -26,7 +26,8 @@ var _tr: Node3D             # 트럼펫 (나팔이 화면 오른쪽 아래에 �
 const TR_POS := Vector3(0.2, -0.24, -0.34)
 const CN_POS := Vector3(0.0, -0.36, -0.42)  # 포병 포신 (화면 아래 가운데)
 const TE_POS := Vector3(0.24, -0.2, -0.55)  # 흡혈귀 틀니 (화면 오른쪽 아래, 앞을 보고 벌어져 있음)
-var _teeth := {}            # {g, up, lo}
+var _teeth := {}
+var _meat: Node3D             # 야만인 고기 먹기 (먹는 동안만, 무기와 따로)            # {g, up, lo}
 var _bob := 0.0
 var _sway := Vector2.ZERO  # 마우스를 움직이면 손이 살짝 늦게 따라옴 (HTML swayX/swayY)
 
@@ -87,6 +88,14 @@ func _group(key: String, pos: Vector3) -> Node3D:
 ## HTML buildVM()
 func _build() -> void:
 	# 돌멩이
+	# 야만인 고기 (왼손, 먹을 때만): 화면 왼쪽 아래에서 입(화면 가운데 아래)으로 올라와 우걱우걱
+	_meat = Node3D.new()
+	_meat.visible = false
+	_root.add_child(_meat)
+	_meat.scale = Vector3.ONE * 0.55
+	var mi := WeaponModels.make_meat(_meat, func(hex: int) -> Material: return GameData.mat(hex))
+	mi.rotation = Vector3(-0.5, 0, 0.9)  # 고기 쪽이 화면 가운데 위로
+	_part(Meshes.sph(), SKIN, Vector3(0.055, 0.05, 0.065), Vector3(0, 0.01, 0), _meat)  # 쥔 손
 	var st := _group("stone", Vector3(0.27, -0.27, -0.58))
 	_part(Meshes.sph(), SKIN, Vector3(0.11, 0.09, 0.13), Vector3.ZERO, st)
 	_stone_rock = _part(Meshes.stone(), GameData.WEAPONS.stone.color, Vector3.ONE * 0.085, Vector3(0, 0.09, -0.02), st)
@@ -303,6 +312,13 @@ func _process(dt: float) -> void:
 	var vfa := e.fall_amt()  # 넘어지면 손이 아래로 쓰러짐
 	_root.position.y -= vfa * 0.35
 	_root.rotation.z += vfa * 0.9
+	_meat.visible = e.eat_t > 0 and e.cls == "barbarian"
+	if _meat.visible:
+		var ek := 1.0 - e.eat_t / float(GameData.WEAPONS.meat.eat_t)  # 0 → 1
+		var up := minf(1.0, ek * 6.0) * minf(1.0, (1.0 - ek) * 6.0)  # 올라왔다가 끝에 내려감
+		var chew := sin(ek * TAU * 3.0)
+		_meat.position = Vector3(-0.3, -0.36, -0.5).lerp(Vector3(-0.08, -0.17, -0.42), up) + Vector3(0, chew * 0.01, chew * 0.015)
+		_meat.rotation = Vector3(0, 0, chew * 0.08)
 	match w:
 		"stone":
 			var t := e.fire_anim

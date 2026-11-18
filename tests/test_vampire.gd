@@ -62,10 +62,10 @@ func put(e, pos: Vector3, cls := "archer", yaw := 0.0) -> void:
 
 
 ## 흡혈귀를 HOME에 세우고 화상은 끔 (물기·돌진만 볼 때)
-func vamp(hp := 150.0) -> void:
+func vamp(hp := -1.0) -> void:
 	put(p, HOME, "vampire", 0.0)  # yaw 0 = -Z를 봄
 	p.burn_wait = 999.0
-	p.hp = hp
+	p.hp = hp if hp > 0 else float(G.class_hp("vampire"))
 
 
 func press(inp: Dictionary, n := 2) -> void:
@@ -108,8 +108,8 @@ func _run() -> void:
 	# ── 기본 스탯 ──
 	put(p, HOME, "vampire", 0.0)
 	await wait(2)
-	check("흡혈귀: 체력 150 · 무기 틀니 · 모델에 틀니·망토", p.hp == 150.0 and p.wep == "teeth" and not p.model.jaws.is_empty() and p.model.cape != null, "hp=%.0f wep=%s" % [p.hp, p.wep])
-	check("걷기 속도 = 5.4 × 1.25", near(p.max_speed(), G.BASE_SPEED * 1.25, 0.001), "%.3f" % p.max_speed())
+	check("흡혈귀: 체력 135 · 무기 틀니 · 모델에 틀니·망토", p.hp == 135.0 and float(G.class_hp("vampire")) == 135.0 and p.wep == "teeth" and not p.model.jaws.is_empty() and p.model.cape != null, "hp=%.0f wep=%s" % [p.hp, p.wep])
+	check("걷기 속도 = 5.4 × 1.125 (밸런스 ×0.9)", near(p.max_speed(), G.BASE_SPEED * 1.125, 0.001), "%.3f" % p.max_speed())
 	check("자연 회복 없음 (regen 0)", G.class_regen("vampire") == 0.0, "")
 	check("병과 목록·봇 병과에 흡혈귀", G.CLASS_ORDER.has("vampire") and G.bot_classes().has("vampire"), "")
 	check("친구대전 무기 번호에 틀니·박쥐·화상", main.get_node("Net").WEPS.has("teeth") and main.get_node("Net").WEPS.has("bat") and main.get_node("Net").WEPS.has("burn"), "")
@@ -136,7 +136,7 @@ func _run() -> void:
 	var die_f := int(round((float(BU.grace) + MAXHP / (float(BU.dmg) / float(BU.tick))) / DT))
 	check("스폰 뒤 3초 동안은 안 탐", hp3 == MAXHP, "%.1f" % hp3)
 	check("그 뒤 0.25초마다 2.5씩 (0.5초 = 5)", near(hp35, MAXHP - 5.0, 0.01), "%.1f" % hp35)
-	check("가만히 있으면 18초(3 + 150/10)에 죽음", absi(died_at - die_f) <= 2 and die_f == 1080, "%d프레임 (%.2f초)" % [died_at, died_at * DT])
+	check("가만히 있으면 16.5초(3 + 135/10)에 죽음", absi(died_at - die_f) <= 2 and die_f == 990, "%d프레임 (%.2f초)" % [died_at, died_at * DT])
 	check("  아무도 안 때렸으면 자멸 (처치 +0, 킬피드 공격자 = 자기, 무기 burn)",
 		kills.size() == 1 and kills[0][1] == p and kills[0][2] == "burn" and p.kills == k0, str(kills))
 	await wait(200)  # 부활
@@ -187,21 +187,22 @@ func _run() -> void:
 	check("허공을 물어도 효과는 보임 (범위 끝에 옅은 틀니)", C.bite_fx.count() >= 2, "%d" % C.bite_fx.count())
 	await wait(40)
 
-	# ── 물기: 앞 1.5m, 28 피해 + 15 회복, 최대 체력은 안 넘음 ──
+	# ── 물기: 앞 1.5m, 22 피해 + 15 회복, 최대 체력은 안 넘음 ──
 	put(dm, HOME + Vector3(0, 0, -1.5), "archer", 0.0)
 	vamp(60.0)
 	await wait(3)
 	nums.clear()
 	await press(BITE)
-	check("앞 1.5m 적을 물면 28 피해", near(dm.hp, 100.0 - float(TW.dmg), 0.01), "hp=%.1f" % dm.hp)
+	check("앞 1.5m 적을 물면 22 피해", near(dm.hp, 100.0 - float(TW.dmg), 0.01), "hp=%.1f" % dm.hp)
 	check("  물면 15 회복", near(p.hp, 60.0 + float(TW.heal), 0.01), "hp=%.1f" % p.hp)
 	check("  머리 위 초록 +15", nums.any(func(n): return n[0] == "+15" and n[1] == "heal"), str(nums))
 	await wait(40)
 	put(dm, HOME + Vector3(0, 0, -1.5), "archer", 0.0)
-	vamp(148.0)
+	var MH := float(G.class_hp("vampire"))
+	vamp(MH - 2.0)
 	await wait(3)
 	await press(BITE)
-	check("회복해도 150을 안 넘음", p.hp == 150.0, "hp=%.1f" % p.hp)
+	check("회복해도 최대 체력(135)을 안 넘음", p.hp == MH, "hp=%.1f" % p.hp)
 	await wait(40)
 	# 처치하면 추가 30 (물기 15 + 처치 30 = 45)
 	put(dm, HOME + Vector3(0, 0, -1.5), "archer", 0.0)
@@ -218,10 +219,10 @@ func _run() -> void:
 	# 처치 회복도 150까지
 	put(dm, HOME + Vector3(0, 0, -1.5), "archer", 0.0)
 	dm.hp = 20.0
-	vamp(140.0)
+	vamp(MH - 10.0)
 	await wait(3)
 	await press(BITE)
-	check("  처치 회복도 150까지", not dm.alive and p.hp == 150.0, "hp=%.1f" % p.hp)
+	check("  처치 회복도 최대 체력까지", not dm.alive and p.hp == MH, "hp=%.1f" % p.hp)
 	await wait(200)
 	# 흡혈귀가 아닌 병과는 처치해도 회복 없음
 	put(dm, HOME + Vector3(0, 0, -6), "archer", 0.0)

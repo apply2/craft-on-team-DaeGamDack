@@ -40,6 +40,8 @@ var breath := 3.0         # 남은 숨 (최대 WEAPONS.trumpet.breath_max)
 var gasp_t := 0.0         # 숨이 차서 헐떡이는 남은 시간 (연주 못 함, 느려짐)
 var squeak_t := 0.0       # 삑사리 뒤 연주 못 하는 남은 시간
 var fan_cd := 0.0         # 팡파레 재사용 대기
+var meat_cd := 0.0        # 야만인 고기 먹기 재사용 대기 (scripts/meat.gd)
+var eat_t := 0.0          # 고기를 먹는 중 남은 시간 (모습·돌 못 던짐)
 # 춤 디버프 (누구나 걸림)
 var dance_t := 0.0        # 춤추는 남은 시간
 var dance_immune := 0.0   # 춤이 끝난 뒤 다시 안 추는 남은 시간
@@ -251,6 +253,8 @@ func spawn_at(p: Vector3) -> void:
 	gasp_t = 0.0
 	squeak_t = 0.0
 	fan_cd = 0.0
+	meat_cd = 0.0
+	eat_t = 0.0
 	dance_t = 0.0
 	dance_immune = 0.0
 	dance_log.clear()

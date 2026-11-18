@@ -198,6 +198,7 @@ static func burn(combat: Combat, e: PlayerController, dt: float) -> void:
 	e.burn_acc += dt
 	while e.burn_acc >= float(T.tick) - 1e-6:
 		e.burn_acc -= float(T.tick)
+		combat.dealt.emit(e, null, minf(float(T.dmg), maxf(e.hp, 0.0)), "burn")
 		e.hp -= float(T.dmg)
 		if e.hp <= 0:
 			combat.kill(e, burn_killer(combat, e), "burn", false, Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized())

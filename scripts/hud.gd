@@ -780,6 +780,15 @@ func _update_weapon() -> void:
 	match e.wep:
 		"stone":
 			st = "던지는 중" if e.cd > 0 else "누르고 있으면 계속 던짐"
+			if e.cls == "barbarian":  # 우클릭 고기 먹기: 조준점 고리 = 재사용 대기
+				if e.eat_t > 0:
+					st = "냠냠..."
+				elif e.meat_cd > 0:
+					ring = 1.0 - e.meat_cd / float(GameData.WEAPONS.meat.cd)
+					ring_col = STEEL
+					st += " · 고기 %.0f초" % ceilf(e.meat_cd)
+				else:
+					st += " · 우클릭 고기 먹기"
 		"bow":
 			var B: Dictionary = GameData.WEAPONS.bow
 			var full_now := e.charging and e.charge >= float(B.full)

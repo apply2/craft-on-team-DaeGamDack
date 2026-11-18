@@ -91,7 +91,7 @@ func _run() -> void:
 	var D: Dictionary = G.DANCE
 
 	# ── 데이터 ──
-	check("음유시인: 트럼펫·속도 1.05·체력 95", G.CLASSES.bard.weapon == "trumpet" and near(G.CLASSES.bard.speed, 1.05, 0.001) and G.class_hp("bard") == 95, "")
+	check("음유시인: 트럼펫·속도 0.945 (1.05 × 밸런스 0.9)·체력 95", G.CLASSES.bard.weapon == "trumpet" and near(G.CLASSES.bard.speed, 0.945, 0.001) and G.class_hp("bard") == 95, "")
 	check("봇도 음유시인을 고를 수 있음 (구현 끝)", G.bot_classes().has("bard"), str(G.bot_classes()))
 
 	# ── 원뿔 (순수 계산) ──

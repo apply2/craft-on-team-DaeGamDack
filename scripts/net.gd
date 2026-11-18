@@ -1193,6 +1193,9 @@ func _ev(x: Array, who: int) -> void:
 				var mv := mine(id)
 				var tv: PlayerController = mv if mv else (remotes.get(id) if id != 0 else null)
 				combat.remote_bite(e, tv, mv != null, bool(x[2]) if x.size() > 2 else false, str(x[0]) == "bd")
+		"eat":  # [eat] — 친구 야만인이 고기를 먹음 (모습·소리만)
+			if e.alive:
+				combat.remote_eat(e)
 		"fan":  # [fan] — 친구 음유시인의 팡파레. 내가 앞에 있었는지는 내 쪽에서 판정
 			if e.alive:
 				combat.remote_fanfare(e)

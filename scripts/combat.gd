@@ -14,6 +14,7 @@ signal hitmark(is_kill: bool)  # 내가 맞혔을 때 조준점 X 표시
 signal kill_mark(head: bool)   # 내가 막타를 쳤을 때 조준점 가운데 해골 (사용자 요청 — 헤드샷이면 빨강)
 signal hurt(dmg: float)        # 내가 맞음 → 붉은 테두리 (HTML hurt)
 signal dmg_dir(from: Vector3)  # 내가 맞음 → 때린 사람 쪽에 붉은 호 (HTML dmgDir)
+signal dealt(v: PlayerController, a: PlayerController, amount: float, kind: String)  # 실제로 들어간 피해 (밸런스 분석 tests/balance_ffa.gd용, 화상은 a = null)
 signal star_changed(e: PlayerController, on: bool)  # 황금 붕어빵 무적 시작·끝 (Main이 내 것만 보고 BGM을 바꿈)
 
 var world: WorldBuilder
@@ -149,6 +150,8 @@ func _physics_process(dt: float) -> void:
 			weapon_update(e, e.fire_held, dt)
 		elif e.alive and e.wep == "crossbow":  # 친구 석궁: 받은 감은 칸 수(xb_wind)로 모션·소리
 			_xbow_anim(e, dt)
+		if e.is_remote and e.eat_t > 0:  # 친구 야만인 먹는 모습 (사건 "eat"로 켜짐)
+			e.eat_t = maxf(0.0, e.eat_t - dt)
 		e.swap_req = false
 	Trumpet.update_victims(self, dt)  # 트럼펫 소리를 들은 쪽: 피해·춤 (4.5단계)
 	update_projectiles(dt)
@@ -423,6 +426,7 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 		return
 	var knocked := head and v.helmet
 	var dmg := base * (GameData.HEADSHOT if v.helmet else GameData.BARE_HEAD) if head else base
+	dealt.emit(v, a, minf(dmg, maxf(v.hp, 0.0)), kind)
 	v.hp -= dmg
 	v.last_hit = {"by": a, "kind": kind, "head": head, "t": clock}  # t: 흡혈귀 화상 사망 처치 인정 (BURN.credit)
 	v.hit_squash = 1.0
@@ -585,6 +589,9 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 			Sfx.play("clank", e.global_position)
 	if e.cls == "vampire":  # 흡혈귀: 돌진 재사용 대기·돌진 부딪힘 (공격 금지여도 돌진은 이어짐)
 		Vampire.tick(self, e, dt)
+	if e.cls == "barbarian":  # 야만인 우클릭 고기 먹기: 춤·둔화를 풀려고 먹으니 춤추는 중에도 됨 (공격이 아님)
+		Meat.tick(e, dt)
+		Meat.try_eat(self, e)
 	# 춤추는 동안엔 어떤 무기로도 공격 못 함 (사용자 요청 — 연주·팡파레·던지기·쏘기·활 당기기 전부)
 	var dancing := e.dance_t > 0
 	# 음유시인은 숨이 다른 무기를 들고 있어도 돌아온다. 연주·팡파레는 트럼펫을 들고 넘어지지·춤추지 않았을 때만
@@ -602,8 +609,8 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 	match e.wep:
 		"bow":
 			_bow_update(e, held, dt)
-		"stone":  # 누르고 있으면 재사용 대기가 끝나는 대로 쏜다
-			if held and e.cd <= 0:
+		"stone":  # 누르고 있으면 재사용 대기가 끝나는 대로 쏜다 (고기 먹는 동안은 손이 바빠서 안 던짐)
+			if held and e.cd <= 0 and e.eat_t <= 0:
 				fire(e, e.wep)
 		"cannon":  # 장전돼 있으면 쏜다 (누르고 있으면 장전되는 대로)
 			if held and e.cn_t <= 0 and e.cd <= 0:
@@ -1354,6 +1361,11 @@ func remote_shot(e: PlayerController, kind: String, from: Vector3, end: Vector3)
 
 
 ## 친구 음유시인이 팡파레를 붊: 효과는 그대로, 나(방장이면 내 봇도)가 앞에 있었으면 내 쪽에서 판정
+## 친구 야만인이 고기를 먹음: 모습·소리만 (회복·풀기는 그 사람 컴퓨터가, 체력은 상태로)
+func remote_eat(e: PlayerController) -> void:
+	Meat.eat_fx(self, e)
+
+
 func remote_fanfare(e: PlayerController) -> void:
 	Trumpet.fanfare_fx(self, e)
 	for v in ents:

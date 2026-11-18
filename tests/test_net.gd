@@ -210,7 +210,7 @@ func _run() -> void:
 	pb.scripted_input = IDLE
 	await wait(20)
 	var TW: Dictionary = G.WEAPONS.teeth
-	check("흡혈귀 물기: 방장이 28 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(TW.dmg))) < 0.5, "hp=%.0f" % pa.hp)
+	check("흡혈귀 물기: 방장이 22 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(TW.dmg))) < 0.5, "hp=%.0f" % pa.hp)
 	check("  친구(흡혈귀)는 15 회복", absf(pb.hp - (60.0 + float(TW.heal))) < 0.5, "hp=%.0f" % pb.hp)
 	check("  두 화면 체력이 같음 (방장 화면의 친구 / 친구 화면의 방장)", absf(rb.hp - pb.hp) < 1.0 and absf(ra.hp - pa.hp) < 1.0,
 		"친구 %.0f/%.0f 방장 %.0f/%.0f" % [pb.hp, rb.hp, pa.hp, ra.hp])
@@ -248,6 +248,20 @@ func _run() -> void:
 	put(pa, HERE, "barbarian", -PI / 2)
 	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
 	await wait(40)
+
+	# ── 야만인 고기 먹기 (친구): 친구 쪽에서 회복, 방장 화면엔 먹는 모습 + 체력은 상태로 ──
+	put(pb, HERE + Vector3(6, 0, 0), "barbarian", PI / 2)
+	await wait(20)
+	pb.hp = 40.0
+	pb.scripted_input = {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "aim": true}
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(3)
+	check("친구 야만인이 고기를 먹으면 방장 화면에서도 먹는 모습", rb.eat_t > 0, "eat=%.2f" % rb.eat_t)
+	await wait(15)
+	check("  친구 쪽에서 30 회복, 방장 화면 체력도 같음", absf(pb.hp - 70.0) < 0.5 and absf(rb.hp - pb.hp) < 1.0, "친구 %.0f / 방장 화면 %.0f" % [pb.hp, rb.hp])
+	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
+	await wait(30)
 
 	# ── 저격총: 쏜 쪽(방장)이 판정해서 알림 → 친구 죽음, 방장 처치 +1 ──
 	A.combat.items.drop_sniper(pa.global_position, 5)

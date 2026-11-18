@@ -141,21 +141,22 @@ const HOLY := {
 # ── 병과 ─────────────────────────────────────────────────────
 # speed: BASE_SPEED 배율 / hp: 없으면 100 / regen: 초당 회복량(기본 10, 5초간 안 맞으면 시작)
 const CLASSES := {
-	"barbarian": {"name": "야만인", "weapon": "stone", "speed": 1.372, "hp": 90,
+	# 이동 속도: 사용자 요청 밸런스로 포병 말고 모두 ×0.9 (사람도 조준이 어렵다고 해서). 괄호 안이 예전 값
+	"barbarian": {"name": "야만인", "weapon": "stone", "speed": 1.2348, "hp": 90,  # (1.372) 걷기 6.67 · 달리기 9.0 m/s
 		"color": 0xf28a1e, "leg": 0xf2c7a0, "arm": 0xf2c7a0, "foot": 0xe9b48e, "pips": [5, 1, 1, 5],
 		"desc": "가장 빠르다. 바짝 붙어서 돌멩이를 퍼붓는 돌격형."},
-	"archer": {"name": "궁수", "weapon": "bow", "speed": 1.0556, "hp": 100,  # 걷기 5.7 m/s (사용자 요청으로 5.4→5.7 버프)
+	"archer": {"name": "궁수", "weapon": "bow", "speed": 0.95, "hp": 100,  # (1.0556) 걷기 5.13 m/s
 		"color": 0xb8322a, "leg": 0x8b939c, "arm": 0x7d858f, "foot": 0x5b6068, "pips": [3, 3, 3, 3],
 		"desc": "당길수록 세지는 활로 중거리를 견제한다."},
-	"crossbow": {"name": "석궁병", "weapon": "crossbow", "speed": 0.85, "hp": 110,
+	"crossbow": {"name": "석궁병", "weapon": "crossbow", "speed": 0.765, "hp": 110,  # (0.85)
 		"color": 0x4d72b8, "leg": 0x8b939c, "arm": 0x7d858f, "foot": 0x5b6068, "pips": [2, 4, 4, 1],
 		"desc": "느리지만 한 발이 묵직하다. 머리에 맞히면 한 방."},
-	"cleric": {"name": "성직자", "weapon": "holy", "speed": 1.0, "hp": 100, "regen": 20,
+	"cleric": {"name": "성직자", "weapon": "holy", "speed": 0.9, "hp": 100, "regen": 20,  # (1.0)
 		"color": 0xeee6d2, "leg": 0xeee6d2, "arm": 0xeee6d2, "foot": 0x8a5a32, "pips": [3, 2, 3, 2],
 		"desc": "성수병을 3개까지 모아 연달아 던진다. 3초간 남는 웅덩이가 밟은 적을 지지고 느리게 만든다. 체력 회복이 두 배 빠르다."},
 	# 4.5단계 (HTML에 없는 새 병과). 투구 자리엔 긴 깃털 달린 납작한 베레모 — 헤드샷이면 투구처럼 날아감
 	# pips는 명세에 없어서 임시로 정함 (이동 조금 빠름 · 피해 약함 · 사거리 짧음 · 계속 연주)
-	"bard": {"name": "음유시인", "weapon": "trumpet", "speed": 1.05, "hp": 95,
+	"bard": {"name": "음유시인", "weapon": "trumpet", "speed": 0.945, "hp": 95,  # (1.05)
 		"color": 0x7a3fa8, "leg": 0xf3b33d, "arm": 0x7a3fa8, "foot": 0x5b3a22, "pips": [3, 1, 2, 5],
 		"desc": "트럼펫을 불어 적을 춤추게 만든다. 춤추는 적은 느리고 조준이 흔들린다."},
 	# 사용자 요청 새 병과 (HTML에 없음): 바퀴 달린 나무 대포에 올라탄 느린 탱커. 포탄 점프로 움직이는 게 핵심
@@ -170,8 +171,8 @@ const CLASSES := {
 	# 사용자 요청 새 병과 (HTML에 없음): 대낮이라 몸에 불이 붙은 드라큘라. 틀니로 물어 피를 채워야 버팀 (화상은 BURN)
 	#   regen 0: 자연 회복 없음 (화상 초당 10을 상쇄하지 않게 — 사용자 확인). 성수 웅덩이·스폰룸 회복은 받음
 	#   skin: 머리·손 피부색 (없으면 C.skin)
-	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.25, "hp": 150, "regen": 0,  # 체력 사용자 요청으로 120→150
-		"skin": 0xe4e6ee, "color": 0x1c1a24, "leg": 0x1c1a24, "arm": 0x1c1a24, "foot": 0x111014, "pips": [4, 5, 1, 3],
+	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.125, "hp": 135, "regen": 0,  # 속도 (1.25). 체력 120→150→120→135 (밸런스: 150은 너무 세고 120은 너무 약함)
+		"skin": 0xe4e6ee, "color": 0x1c1a24, "leg": 0x1c1a24, "arm": 0x1c1a24, "foot": 0x111014, "pips": [4, 3, 1, 3],
 		"desc": "햇빛에 계속 타들어간다. 틀니로 물어뜯어 피를 채우고, 박쥐로 돌진해 달라붙는 근접형."},
 }
 const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard", "cannoneer", "vampire"]
@@ -283,13 +284,16 @@ const WEAPONS := {
 	"fanfare": {"name": "팡파레", "range": 3.5, "half_angle": 45.0, "dmg": 15, "kb": 9, "up": 3, "cd": 6.0},
 	# 흡혈귀 틀니 (사용자 요청 새 병과): 근접 물기. 눈에서 range m 안, 조준 방향 반각 half_angle° 원뿔 안의 가장 가까운 적 1명
 	#   heal: 적을 맞히면 그만큼 회복 (최대 체력은 안 넘음). 머리 판정 없음 (늘 dmg)
-	# 범위 사용자 요청으로 2.3→3.0m, 반각 30→40°. kill_heal = 흡혈귀가 처치하면 추가 회복 (사용자 요청, 무기 상관없이 — 화상 처치 인정 포함)
-	"teeth": {"name": "틀니", "dmg": 28, "cd": 0.5, "range": 3.0, "half_angle": 40.0, "heal": 15, "kill_heal": 30, "kb": 3, "up": 1.5,
+	# 범위 사용자 요청으로 2.3→3.0m, 반각 30→40°. 피해 28→22 (밸런스). kill_heal = 흡혈귀가 처치하면 추가 회복 (사용자 요청, 무기 상관없이 — 화상 처치 인정 포함)
+	"teeth": {"name": "틀니", "dmg": 22, "cd": 0.5, "range": 3.0, "half_angle": 40.0, "heal": 15, "kill_heal": 30, "kb": 3, "up": 1.5,
 		"color": 0xf4f1e6, "gum": 0xd2465a},
 	# 흡혈귀 박쥐 돌진 (우클릭): 바라보는 쪽으로 time초 동안 dist m. 위아래는 ±pitch_max°로 자름
 	#   첫 번째로 부딪힌 적(몸까지 거리 r m)에게 dmg + 약한 넉백, 그 자리에서 멈춤. 맞히면 물기 1회로 쳐서 회복 + 물기 재사용 초기화
 	#   end_vy: 끝날 때 위로 남기는 속도 상한 (위로 돌진하고 끝나면 살짝만 뜸)
 	"bat": {"name": "박쥐 돌진", "dmg": 20, "cd": 7.0, "dist": 9.0, "time": 0.3, "pitch_max": 20.0, "r": 0.55, "kb": 4, "up": 2, "end_vy": 3.0},
+	# 야만인 우클릭 "고기 먹기" (사용자 요청): cd초마다 heal 회복 + 상태이상(춤·춤 게이지·성수 둔화·봇 경직) 바로 풀림.
+	#   eat_t초 동안 고기를 입에 대고 있음 (그동안 돌은 못 던짐). 춤추는 중에도 먹을 수 있음 (공격이 아니라서)
+	"meat": {"name": "고기 먹기", "cd": 6.0, "heal": 30, "eat_t": 0.6, "color": 0x9c4a26, "fat": 0xe8b08a, "bone": 0xf2ead8},
 	# 화상 (흡혈귀가 햇빛에 탐): 킬피드·사망 화면 이름만 (피해는 BURN)
 	"burn": {"name": "햇빛"},
 }
@@ -375,6 +379,7 @@ const BOT := {
 	"item_busy": 8.0,            # 단, 보이는 적이 이보다 가까우면 싸움이 먼저
 	"pref_band": 5.0,            # 선호 거리 ±5m면 다가가지도 물러나지도 않음
 	"bat_min": 3.5, "bat_max": 8.5,  # 흡혈귀 봇: 대상이 이 거리 사이에 있고 보이면 박쥐 돌진
+	"meat_hp": 0.5,  # 야만인 봇: 체력이 최대의 이만큼 아래거나 춤·둔화 중이면 고기 먹기
 	"cannon_min": 4.5,  # 포병 봇: 대상이 이보다 가까우면 안 쏨 (자기 폭발에 휘말림)
 	"fire_range": {"teeth": 2.9, "cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
 	"knight_avoid": 12.0,        # 말 탄 사람 피하기 반경
@@ -643,7 +648,7 @@ const CLASS_PAGE := {
 	},
 	# 아래 한 줄 설명. {..}는 WEAPONS 값으로 채움 (game_data를 고치면 문구도 따라감)
 	"blurbs": {
-		"barbarian": "{cd}초마다 돌을 퍼붓는 돌격형. 가장 빠르지만 가장 약하다.",
+		"barbarian": "{cd}초마다 돌을 퍼붓는 돌격형. 우클릭 고기 먹기로 30 회복 + 춤·둔화 풀기.",
 		"archer": "짧게 끊어 쏘면 연사, 끝까지 당기면 {dmg_max} 피해. 화살은 포물선으로 떨어진다.",
 		"crossbow": "피해 {dmg}, 머리에 맞히면 한 방. 쏜 뒤엔 마우스 휠을 {notches}칸 굴려 감는다.",
 		"cleric": "성수병 {max_charges}개를 모아 던진다. 웅덩이가 적을 지지고 느리게 만든다.",

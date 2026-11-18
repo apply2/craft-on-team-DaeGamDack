@@ -330,7 +330,9 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 		if wind_acc >= 1.0:
 			wind_acc -= 1.0
 			wind = true
-	return {"wish": move, "jump": jump, "crouch": crouch, "sprint": sprint, "fire": held, "aim": want_fan and aligned, "wind": wind}
+	# 야만인: 체력이 낮거나 춤·둔화 중이면 고기 먹기 (조준 상관없음)
+	var want_eat := e.cls == "barbarian" and Meat.can_eat(e) and (e.hp < float(GameData.class_hp(e.cls)) * float(B.meat_hp) or e.dance_t > 0 or e.slow_t > 0)
+	return {"wish": move, "jump": jump, "crouch": crouch, "sprint": sprint, "fire": held, "aim": (want_fan and aligned) or want_eat, "wind": wind}
 
 
 ## 쟁탈전: 이 적이 자기 팀 스폰룸 문 앞에 있나 (거기선 안 쫓음)

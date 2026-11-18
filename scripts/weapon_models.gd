@@ -307,6 +307,21 @@ static func make_teeth(parent: Node3D, mat: Callable = _default_mat) -> Dictiona
 	return jaws
 
 
+## 야만인 고기 (뼈 달린 큰 다리살). 원점 = 뼈 손잡이 끝, 고기는 +Y 쪽 (손에 쥐고 위로 듦)
+static func make_meat(parent: Node3D, mat: Callable = _default_mat) -> Node3D:
+	var W: Dictionary = GameData.WEAPONS.meat
+	var g := Node3D.new()
+	parent.add_child(g)
+	var bone: Material = mat.call(W.bone)
+	part(Meshes.cyl(), bone, Vector3(0, 0.07, 0), Vector3(0.022, 0.14, 0.022), g)          # 뼈
+	for sx in [1.0, -1.0]:  # 뼈 끝 혹 두 개
+		part(Meshes.sph(), bone, Vector3(sx * 0.02, 0.0, 0), Vector3.ONE * 0.026, g)
+	part(Meshes.sph(), mat.call(W.color), Vector3(0, 0.22, 0), Vector3(0.085, 0.11, 0.08), g)  # 고기
+	part(Meshes.sph(), mat.call(W.fat), Vector3(0.035, 0.27, 0.05), Vector3(0.03, 0.04, 0.025), g)  # 비계 얼룩
+	part(Meshes.sph(), mat.call(W.fat), Vector3(-0.04, 0.18, 0.045), Vector3(0.022, 0.03, 0.02), g)
+	return g
+
+
 ## 닭 (+Z를 봄, 발이 원점) — HTML makeChicken(). {g, hd, wings}
 static func make_chicken(mat: Callable = _default_mat) -> Dictionary:
 	var g := Node3D.new()
