@@ -215,6 +215,22 @@ func _run() -> void:
 	check("  두 화면 체력이 같음 (방장 화면의 친구 / 친구 화면의 방장)", absf(rb.hp - pb.hp) < 1.0 and absf(ra.hp - pa.hp) < 1.0,
 		"친구 %.0f/%.0f 방장 %.0f/%.0f" % [pb.hp, rb.hp, pa.hp, ra.hp])
 	check("  방장 화면에서도 틀니가 딱 (모습)", rb.cls == "vampire" and rb.fire_anim >= 0.0, "")
+	# 처치 회복: 친구(흡혈귀)가 방장을 물어 죽이면 친구 쪽에서 처치를 세며 +30 (방장 화면에도 상태로)
+	pa.hp = 10.0
+	var hp_b0: float = pb.hp
+	await wait(10)
+	pb.cd = 0.0
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait_until(func(): return not pa.alive, 60)
+	await wait(20)
+	check("흡혈귀 처치: 친구 쪽에서 +15 + 30 회복, 방장 화면도 같음", not pa.alive and absf(pb.hp - (hp_b0 + float(TW.heal) + float(TW.kill_heal))) < 0.5 and absf(rb.hp - pb.hp) < 1.0,
+		"친구 %.0f→%.0f / 방장 화면 %.0f" % [hp_b0, pb.hp, rb.hp])
+	await wait_until(func(): return pa.alive, 300)
+	put(pa, HERE, "archer", -PI / 2)
+	await wait(20)
+	pb.hp = 75.0
 	# 화상은 친구 컴퓨터가 깎고 방장 화면엔 상태로
 	pb.burn_wait = 0.0
 	await wait(70)

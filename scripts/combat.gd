@@ -1244,6 +1244,7 @@ func kill(v: PlayerController, a: PlayerController, kind: String, head: bool, di
 	v.reset_charge()  # 당기던 활 소리도 끔
 	if a and a != v and not a.is_remote:  # 친구대전에선 죽인 사람(의 컴퓨터)이 처치 사건을 받고 스스로 센다
 		a.kills += 1
+		Vampire.on_kill(self, a)  # 흡혈귀가 처치하면 추가 회복 (처치를 세는 컴퓨터에서 한 번만)
 	if mp() and not v.is_remote:
 		net.event(["k", net.peer_of(a) if a and a != v else 0, Net.WEPS.find(kind), head, dir], v)
 	# 말에서 내리고, 들고 있던 저격총·AK·닭은 그 자리에 떨어뜨림
@@ -1393,6 +1394,7 @@ func remote_kill(e: PlayerController, a: PlayerController, kind: String, head: b
 	e.die(dir)
 	if a and not a.is_remote:  # 나 (방장이면 내 봇도)
 		a.kills += 1
+		Vampire.on_kill(self, a)
 	if a and a.is_local and a != e:  # 친구대전: 친구 쪽이 판정한 죽음이라도 막타가 나면 내 화면에만
 		hitmark.emit(true)
 		kill_mark.emit(head)

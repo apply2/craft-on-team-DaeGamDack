@@ -143,7 +143,7 @@ func _run() -> void:
 	OS.delay_msec(int(float(K.punch_t) * 1000.0) + 20)
 	var s1: float = sk.state().s
 	check("처음엔 크게(1.3배) → 0.1초 뒤 원래 크기", near(s0, float(K.punch), 0.05) and s1 == 1.0, "%.2f → %.2f" % [s0, s1])
-	OS.delay_msec(int(float(K.hold) * 1000.0) - 50)
+	OS.delay_msec(int(float(K.hold) * 1000.0) - 150)  # 그대로 있는 구간 안쪽 (Windows 타이머가 늦어도 넘지 않게 여유 150ms)
 	check("0.5초 동안은 그대로 (반투명 0.6)", near(sk.state().a, float(K.alpha), 0.001) and K.alpha == 0.6, "a=%.2f" % sk.state().a)
 	sk._process(0.0)
 	check("해골은 그룹째 흐리게 (겹친 조각이 비치지 않게)", sk._grp.visible and near(sk._grp.self_modulate.a, float(K.alpha), 0.001), "a=%.2f" % sk._grp.self_modulate.a)

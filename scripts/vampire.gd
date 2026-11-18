@@ -105,14 +105,21 @@ static func bite_fx(combat: Combat, e: PlayerController, v: PlayerController, fe
 static func heal(combat: Combat, e: PlayerController, amt: float) -> void:
 	e.hp = minf(float(GameData.class_hp(e.cls)), e.hp + amt)
 	if not e.is_remote:
-		heal_num(combat, e)
+		heal_num(combat, e, amt)
+
+
+## 처치 보너스: 흡혈귀가 처치하면 kill_heal 회복 (Combat.kill·remote_kill — 처치를 세는 컴퓨터에서만. 자멸은 안 옴)
+static func on_kill(combat: Combat, a: PlayerController) -> void:
+	if a.cls != "vampire" or not a.alive:
+		return
+	heal(combat, a, float(GameData.WEAPONS.teeth.kill_heal))
 
 
 ## 머리 위 초록 "+15" — 내 흡혈귀거나 내 카메라 근처일 때만 (봇끼리 싸우는 먼 곳까지 숫자가 뜨지 않게)
-static func heal_num(combat: Combat, e: PlayerController) -> void:
+static func heal_num(combat: Combat, e: PlayerController, amt := -1.0) -> void:
 	var me := combat.me
 	if e.is_local or (me and me.global_position.distance_to(e.global_position) < 20.0):
-		combat.num.emit(e.global_position + Vector3(0, e.mount_h + 2.2, 0), "+%d" % int(GameData.WEAPONS.teeth.heal), "heal")
+		combat.num.emit(e.global_position + Vector3(0, e.mount_h + 2.2, 0), "+%d" % int(amt if amt > 0 else float(GameData.WEAPONS.teeth.heal)), "heal")
 
 
 static func _flat_dir(e: PlayerController, v: PlayerController) -> Vector3:

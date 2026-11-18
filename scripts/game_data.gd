@@ -170,8 +170,8 @@ const CLASSES := {
 	# 사용자 요청 새 병과 (HTML에 없음): 대낮이라 몸에 불이 붙은 드라큘라. 틀니로 물어 피를 채워야 버팀 (화상은 BURN)
 	#   regen 0: 자연 회복 없음 (화상 초당 10을 상쇄하지 않게 — 사용자 확인). 성수 웅덩이·스폰룸 회복은 받음
 	#   skin: 머리·손 피부색 (없으면 C.skin)
-	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.25, "hp": 120, "regen": 0,
-		"skin": 0xe4e6ee, "color": 0x1c1a24, "leg": 0x1c1a24, "arm": 0x1c1a24, "foot": 0x111014, "pips": [4, 3, 1, 3],
+	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.25, "hp": 150, "regen": 0,  # 체력 사용자 요청으로 120→150
+		"skin": 0xe4e6ee, "color": 0x1c1a24, "leg": 0x1c1a24, "arm": 0x1c1a24, "foot": 0x111014, "pips": [4, 5, 1, 3],
 		"desc": "햇빛에 계속 타들어간다. 틀니로 물어뜯어 피를 채우고, 박쥐로 돌진해 달라붙는 근접형."},
 }
 const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard", "cannoneer", "vampire"]
@@ -283,8 +283,8 @@ const WEAPONS := {
 	"fanfare": {"name": "팡파레", "range": 3.5, "half_angle": 45.0, "dmg": 15, "kb": 9, "up": 3, "cd": 6.0},
 	# 흡혈귀 틀니 (사용자 요청 새 병과): 근접 물기. 눈에서 range m 안, 조준 방향 반각 half_angle° 원뿔 안의 가장 가까운 적 1명
 	#   heal: 적을 맞히면 그만큼 회복 (최대 체력은 안 넘음). 머리 판정 없음 (늘 dmg)
-	# 범위 사용자 요청으로 2.3→3.0m, 반각 30→40°
-	"teeth": {"name": "틀니", "dmg": 28, "cd": 0.5, "range": 3.0, "half_angle": 40.0, "heal": 15, "kb": 3, "up": 1.5,
+	# 범위 사용자 요청으로 2.3→3.0m, 반각 30→40°. kill_heal = 흡혈귀가 처치하면 추가 회복 (사용자 요청, 무기 상관없이 — 화상 처치 인정 포함)
+	"teeth": {"name": "틀니", "dmg": 28, "cd": 0.5, "range": 3.0, "half_angle": 40.0, "heal": 15, "kill_heal": 30, "kb": 3, "up": 1.5,
 		"color": 0xf4f1e6, "gum": 0xd2465a},
 	# 흡혈귀 박쥐 돌진 (우클릭): 바라보는 쪽으로 time초 동안 dist m. 위아래는 ±pitch_max°로 자름
 	#   첫 번째로 부딪힌 적(몸까지 거리 r m)에게 dmg + 약한 넉백, 그 자리에서 멈춤. 맞히면 물기 1회로 쳐서 회복 + 물기 재사용 초기화
@@ -649,7 +649,7 @@ const CLASS_PAGE := {
 		"cleric": "성수병 {max_charges}개를 모아 던진다. 웅덩이가 적을 지지고 느리게 만든다.",
 		"bard": "트럼펫을 불면 적이 춤춘다. 춤추는 적은 느리고 공격을 못 한다.",
 		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 한 발 쏘면 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
-		"vampire": "햇빛에 초당 10씩 탄다. 물면 {dmg} 피해 + {heal} 회복. 우클릭 박쥐 돌진.",
+		"vampire": "햇빛에 초당 10씩 탄다. 물면 {dmg} 피해 + {heal} 회복, 처치하면 +{kill_heal}. 우클릭 박쥐 돌진.",
 	},
 	"eye_h": 1.62,   # 사거리 계산: 눈높이(player.eye_pos)에서 정면으로 쏴서 땅에 닿는 거리 (무기 range가 있으면 거기까지)
 	"bar_cols": {"hp": 0xe5484d, "speed": 0x3fa7e0, "range": 0x6cc35a, "track": 0xe2c992},
