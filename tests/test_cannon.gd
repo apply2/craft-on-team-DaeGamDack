@@ -116,7 +116,7 @@ func _run() -> void:
 	var K: Dictionary = G.CLASSES.cannoneer
 
 	# ── 기본 스탯 ──
-	check("포병: 체력 150 · 무기 대포 · 모델에 포가", p.hp == 150.0 and p.wep == "cannon" and p.model.carriage != null and p.model.wheels.size() == 2,
+	check("포병: 체력 130 · 무기 대포 · 모델에 포가", p.hp == 130.0 and p.wep == "cannon" and p.model.carriage != null and p.model.wheels.size() == 2,
 		"hp=%.0f wep=%s" % [p.hp, p.wep])
 	check("몸 판정 1.4배", near(p.body_r(), G.BODY_R * 1.4, 0.001), "r=%.3f" % p.body_r())
 	check("걷기 속도 = 5.4 × 0.7 (사용자 요청 0.65 → 0.7)", near(p.max_speed(), G.BASE_SPEED * 0.7, 0.001), "%.3f" % p.max_speed())
@@ -177,7 +177,7 @@ func _run() -> void:
 		top = maxf(top, p.global_position.y)
 		vmax = maxf(vmax, p.velocity.y)
 		air_seen = air_seen or p.blast_air
-	var lost: float = 150.0 - p.hp
+	var lost: float = 130.0 - p.hp
 	check("발밑 사격: 자기 피해 약 27 (80 × 1/3)", near(lost, 80.0 / 3.0, 3.0), "잃은 체력 %.1f" % lost)
 	check("위로 22m/s 튕김", near(vmax, 22.0, 0.6), "최고 vy %.1f" % vmax)
 	check("높이 뜸 (일반 점프 1.45m의 4배 이상)", top - y0 > 6.0, "높이 %.1fm" % (top - y0))
@@ -192,7 +192,7 @@ func _run() -> void:
 	await wait(5)
 	await hold(2)
 	await wait(40)
-	check("직격하면 100 (150 → 50)", near(dm.hp, 50.0, 0.01), "dm hp=%.1f" % dm.hp)
+	check("직격하면 100 (130 → 30)", near(dm.hp, 30.0, 0.01), "dm hp=%.1f" % dm.hp)
 	check("직격당하면 뒤로 밀림", dm.velocity.x < -1.0 or dm.global_position.x < SHOOTER.x - 7.2, "vx=%.2f x=%.2f" % [dm.velocity.x, dm.global_position.x])
 
 	# ── 범위 피해: 거리에 따라 80 → 25, 반경 밖 0 ──
@@ -246,8 +246,8 @@ func _run() -> void:
 	await wait(3)
 	C.cannon.explode(p, spot + Vector3(0, 0.3, 1.0))
 	await physics_frame
-	check("같은 팀은 범위 피해 없음", dm.hp == 150.0, "dm hp=%.1f" % dm.hp)
-	check("같은 팀이어도 내 포탄 피해는 받음", p.hp < 150.0, "my hp=%.1f" % p.hp)
+	check("같은 팀은 범위 피해 없음", dm.hp == 130.0, "dm hp=%.1f" % dm.hp)
+	check("같은 팀이어도 내 포탄 피해는 받음", p.hp < 130.0, "my hp=%.1f" % p.hp)
 	p.team = ""
 	dm.team = ""
 	await wait(80)
@@ -365,7 +365,7 @@ func _run() -> void:
 	var cn_ratio: float = p.max_speed() / cn_full
 	check("  (포병이 웅덩이 안에서 둔화에 걸림)", p.slow_t > 0, "")
 	check("포병: 성수 둔화를 절반만 (65%% → 32.5%%, 속도 ×%.3f)" % cn_keep, near(cn_ratio, cn_keep, 0.001), "×%.3f" % cn_ratio)
-	check("  웅덩이 피해는 그대로 받음", p.hp < 150.0, "hp=%.0f" % p.hp)
+	check("  웅덩이 피해는 그대로 받음", p.hp < 130.0, "hp=%.0f" % p.hp)
 	check("  '면역' 표시는 없음", not toasts.has("둔화 면역"), "%s" % [toasts])
 	# 실제로 걸어 보기: 웅덩이를 계속 발밑에 두고 1.5초 걸은 거리 (평소 대비)
 	var walk := func(cls: String, puddle: bool) -> float:

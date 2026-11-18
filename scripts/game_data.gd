@@ -164,9 +164,9 @@ const CLASSES := {
 	#   hit_r: 몸통 판정 반지름 배율 (대포 크기 — 머리는 그대로)
 	#   slow_resist: 남이 거는 둔화(성수 웅덩이·춤 이동 감소)를 이 비율만 받음. 겹치면 합친 최종 둔화량에 곱함 (춤 자체·자기 조준 감속은 그대로) — 사용자 요청 (면역 → 50%)
 	#   speed: 사용자 요청 0.65 → 0.7
-	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.7, "hp": 150,  # 사용자 요청 200 → 150
+	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.7, "hp": 130,  # 사용자 요청 200 → 150 → 130 (밸런스)
 		"no_sprint": true, "accel": 6.0, "jump": 0.4, "hit_r": 1.4, "slow_resist": 0.5,
-		"color": 0x5e7d3c, "leg": 0x4a3a2a, "arm": 0x5e7d3c, "foot": 0x2e241c, "pips": [1, 5, 4, 1],
+		"color": 0x5e7d3c, "leg": 0x4a3a2a, "arm": 0x5e7d3c, "foot": 0x2e241c, "pips": [1, 4, 4, 1],
 		"desc": "느리고 크지만 한 방이 세다. 포탄은 터지며 주변을 날리고, 발밑에 쏘면 높이 뛴다."},
 	# 사용자 요청 새 병과 (HTML에 없음): 대낮이라 몸에 불이 붙은 드라큘라. 틀니로 물어 피를 채워야 버팀 (화상은 BURN)
 	#   regen 0: 자연 회복 없음 (화상 초당 10을 상쇄하지 않게 — 사용자 확인). 성수 웅덩이·스폰룸 회복은 받음
@@ -293,7 +293,7 @@ const WEAPONS := {
 	"bat": {"name": "박쥐 돌진", "dmg": 20, "cd": 7.0, "dist": 9.0, "time": 0.3, "pitch_max": 20.0, "r": 0.55, "kb": 4, "up": 2, "end_vy": 3.0},
 	# 야만인 우클릭 "고기 먹기" (사용자 요청): cd초마다 heal 회복 + 상태이상(춤·춤 게이지·성수 둔화·봇 경직) 바로 풀림.
 	#   eat_t초 동안 고기를 입에 대고 있음 (그동안 돌은 못 던짐). 춤추는 중에도 먹을 수 있음 (공격이 아니라서)
-	"meat": {"name": "고기 먹기", "cd": 6.0, "heal": 30, "eat_t": 0.6, "color": 0x9c4a26, "fat": 0xe8b08a, "bone": 0xf2ead8},
+	"meat": {"name": "고기 먹기", "cd": 9.7, "heal": 30, "eat_t": 0.6, "color": 0x9c4a26, "fat": 0xe8b08a, "bone": 0xf2ead8},
 	# 화상 (흡혈귀가 햇빛에 탐): 킬피드·사망 화면 이름만 (피해는 BURN)
 	"burn": {"name": "햇빛"},
 }

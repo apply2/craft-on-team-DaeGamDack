@@ -69,7 +69,7 @@ func _run() -> void:
 	var W: Dictionary = G.WEAPONS.meat
 	var MH := float(G.class_hp("barbarian"))
 
-	# ── 먹기: 30 회복 · 재사용 6초 · 먹는 모습 · 소리 · 초록 +30 ──
+	# ── 먹기: 30 회복 · 재사용 9.7초 · 먹는 모습 · 소리 · 초록 +30 ──
 	put(p, HOME)
 	await wait(3)
 	p.hp = 40.0
@@ -78,7 +78,7 @@ func _run() -> void:
 	sfx.played.clear()
 	await press(EAT)
 	check("우클릭하면 고기를 먹고 30 회복", is_equal_approx(p.hp, 40.0 + float(W.heal)), "hp=%.1f" % p.hp)
-	check("  재사용 6초 · 먹는 중", is_equal_approx(float(W.cd), 6.0) and p.meat_cd > 5.9 and p.eat_t > 0, "cd=%.2f eat=%.2f" % [p.meat_cd, p.eat_t])
+	check("  재사용 9.7초 · 먹는 중", is_equal_approx(float(W.cd), 9.7) and p.meat_cd > float(W.cd) - 0.1 and p.eat_t > 0, "cd=%.2f eat=%.2f" % [p.meat_cd, p.eat_t])
 	check("  머리 위 초록 +30 · 냠 소리", nums.any(func(n): return n[0] == "+30" and n[1] == "heal") and sfx.played.has("nyam"), "%s %s" % [str(nums), str(sfx.played)])
 	check("  3인칭 모델 왼손에 고기가 보임", p.model.meat != null and p.model.meat.visible, "")
 	await wait(int(float(W.eat_t) * 60.0) + 4)
@@ -87,10 +87,10 @@ func _run() -> void:
 	var hp1: float = p.hp
 	await press(EAT)
 	check("재사용 대기 중엔 안 먹어짐", p.hp == hp1, "hp=%.1f" % p.hp)
-	# 6초 뒤엔 다시
-	await wait(int(6.0 * 60.0))
+	# 재사용 대기가 끝나면 다시
+	await wait(int(float(W.cd) * 60.0))
 	await press(EAT)
-	check("6초 뒤엔 다시 먹음", is_equal_approx(p.hp, minf(MH, hp1 + float(W.heal))), "hp=%.1f" % p.hp)
+	check("재사용 대기가 끝나면 다시 먹음", is_equal_approx(p.hp, minf(MH, hp1 + float(W.heal))), "hp=%.1f" % p.hp)
 	# 최대 체력 넘지 않음
 	put(p, HOME)
 	await wait(3)
