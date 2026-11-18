@@ -663,12 +663,79 @@ func _run() -> void:
 	await roof_drop(p, "archer")
 	await wait(10)
 
+	# ── 봄바드 겉모습 (사용자 요청 — 보기만): 판정 크기 그대로, 1인칭은 화면 아래 25% 안 ──
+	await bombard_look()
+
 	# ── 봇 포병: 대포를 쏘고, 너무 가까우면 안 쏨 ──
 	check("친구대전 무기 번호에 대포", main.get_node("Net").WEPS.has("cannon"), "")
 	check("봇이 고를 수 있는 병과에 포병", G.bot_classes().has("cannoneer"), "")
 
 	print("ALL PASS" if fails == 0 else "FAILS: %d" % fails)
 	quit(1 if fails > 0 else 0)
+
+
+## 봄바드 겉모습: 3인칭 부품(8각 포신·쇠고리·통판 바퀴·린스톡), 돌 포탄(판정 반지름 그대로),
+## 1인칭 포신은 화면 아래 25% 안, 린스톡은 쏠 때도 조준점 둘레(가운데 위쪽)를 안 가림
+func bombard_look() -> void:
+	var W: Dictionary = G.WEAPONS.cannon
+	G.third_person = false
+	put(p, SHOOTER, "cannoneer", WEST_YAW)
+	await wait(10)
+	var md = p.model
+	check("봄바드: 포신·린스톡·통판 바퀴 2개 (바퀴살 없음)", md.barrel != null and md.linstock != null and md.wheels.size() == 2 and md.linstock.visible, "")
+	check("  몸 판정은 그대로 1.4배 · 포탄 판정 반지름 그대로", near(p.body_r(), G.BODY_R * 1.4, 0.001) and float(W.radius) == 0.2, "body_r=%.3f" % p.body_r())
+	new_shots.clear()
+	p.cn_t = 0.0
+	p.cd = 0.0
+	root.size = Vector2i(1280, 720)  # 헤드리스 창은 64×64 (정사각형) — 실제 화면 비율로 재야 가로 위치가 맞음
+	await process_frame
+	await process_frame
+	var vm = main.hud._vm
+	var cam: Camera3D = vm._vp.get_camera_3d()
+	var vs: Vector2 = Vector2(vm._vp.size)
+	var worst_barrel := 0.0  # 화면 위에서부터 비율 (0 = 맨 위). 포신은 0.75 이상이어야 함
+	var center_hits := 0     # 린스톡이 조준점 둘레(가로 가운데 50%, 위 75%)에 들어간 꼭짓점 수
+	var spark_seen := false
+	await hold(2)
+	var shot = new_shots[0] if new_shots.size() > 0 else null
+	check("  돌 포탄 (울퉁불퉁한 돌 모양) · 판정 반지름 0.2", shot != null and shot.radius == float(W.radius) and (shot.mesh as MeshInstance3D).mesh == Meshes.stone(), "")
+	worst_barrel = 1.0
+	for f in 40:  # 쏘는 순간 ~ 린스톡이 돌아올 때까지 (화면 프레임마다)
+		await process_frame
+		vs = Vector2(vm._vp.size)  # 창 크기를 바꾼 뒤 한두 프레임 늦게 따라옴
+		spark_seen = spark_seen or vm._cn_spark.visible
+		for mi in _meshes(vm._vm.cannon):
+			for c in _corners(mi):
+				if (cam.global_transform.affine_inverse() * c).z > -cam.near:  # 카메라 뒤·가까운 면 앞 = 잘려서 안 그려짐
+					continue
+				var sp: Vector2 = cam.unproject_position(c) / vs
+				worst_barrel = minf(worst_barrel, sp.y)
+		for mi in _meshes(vm._cn_stick):
+			for c in _corners(mi):
+				var sp: Vector2 = cam.unproject_position(c) / vs
+				if sp.y < 0.75 and absf(sp.x - 0.5) < 0.25:
+					center_hits += 1
+	check("1인칭 포신은 쏠 때도 화면 아래 25% 안", worst_barrel >= 0.75, "가장 높은 곳 %.2f (위에서부터)" % worst_barrel)
+	check("  린스톡은 조준점 둘레를 안 가림", center_hits == 0, "%d" % center_hits)
+	check("  쏘면 점화 구멍 불꽃", spark_seen, "")
+	await wait(int(float(W.reload) * 60.0) + 10)
+
+
+func _meshes(n: Node) -> Array:
+	var out: Array = []
+	if n is MeshInstance3D and (n as MeshInstance3D).is_visible_in_tree():
+		out.append(n)
+	for c in n.get_children():
+		out.append_array(_meshes(c))
+	return out
+
+
+func _corners(mi: MeshInstance3D) -> Array:
+	var b: AABB = mi.get_aabb()
+	var out: Array = []
+	for k in 8:
+		out.append(mi.global_transform * (b.position + b.size * Vector3(k & 1, (k >> 1) & 1, (k >> 2) & 1)))
+	return out
 
 
 ## 지붕 경사면 흘러내림 (사용자 요청): 지붕마다 꼭대기 근처 두 곳(맵 안쪽으로)에 떨어뜨려

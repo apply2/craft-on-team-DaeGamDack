@@ -24,7 +24,15 @@ var _chicken := {}          # 손에 든 닭 모양 {g, hd, wings}
 var _horse_head: Node3D     # 마상창 아래 보이는 말 머리
 var _tr: Node3D             # 트럼펫 (나팔이 화면 오른쪽 아래에 보임)
 const TR_POS := Vector3(0.2, -0.24, -0.34)
-const CN_POS := Vector3(0.0, -0.36, -0.42)  # 포병 포신 (화면 아래 가운데)
+const CN_POS := Vector3(-0.07, -0.34, -0.3)  # 포병 포신 (화면 아래 가운데 — 굵어져서 앞을 숙여 윗면·쇠고리가 보이게: 화면 아래 25% 안)
+const CN_TILT := -0.25
+const CN_YAW := -0.22   # 포신 앞을 살짝 오른쪽(가운데 쪽)으로 → 오른쪽 옆면이 보여서 쇠고리 띠가 읽힘
+const CN_HAND := Vector3(0.34, -0.19, -0.45)     # 포병 린스톡 쥔 손 (오른쪽 아래 — HUD 무기 칸 바로 위에 살짝)
+const CN_DIR := Vector3(0.85, 0.5, 0.0)          # 평소 막대 방향: 오른쪽 바깥으로 눕혀 → 금방 화면 밖으로 나가서 가운데를 안 가림
+const CN_HIT_DIR := Vector3(-0.75, 0.55, -0.2)   # 쏠 때 막대 방향: 손에서 왼쪽 위 = 점화 구멍 쪽
+const CN_TIP := 0.55                             # 손에서 불붙은 심지까지
+var _cn_spark: Node3D
+var _cn_stick: Node3D
 const TE_POS := Vector3(0.24, -0.2, -0.55)  # 흡혈귀 틀니 (화면 오른쪽 아래, 앞을 보고 벌어져 있음)
 var _teeth := {}
 var _meat: Node3D             # 야만인 고기 먹기 (먹는 동안만, 무기와 따로)            # {g, up, lo}
@@ -157,18 +165,43 @@ func _build() -> void:
 	WeaponModels.make_trumpet(_tr)
 	_part(Meshes.sph(), SKIN, Vector3(0.055, 0.05, 0.065), Vector3(-0.01, -0.03, -0.17), tw)
 	_part(Meshes.sph(), SKIN, Vector3(0.05, 0.045, 0.06), Vector3(0.02, -0.07, -0.3), tw)
-	# 포병 대포: 화면 아래 가운데 포신이 앞으로 뻗음, 양손이 옆을 잡음
+	# 포병 봄바드: 화면 아래 가운데 굵은 8각 철 포신 윗면 + 쇠고리 (화면 아래 25% 안 — test_cannon이 확인),
+	# 오른쪽 아래 린스톡을 든 손 (쏘면 점화 구멍을 콕 찍고 불꽃). 색은 GameData.CANNON_LOOK
+	var L: Dictionary = GameData.CANNON_LOOK
 	var cw := _group("cannon", CN_POS)
-	cw.rotation.x = 0.12
-	const IRON := 0x3b3b42
-	_rx(_part(Meshes.cyl(), IRON, Vector3(0.1, 0.75, 0.1), Vector3(0, 0, -0.38), cw), PI / 2)
-	_rx(_part(Meshes.cyl(), IRON, Vector3(0.125, 0.09, 0.125), Vector3(0, 0, -0.74), cw), PI / 2)
-	_rx(_part(Meshes.cyl(), 0x141418, Vector3(0.07, 0.02, 0.07), Vector3(0, 0, -0.79), cw), PI / 2)  # 포구 구멍
-	_part(Meshes.sph(), IRON, Vector3(0.14, 0.14, 0.15), Vector3(0, 0, 0.0), cw)
-	for z in [-0.12, -0.5]:
-		_rx(_part(Meshes.cyl(), GameData.C.gold, Vector3(0.11, 0.03, 0.11), Vector3(0, 0, z), cw), PI / 2)
+	cw.rotation = Vector3(CN_TILT, CN_YAW, 0)
+	var cr := 0.13
+	var cl := 0.6
+	_rx(_part(Meshes.prism(), L.iron, Vector3(cr, cl, cr), Vector3(0, 0, -cl * 0.5 + 0.03), cw), PI / 2)
+	_rx(_part(Meshes.prism(), L.iron, Vector3(cr * 0.9, 0.1, cr * 0.9), Vector3(0, 0, 0.07), cw), PI / 2)  # 뒤 마개
+	for k in 5:
+		_rx(_part(Meshes.prism(), L.ring, Vector3(cr * 1.25, 0.07, cr * 1.25), Vector3(0, 0, -0.02 - k * 0.12), cw), PI / 2)
+	_rx(_part(Meshes.prism(), L.ring, Vector3(cr * 1.38, 0.08, cr * 1.38), Vector3(0, 0, -cl + 0.02), cw), PI / 2)  # 두꺼운 포구 테
+	_rx(_part(Meshes.cyl(), L.bore, Vector3(cr * 0.82, 0.01, cr * 0.82), Vector3(0, 0, -cl - 0.025), cw), PI / 2)  # 굵은 구경
+	_part(Meshes.box(), L.ring, Vector3(0.04, 0.016, 0.04), Vector3(0, cr + 0.008, -0.08), cw)   # 점화 구멍 받침
+	_part(Meshes.cyl(), L.touch, Vector3(0.008, 0.01, 0.008), Vector3(0, cr + 0.018, -0.08), cw)  # 점화 구멍
+	_part(Meshes.sph(), SKIN, Vector3(0.055, 0.05, 0.065), Vector3(-0.15, 0.0, -0.16), cw)        # 포신을 붙잡은 왼손
+	_cn_spark = Node3D.new()  # 점화 구멍 불꽃 (쏘는 순간만)
+	_cn_spark.position = Vector3(0, cr + 0.03, -0.08)
+	_cn_spark.visible = false
+	cw.add_child(_cn_spark)
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.albedo_color = GameData.col(int(L.fx.spark))
+	for k in 6:  # 가운데 큰 불꽃 + 튀는 불티 (쏘는 동안 매 프레임 흩뿌림)
+		WeaponModels.part(Meshes.sph(), sm, Vector3.ZERO, Vector3.ONE * (0.018 if k == 0 else 0.007), _cn_spark)
+	_cn_stick = Node3D.new()  # 린스톡 (막대 = +Y, 원점 = 쥔 손. 쏘면 손이 오른쪽 아래로 빠지며 막대 끝이 점화 구멍을 찍음)
+	_root.add_child(_cn_stick)
+	_vm["cannon_stick"] = _cn_stick
+	_part(Meshes.sph(), SKIN, Vector3(0.05, 0.045, 0.06), Vector3.ZERO, _cn_stick)                  # 린스톡을 쥔 손
+	_part(Meshes.cyl(), L.staff, Vector3(0.014, CN_TIP + 0.15, 0.014), Vector3(0, CN_TIP * 0.5 - 0.06, 0), _cn_stick)
 	for sx in [1.0, -1.0]:
-		_part(Meshes.sph(), SKIN, Vector3(0.055, 0.05, 0.065), Vector3(sx * 0.13, -0.02, -0.12), cw)
+		_part(Meshes.box(), L.fork, Vector3(0.01, 0.07, 0.01), Vector3(sx * 0.018, CN_TIP - 0.05, 0), _cn_stick).rotation.z = -sx * 0.35
+	_part(Meshes.sph(), L.rope, Vector3(0.02, 0.03, 0.02), Vector3(0, CN_TIP - 0.03, 0), _cn_stick)
+	var mm := StandardMaterial3D.new()
+	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mm.albedo_color = GameData.col(int(L.match))
+	WeaponModels.part(Meshes.sph(), mm, Vector3(0, CN_TIP, 0), Vector3.ONE * 0.022, _cn_stick)      # 불붙은 심지
 	# 흡혈귀 틀니: 커다란 틀니를 손에 쥐고 앞으로 내밂. 물면 딱! 다물림
 	var tg := _group("teeth", TE_POS)
 	var ti := Node3D.new()
@@ -363,8 +396,26 @@ func _process(dt: float) -> void:
 			var rl := float(GameData.WEAPONS.cannon.reload)
 			var dip := sin(clampf(e.cn_t / rl, 0, 1) * PI) * 0.06 if e.cn_t > 0 else 0.0
 			_cn_ads += ((1.0 if e.aim_held else 0.0) - _cn_ads) * minf(1.0, dt * 10.0)
-			g.position = CN_POS + Vector3(0, -dip + kick * 0.03 - _cn_ads * 0.14, kick * 0.2 + _cn_ads * 0.06)
-			g.rotation.x = 0.12 + kick * 0.18 - _cn_ads * 0.1
+			g.position = CN_POS + Vector3(0, -dip - kick * 0.03 - _cn_ads * 0.03, kick * 0.15)  # 쏘면 뒤·아래로 (위로 들리면 조준을 가림)
+			g.rotation.x = CN_TILT - kick * 0.05
+			# 린스톡으로 점화 구멍을 콕: 막대 끝(CN_TIP)이 점화 구멍에 닿게 손 자리를 거꾸로 계산
+			var strike := sin(clampf(e.fire_anim, 0.0, 1.0) * PI)
+			var hole := g.transform * _cn_spark.position
+			# 손은 곧게 옮기고, 막대는 시계 방향(오른쪽 → 아래 → 왼쪽 → 왼쪽 위)으로 휘둘러 점화 구멍을 찍음.
+			# 위쪽을 거쳐 돌리면 막대 끝이 조준점 근처로 솟아서 아래로 돈다 (test_cannon이 확인)
+			var d0 := CN_DIR.normalized()
+			var d1 := CN_HIT_DIR.normalized()
+			var ang := lerpf(atan2(d0.y, d0.x), atan2(d1.y, d1.x) - TAU, strike)
+			var flat := lerpf(Vector2(d0.x, d0.y).length(), Vector2(d1.x, d1.y).length(), strike)
+			var dir := Vector3(cos(ang) * flat, sin(ang) * flat, lerpf(d0.z, d1.z, strike)).normalized()
+			var hand := CN_HAND.lerp(hole - d1 * CN_TIP, strike)
+			_cn_stick.visible = true
+			_cn_stick.transform = Transform3D(Basis(Quaternion(Vector3.UP, dir)), hand + Vector3(0, -dip, 0))
+			_cn_spark.visible = e.fire_anim > 0.2 and e.fire_anim < 0.75
+			if _cn_spark.visible:
+				for c in _cn_spark.get_children():
+					var m := c as Node3D
+					m.position = Vector3(randf_range(-0.04, 0.04), randf_range(0.0, 0.07), randf_range(-0.04, 0.04)) if m.get_index() > 0 else Vector3.ZERO
 		"teeth":  # 평소엔 딱딱 떨며 벌어져 있고, 물면 앞으로 쑥 내밀며 딱! 다물림. 돌진 중엔 앞으로 쭉
 			var g: Node3D = _vm.teeth
 			var snap := sqrt(clampf(e.fire_anim, 0.0, 1.0))

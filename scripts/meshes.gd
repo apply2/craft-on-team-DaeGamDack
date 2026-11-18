@@ -59,6 +59,39 @@ static func stone() -> ArrayMesh:
 	return m
 
 
+## n각 기둥 (Y축, 높이 1, 가운데 = 원점, 면까지 반지름 1). 면마다 법선이 따로라 판재를 이어 붙인 듯 각져 보임.
+## 면 하나가 +X·+Z·-Z 쪽을 보게 놓여서 X로 90° 눕혀도 윗면이 평평하다 (포병 봄바드 포신·쇠고리)
+static func prism(n := 8) -> ArrayMesh:
+	var key := "prism%d" % n
+	if _cache.has(key):
+		return _cache[key]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var h := PI / n
+	var R := 1.0 / cos(h)
+	var pt := func(a: float, y: float) -> Vector3: return Vector3(sin(a) * R, y, cos(a) * R)
+	for i in n:
+		var a := TAU * i / n
+		var nrm := Vector3(sin(a), 0, cos(a))
+		var v0: Vector3 = pt.call(a - h, -0.5)
+		var v1: Vector3 = pt.call(a + h, -0.5)
+		var v2: Vector3 = pt.call(a + h, 0.5)
+		var v3: Vector3 = pt.call(a - h, 0.5)
+		for v in [v0, v2, v1, v0, v3, v2]:  # Godot 앞면 = 시계 방향
+			st.set_normal(nrm)
+			st.add_vertex(v)
+		for v in [Vector3(0, 0.5, 0), v2, v3]:  # 윗 뚜껑
+			st.set_normal(Vector3.UP)
+			st.add_vertex(v)
+		for v in [Vector3(0, -0.5, 0), v0, v1]:  # 아랫 뚜껑
+			st.set_normal(Vector3.DOWN)
+			st.add_vertex(v)
+	st.index()  # Meshes.merge가 인덱스 배열을 읽음
+	var m := st.commit()
+	_cache[key] = m
+	return m
+
+
 ## 안쪽 0.62, 바깥 1 고리 (XY 평면, +Z를 봄) — HTML RingGeometry(0.62,1,32)
 static func ring() -> ArrayMesh:
 	if _cache.has("ring"):

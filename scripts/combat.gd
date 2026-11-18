@@ -925,9 +925,8 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 	if W.has("lift"):
 		vel.y += float(W.lift)
 	var life: float = float(W.range) / speed if W.has("range") else float(W.get("fuse", GameData.PROJ_LIFE))
-	if kind == "cannon":  # 포구 연기
-		fx.puff(pos, 0x8a8478, 0.35, 5)
-		fx.puff(pos, 0xffb347, 0.18, 2)
+	if kind == "cannon":  # 점화 구멍 불꽃 + 포구 연기
+		cannon.fire_fx(e, pos, dir)
 	projectiles.append({
 		"kind": kind, "pos": pos, "vel": vel, "grav": float(W.grav), "owner": e, "dmg": dmg,
 		"mesh": mesh, "life": life, "radius": float(W.radius), "from": from,
@@ -941,9 +940,9 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 func _cannonball() -> Node3D:
 	var W: Dictionary = GameData.WEAPONS.cannon
 	var mi := MeshInstance3D.new()
-	mi.mesh = Meshes.sph()
+	mi.mesh = Meshes.stone()  # 울퉁불퉁한 돌 포탄 (겉모습만 — 판정은 W.radius)
 	mi.material_override = GameData.mat(W.color)
-	mi.scale = Vector3.ONE * float(W.ball)
+	mi.scale = Vector3(1.0, 0.9, 1.08) * float(W.ball)
 	return mi
 
 
@@ -1329,7 +1328,7 @@ func remote_fire(e: PlayerController, kind: String, pos: Vector3, vel: Vector3, 
 			dmg = W.dmg
 			Sfx.play("cannon", pos)
 			e.rec_v += 12
-			fx.puff(pos, 0x8a8478, 0.35, 5)
+			cannon.fire_fx(e, pos, vel.normalized() if vel.length_squared() > 1e-6 else Vector3.FORWARD)
 		_:
 			return
 	e.fire_anim = 1.0
