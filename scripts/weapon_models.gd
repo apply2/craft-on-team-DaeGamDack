@@ -80,6 +80,97 @@ static func make_arrow_fast(kind: String) -> Node3D:
 	return g
 
 
+## ── 날아가는 화살 눈에 띄게 (GameData.ARROW_FLIGHT, 사용자 요청) ──
+## make_arrow_fast로 만든 화살에 붙인다: 화살을 크게·밝게 + 뒤에 빛 꼬리 (메시 하나 더 — 그리기 1번).
+## 꽂힐 때 end_flight_fx로 원래 모습. 꼬리 길이는 Combat이 매 프레임 set_trail로.
+static var _flight_mat: StandardMaterial3D
+static var _trail_mesh: ArrayMesh
+static var _trail_mats := {}
+
+
+static func add_flight_fx(g: Node3D, kind: String) -> void:
+	if not GameData.ARROW_FLIGHT.has(kind) or g.get_child_count() == 0:
+		return
+	var F: Dictionary = GameData.ARROW_FLIGHT[kind]
+	var body := g.get_child(0) as MeshInstance3D
+	if _flight_mat == null:
+		_flight_mat = Meshes.vertex_color_mat()
+		_flight_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	body.material_override = _flight_mat
+	var tr := MeshInstance3D.new()
+	tr.name = "Trail"
+	tr.mesh = _trail()
+	tr.material_override = _trail_mat(kind)
+	tr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	tr.scale = Vector3(float(F.r), float(F.r), 0.001)
+	tr.visible = false
+	tr.position.z = -float(GameData.ARROWS[kind].len)  # 화살 꼬리(깃)에서 시작 (flight_tick이 크기에 맞춰 옮김)
+	g.add_child(tr)
+
+
+## 매 프레임: trav = 지금까지 날아간 거리(m), speed = 지금 속도.
+## 화살은 처음 grow m 동안 원래 크기 → scale배로 자라고 (1인칭에서 큰 화살이 눈앞을 가리지 않게),
+## 꼬리는 날아간 거리만큼 자라다가 min(len, 속도 × time)에서 멈춘다 (쏜 사람 뒤로는 안 늘어짐)
+static func flight_tick(g: Node3D, kind: String, trav: float, speed: float) -> void:
+	var tr := g.get_node_or_null("Trail") as MeshInstance3D
+	if tr == null:
+		return
+	var F: Dictionary = GameData.ARROW_FLIGHT[kind]
+	var k := lerpf(1.0, float(F.scale), clampf(trav / float(F.grow), 0, 1))
+	(g.get_child(0) as Node3D).scale = Vector3.ONE * k
+	tr.position.z = -float(GameData.ARROWS[kind].len) * k
+	var length := minf(minf(float(F.len), speed * float(F.time)), trav)
+	tr.visible = length > 0.05
+	if tr.visible:
+		tr.scale.z = length
+
+
+## 꽂힘: 꼬리를 떼고 원래 크기·재질로
+static func end_flight_fx(g: Node3D) -> void:
+	var tr := g.get_node_or_null("Trail")
+	if tr:
+		g.remove_child(tr)
+		tr.queue_free()
+	if g.get_child_count() > 0 and g.get_child(0) is MeshInstance3D:
+		var body := g.get_child(0) as MeshInstance3D
+		body.material_override = Meshes.shared_vc_mat()
+		body.scale = Vector3.ONE
+
+
+## 꼬리 모양: 원점(화살 꼬리 쪽)에서 -Z로 1m 가늘어지는 8각 원뿔, 정점 알파 1 → 0. 하나 만들어 같이 씀
+static func _trail() -> ArrayMesh:
+	if _trail_mesh:
+		return _trail_mesh
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := 8
+	for i in n:
+		var a0 := TAU * i / n
+		var a1 := TAU * (i + 1) / n
+		var p0 := Vector3(cos(a0), sin(a0), 0)
+		var p1 := Vector3(cos(a1), sin(a1), 0)
+		var q0 := Vector3(cos(a0) * 0.2, sin(a0) * 0.2, -1)
+		var q1 := Vector3(cos(a1) * 0.2, sin(a1) * 0.2, -1)
+		for v: Array in [[p0, 1.0], [p1, 1.0], [q1, 0.0], [p0, 1.0], [q1, 0.0], [q0, 0.0]]:
+			st.set_color(Color(1, 1, 1, v[1]))
+			st.add_vertex(v[0])
+	_trail_mesh = st.commit()
+	return _trail_mesh
+
+
+static func _trail_mat(kind: String) -> StandardMaterial3D:
+	if not _trail_mats.has(kind):
+		var F: Dictionary = GameData.ARROW_FLIGHT[kind]
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.vertex_color_use_as_albedo = true
+		m.albedo_color = Color(GameData.col(F.trail), float(F.alpha))
+		_trail_mats[kind] = m
+	return _trail_mats[kind]
+
+
 ## 3인칭 캐릭터 손에 든 활 — HTML makeWeapon('bow')
 static func make_bow(parent: Node3D, mat: Callable = _default_mat) -> void:
 	var R := 0.42
