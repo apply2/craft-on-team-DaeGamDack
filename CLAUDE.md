@@ -70,6 +70,9 @@ scripts/fx/bard_fx.gd  트럼펫 공격 이펙트 (Combat 아래 BardFx 노드, 
 scripts/fx/star_fx.gd  황금 붕어빵 무적 반짝임 (Combat 아래 StarFx 노드, 보기만 함). 몸 금색↔흰색 덮어씌우기·별 반짝이·금가루 꼬리(MultiMesh)·금빛(가까운 2명)
 tests/test_fish.gd     황금 붕어빵: 등장 자리·먹기·8초 무적·막는 것·몸박치기·반짝임·HUD·뷰모델·무적 BGM·봇·친구대전 비트 자동 테스트
 tests/test_bard_fx.gd  트럼펫 이펙트: 풀 상한(한 명 24·전체 120)·원뿔 안 퍼짐·벽 튕김·1인칭 비켜 감·고리 주기·게이지 1→3·춤 조명·면역·팡파레·삑사리·숨 참·정리 자동 테스트
+scripts/cannon.gd      포병 대포 (class Cannon, Combat 아래 "Cannon" 노드): 폭발 explode(범위 피해·벽 차단·거리 감소·포탄 점프 blast_jump), 효과·흔들림, 우클릭 탄도 조준(궤적 점 MultiMesh + 착탄 고리)
+tests/test_cannon.gd   포병: 스탯·달리기 없음·느린 가속·낮은 점프, 한 발·5초 재장전, 발밑 사격(피해 1/3·높이 뜸), 직격 100, 범위 80→25, 넉백 감소, 벽 차단, 같은 팀, 자멸, 넓은 판정, 탄도 조준, 공중 폭발 자동 테스트
+tests/screenshot_class.gd 병과 하나 자세히 (3방향·걷는 중·1인칭 우클릭·3인칭): godot --path . --resolution 1280x720 -s tests/screenshot_class.gd -- cls=cannoneer tag=now
 scripts/trumpet_voice.gd  연주 멜로디 (AudioStreamGenerator, 톱니파+비브라토+로우패스). 음유시인 모델마다 하나
 tests/test_bard.gd     원뿔 안/밖·벽 차단·피해 주기·누적 0.75초 춤·1.5초 창·3초 면역·넘어짐 우선·숨 소진·삑사리·팡파레·봇 오차·베레모·볼·숨 막대 자동 테스트
 scripts/ragdoll.gd     죽으면 쓰러지는 몸 (HTML makeRagdoll·stepRagdoll·poseRagdoll). 점 8개 Verlet + world.aabbs 충돌. 모델의 머리·몸통·팔·다리를 떼어 와서 돌림
@@ -253,6 +256,7 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 | 석궁병 | 석궁 | 0.85 (휠로 감는 중 ×0.75) | 110 | 파란 갑옷 |
 | 성직자 | 성수 | 1.0 | 100 | 체력 재생 2배 (초당 20) |
 | 음유시인 (4.5단계) | 트럼펫 | 1.05 | 95 | 적을 춤추게 만드는 방해형. 깃털 베레모 (투구와 같은 규칙으로 날아감) |
+| 포병 (사용자 요청) | 대포 | 0.7 (사용자 요청 0.65→0.7. 달리기 없음, 가속 6, 점프 높이 0.4배) | 150 (사용자 요청 200→150) | 바퀴 달린 포가에 앉은 탱커. 몸 판정 1.4배. 둔화 절반만. 샤코 모자 — 아래 "포병 명세" |
 
 ### 피해 공통
 - 머리 판정: 투구를 쓰고 있으면 ×1.5. 첫 헤드샷에 투구가 날아가고, 그 뒤로는 맨머리라 ×2.0이다.
@@ -418,6 +422,41 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 - **7. 1인칭**: 내 음표는 카메라 앞 1m부터, 조준점 둘레(화면 높이 8%)는 비켜 감, 불투명도 60%. 내 머리 둘레 효과는 안 그림.
   - 내가 춤추면 분홍 테두리 + 테두리를 도는 음표 (hud `DanceEdge`, 원·막대로 직접 그림) + 카메라 까딱 (player `_update_camera`).
 - 성능: 8명이 동시에 연주해도 1280×720에서 프레임 3.1ms → 4.3ms, 그리기 호출 515 → 558 (PC 측정).
+
+## 포병 명세 (사용자 요청 새 병과 — HTML에 없음)
+
+수치는 `GameData.CLASSES.cannoneer`·`WEAPONS.cannon`. 코드는 `scripts/cannon.gd` + Combat(발사·재장전·투사체) + player(이동) + derp_model(`_build_carriage`·`_anim_carriage`) + viewmodel(`cannon`).
+- **이동**: `no_sprint`(Shift 무시), 땅 가속 `accel` 6(기본 12 — 마찰 6.5보다 작아서 실제 최고 걸음은 명목 3.78보다 조금 느린 약 3.5m/s), 점프 속도 = JUMP_V × √`jump`(0.4 → 높이 0.4배), 몸통 판정 반지름 ×`hit_r` 1.4 (`player.body_r()` — hit_test·디버그 표시가 씀). 낙하 피해는 게임에 없음.
+- **둔화 50%** (사용자 요청 — 처음엔 면역이었다가 바꿈, `slow_resist` 0.5, `player.slow_resist()`): 남이 거는 둔화(성수 ×0.35·춤 ×0.6)를 곱해 합친 뒤 최종 둔화량의 절반만 받음
+  (성수 → ×0.675, 춤 → ×0.8, 둘 다 → ×0.605). 웅덩이 피해·춤(공격 금지)·자기 조준 감속은 그대로. "면역" 표시는 없앰.
+- **넉백 속도 보호** (사용자 요청, 모든 병과): 넉백으로 뜨면 `player.kb_air` — 착지할 때까지 속도 상한이 (최고 속도×2.4, 32) 중 큰 값이라 둔화·느린 병과여도 날아가는 속도가 안 잘림 (예전엔 kb_t 0.45초가 끝나면 둔화된 최고 속도×2.4로 잘렸음). 포탄 점프(`blast_air`)도 같음.
+- **포탄** (사용자 요청 밸런스: 속도 26→32·재장전 5→4·반경 4.5→3.5→2.5·공중 폭발 4→5초): 32m/s, 중력 14(사람 22보다 작게 — 아치가 김, 평지 최대 사거리 약 73m). 무엇에든 닿으면 터지고, 5초(`fuse`, 투사체 수명)가 지나면 공중에서 터짐.
+  - 직격 = `dmg` 100 그대로 (범위 피해는 안 더함). 범위 2.5m: 몸(캡슐 겉면)까지 거리로 80 → 25 선형 (`Cannon.blast_dmg`).
+  - 폭발 지점에서 몸 가운데 선·머리 둘 다 벽에 막히면 범위 피해 없음 (`combat.los`). 벽에 맞은 폭발은 0.12m 앞으로 당겨서 잼.
+  - 넉백 kb 6·up 4에 `damage(..., kb_mul)` = 1 - 거리/반경.
+  - 한 발 쏘면 `reload` 4초 자동 재장전 (`player.cn_t`, 다른 무기를 들어도 참), 끝나면 `clank`. 누르고 있으면 장전되는 대로 쏨. 조준점 고리 = 장전 진행도.
+- **포탄 점프**: 자기 폭발은 ×`self_mul`(1/3, 발밑이면 약 27). 몸 가운데 선까지 `jump_r` 2.5m 안이면 위로 22m/s(사용자 요청 20→22) + 폭발 반대쪽 5m/s.
+  착지할 때까지 `player.blast_air` = 중력 ×`air_grav` 0.75(사용자 요청 — 일반 점프·낙하는 그대로, 공중에서 또 포탄 점프해도 유지) → 약 14.7m·2.7초 뜸,
+  공중 가속 ×`air_ctrl` 0.3, 속도 상한 풀림, 착지 넘어짐 없음. 말 위에선 안 뜸.
+- **발사 반동** (사용자 요청, `Cannon.fire_recoil` — Combat.fire에서 `not is_remote`만): 쏜 방향 반대로 `recoil` 8m/s(사용자 요청 6→10→8). 땅에 있으면 위로 `recoil_up` 2 + `recoil_t` 0.3초 동안 땅 마찰 `recoil_fric` 2(속도 상한도 풀림).
+  세로 성분은 ±`recoil_vmax` 4로 자름 (발밑 사격이면 위로 4 → 그다음 포탄 점프 22). 공중도 같음, 말 위는 없음. 반동도 `kb_air`를 켜서 떠 있는 동안 속도 상한·둔화에 안 잘림.
+  화면 반동: `player.cam_kick_t` → `cam_kick_now()` = 위로 `cam_kick` 0.06rad까지 빨리 올라갔다 `cam_kick_t` 0.2초에 정확히 0 (실제 시간, 조준 방향 그대로). 그래서 `RECOIL.cannon.vrec`은 0 (몸 반동 rec는 그대로).
+- **맵 경계** (포탄 점프로 성벽을 넘어가서 추가, 모든 캐릭터): `WorldBuilder.invisible_bounds` — 바깥 성벽 자리에 땅부터 `MAP_BOUNDS.ceil`(40m)까지 보이지 않는 벽 + 천장.
+  충돌 층 `WorldBuilder.BOUND_LAYER`(16)는 캐릭터 mask에만 (player._ready·Main._use_ffa·set_team) → 투사체·레이·내비·래그돌(aabbs)·맵 지문은 그대로. 맵을 새로 만들면 build()에서 부를 것.
+- **지붕 경사면** (사용자 요청 — 포탄 점프로 지붕에 올라가도 못 서 있고 흘러내림, 모든 캐릭터): `WorldBuilder.roof()`가 보이는 사각뿔 그대로 충돌(`_roof_col`, ConvexPolygon)을 `roofs`(그룹 "roof")에 넣는다.
+  층은 `BOUND_LAYER` → 투사체·레이·내비·래그돌·맵 지문은 예전처럼 지붕을 지나감. `player._integrate`: 지붕에 닿아 있으면 `floor_max_angle`을 `ROOF.floor_deg`(8°)로 줄여 지붕을 벽으로 → 중력으로 미끄러짐, grounded도 아님(착지 넘어짐 없음).
+  두 지붕이 맞닿은 V자 골(쟁탈전 시장 블록 옆)에 끼어 멈추면 `_roof_unstick`이 골을 따라 `ROOF.push` 3m/s로 밀어냄. 테스트: test_cannon(개인전 지붕 18곳)·test_control(쟁탈전 16곳).
+  - `damage()`에서 a == v는 아군 막기에 안 걸린다 (`ally`가 원래 a != b). 자기 포탄으로 죽으면 `kill`이 처치 +0 (자멸, 킬피드는 공격자 = 자기).
+  - 내 포탄에 내가 맞은 건 히트마크·숫자·맞힘 소리 없음 (`impact_fx`의 `mine`이 a != v).
+- **우클릭 탄도 조준**: 실제 발사와 같은 `local_launch` + 포탄과 똑같은 프레임 적분(닫힌 식, `aim_every` 프레임마다 벽·땅 레이)으로 궤적 점 28개 + 착탄 고리(반지름 = 폭발 반경, 장전 중엔 흐리게).
+  속도·중력을 바꿔도 착탄 지점 = 실제 폭발 자리 (`Cannon.aim_hit` vs `last_blast`, 차이는 벽에서 당기는 0.12m뿐 — `test_cannon`). 아무 데도 안 닿으면 고리는 fuse초 공중 폭발 자리. 확대 `AIM_CAM.cannon`(75/1.3, 85/1.3), 이동 ×`aim_slow` 0.7. 1인칭은 포신을 내려 궤적이 보이게.
+- **모습**: 3인칭 = 모델 뿌리에 포가(`carriage`, 몸 출렁임과 따로) + 바퀴 2개(따로 노드, 바라보는 쪽 속도로 굴러감) + 포신(`barrel` = weapons.cannon, 조준 높이를 따라 들리고 쏘면 뒤로).
+  사람은 축 위에 걸터앉음(다리 앞으로). 말을 타면 포가는 숨김. 초록 군복·흰 띠·금 단추·샤코 모자(헤드샷이면 날아감). 팀 색 = 군복·모자.
+  1인칭 = 화면 아래 가운데 포신, 쏘면 뒤로 밀렸다 돌아옴, 장전 중엔 살짝 내려감. 폭발 = 섬광·불덩이·흙 조각·고리 + `boom` + 화면 흔들림(4m 안 최대 → 26m에서 0).
+- **소리**(임시 합성, `Sfx.RECIPES`): `cannon`(발사) · `boom`(폭발) · `clank`(재장전). 파일로 바꾸려면 `audio/sfx/`에 넣고 `Sfx.FILES`에 같은 이름을 더한 뒤 RECIPES에서 지움.
+- **봇**: 성수처럼 대상 발밑에 떨어질 각도를 훑어서 찾음, `BOT.cannon_min` 4.5m 안이면 안 쏨, 선호 거리 16m, 쟁탈전 역할 = 거점.
+- **친구대전**: 포탄은 "f" 사건 (`Net.WEPS` 끝에 "cannon" — 번호는 뒤에만 더함). 터지면 각자 자기 캐릭터(방장은 + 봇)만 피해 판정, 포탄 점프는 쏜 사람 컴퓨터만. 체력은 상태로.
+- **UI**: 병과 카드가 늘면 5장 너비에 맞춰 줄어듦 (`menu._build_class`). 숫자키는 class_1~7. 병과 아이콘 `UiKit.ICONS.cannoneer`, 킬피드 `WEAPON_ICONS.cannon`.
 
 ## 쟁탈전 명세 (7.5단계 — 구현됨, 사용자 요청. AI대전 + 친구대전)
 
@@ -757,6 +796,7 @@ godot --headless --fixed-fps 60 --path . -s tests/test_crossbow.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_close_range.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_hitbox.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_holy.gd
+godot --headless --fixed-fps 60 --path . -s tests/test_cannon.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_bot.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_match.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_items.gd

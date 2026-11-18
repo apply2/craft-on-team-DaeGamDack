@@ -593,13 +593,20 @@ func _build_class() -> void:
 	_class_host.position = C.pos
 	_class_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lay.add_child(_class_host)
-	for i in GameData.CLASS_ORDER.size():
+	# 카드 줄 너비는 5장 기준 그대로 — 병과가 늘면 카드를 줄여서 같은 너비에 넣음 (뒤로·출전 버튼과 안 겹치게)
+	var n := GameData.CLASS_ORDER.size()
+	var step := float(C.size.x) + float(C.gap)
+	var span5 := step * 5.0 - float(C.gap)
+	var ck := minf(1.0, span5 / (step * n - float(C.gap)))
+	var cs: Vector2 = C.size
+	for i in n:
 		var k: String = GameData.CLASS_ORDER[i]
 		var card := _class_pick_card(k, i)
 		_class_host.add_child(card)
-		card.position = Vector2((float(C.size.x) + float(C.gap)) * i, 0)
+		card.pivot_offset = cs / 2.0
+		card.scale = Vector2.ONE * ck
+		card.position = Vector2(step * ck * i, 0) - cs / 2.0 * (1.0 - ck)  # 가운데 기준으로 줄었으니 왼쪽 위를 맞춤
 		card.rotation = deg_to_rad(float(C.tilts[i % C.tilts.size()]))
-		card.pivot_offset = C.size / 2.0
 		_class_cards[k] = card
 	# 뒤로 · 이놈으로 출전 · 개구 한마디
 	var B: Dictionary = CP.back

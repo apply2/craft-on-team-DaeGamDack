@@ -363,7 +363,7 @@ func _use_ffa() -> void:
 	for e in all:
 		if e.team != "":
 			e.team = ""
-			e.collision_mask = 1
+			e.collision_mask = 1 | WorldBuilder.BOUND_LAYER
 			if e.model and not e.alive:
 				e.model.visible = false
 	for i in bots.size():
@@ -388,7 +388,8 @@ func control_world() -> MapControl:
 ## 팀 나누기 (AI대전: 나 + 봇 4 = 블루, 봇 5 = 레드). 적 팀 스폰룸 문 막에 부딪히게 mask를 정한다
 func set_team(e: PlayerController, team: String) -> void:
 	e.team = team
-	e.collision_mask = 1 | int(MapControl.BARRIER_LAYER[ControlMode.other(team)]) if team != "" else 1
+	var base := 1 | WorldBuilder.BOUND_LAYER  # 월드 + 맵 경계
+	e.collision_mask = base | int(MapControl.BARRIER_LAYER[ControlMode.other(team)]) if team != "" else base
 
 
 ## 쟁탈전 시작 (AI대전)

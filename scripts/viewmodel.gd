@@ -19,10 +19,12 @@ var _xb := {}        # xs1, xs2, bolt, ptz, ptx, ph
 var _holy_fl: Node3D # 손에 든 성수병
 var _ak_fl: MeshInstance3D  # AK 총구 불꽃
 var _ak_ads := 0.0          # AK 정조준 정도 0~1
+var _cn_ads := 0.0          # 포병 탄도 조준 정도 0~1 (포신을 내려 궤적 점이 보이게)
 var _chicken := {}          # 손에 든 닭 모양 {g, hd, wings}
 var _horse_head: Node3D     # 마상창 아래 보이는 말 머리
 var _tr: Node3D             # 트럼펫 (나팔이 화면 오른쪽 아래에 보임)
 const TR_POS := Vector3(0.2, -0.24, -0.34)
+const CN_POS := Vector3(0.0, -0.36, -0.42)  # 포병 포신 (화면 아래 가운데)
 var _bob := 0.0
 var _sway := Vector2.ZERO  # 마우스를 움직이면 손이 살짝 늦게 따라옴 (HTML swayX/swayY)
 
@@ -144,6 +146,18 @@ func _build() -> void:
 	WeaponModels.make_trumpet(_tr)
 	_part(Meshes.sph(), SKIN, Vector3(0.055, 0.05, 0.065), Vector3(-0.01, -0.03, -0.17), tw)
 	_part(Meshes.sph(), SKIN, Vector3(0.05, 0.045, 0.06), Vector3(0.02, -0.07, -0.3), tw)
+	# 포병 대포: 화면 아래 가운데 포신이 앞으로 뻗음, 양손이 옆을 잡음
+	var cw := _group("cannon", CN_POS)
+	cw.rotation.x = 0.12
+	const IRON := 0x3b3b42
+	_rx(_part(Meshes.cyl(), IRON, Vector3(0.1, 0.75, 0.1), Vector3(0, 0, -0.38), cw), PI / 2)
+	_rx(_part(Meshes.cyl(), IRON, Vector3(0.125, 0.09, 0.125), Vector3(0, 0, -0.74), cw), PI / 2)
+	_rx(_part(Meshes.cyl(), 0x141418, Vector3(0.07, 0.02, 0.07), Vector3(0, 0, -0.79), cw), PI / 2)  # 포구 구멍
+	_part(Meshes.sph(), IRON, Vector3(0.14, 0.14, 0.15), Vector3(0, 0, 0.0), cw)
+	for z in [-0.12, -0.5]:
+		_rx(_part(Meshes.cyl(), GameData.C.gold, Vector3(0.11, 0.03, 0.11), Vector3(0, 0, z), cw), PI / 2)
+	for sx in [1.0, -1.0]:
+		_part(Meshes.sph(), SKIN, Vector3(0.055, 0.05, 0.065), Vector3(sx * 0.13, -0.02, -0.12), cw)
 	_build_items()
 
 
@@ -316,6 +330,14 @@ func _process(dt: float) -> void:
 			var fan := sin(e.fire_anim * PI)
 			g.position = TR_POS + Vector3(randf_range(-1, 1) * shake, randf_range(-1, 1) * shake - (0.08 if e.gasp_t > 0 else 0.0), -fan * 0.08)
 			_tr.rotation.z = sin(Time.get_ticks_msec() / 1000.0 * 40.0) * 0.02 if e.playing else 0.0
+		"cannon":  # 쏘면 반동으로 뒤로 밀렸다 돌아옴, 장전 중엔 살짝 내려감
+			var g: Node3D = _vm.cannon
+			var kick := e.fire_anim * e.fire_anim
+			var rl := float(GameData.WEAPONS.cannon.reload)
+			var dip := sin(clampf(e.cn_t / rl, 0, 1) * PI) * 0.06 if e.cn_t > 0 else 0.0
+			_cn_ads += ((1.0 if e.aim_held else 0.0) - _cn_ads) * minf(1.0, dt * 10.0)
+			g.position = CN_POS + Vector3(0, -dip + kick * 0.03 - _cn_ads * 0.14, kick * 0.2 + _cn_ads * 0.06)
+			g.rotation.x = 0.12 + kick * 0.18 - _cn_ads * 0.1
 		"holy":  # 던지면 앞으로 뻗고, 빈손이면 아래로 내려 새 병을 꺼냄
 			var t := e.fire_anim
 			var g: Node3D = _vm.holy

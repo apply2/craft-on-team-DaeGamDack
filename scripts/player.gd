@@ -54,6 +54,11 @@ var ak_ammo := 0          # AK 남은 탄
 var bloom := 0.0          # AK 연사 퍼짐
 var horse := {}           # 타고 있는 말 모양 (WeaponModels.make_horse) — Items가 관리
 var ln_t := 0.0           # 마상창에 또 맞기까지 남은 시간
+var kb_air := false       # 넉백으로 떠 있음 (착지할 때까지 속도 상한을 이동속도·둔화와 상관없이 풀어 둠 — 사용자 요청)
+var blast_air := false    # 포탄 점프로 떠 있음 (착지할 때까지 공중 조작 ×WEAPONS.cannon.air_ctrl, 속도 상한 풀림)
+var cn_t := 0.0           # 포병: 재장전 남은 시간
+var recoil_t := 0.0       # 포병: 발사 반동으로 밀리는 중 (땅 마찰 WEAPONS.cannon.recoil_fric)
+var cam_kick_t := 0.0     # 포병: 발사 화면 반동 남은 시간 (실제 시간) (0이면 장전됨 — WEAPONS.cannon.reload)
 var swap_req := false     # Q를 눌렀음 (Combat이 처리)
 var ak_flash := 0.0       # 내 1인칭 AK 총구 불꽃
 var hp := 100.0
@@ -139,6 +144,7 @@ var shake := 0.0
 ## 테스트·봇용: 비어 있지 않으면 키보드 대신 이 값을 읽는다
 ## {"f": -1..1, "r": -1..1, "jump": bool, "crouch": bool, "sprint": bool, "fire": bool(없으면 false)}
 var scripted_input := {}
+var on_roof := false  # 지난 물리 프레임에 지붕 경사면에 닿았나
 
 @onready var col: CollisionShape3D = $CollisionShape3D
 @onready var cam: Camera3D = $Camera3D
@@ -151,7 +157,7 @@ func _ready() -> void:
 	floor_max_angle = deg_to_rad(46)
 	# 캐릭터끼리는 부딪히지 않는다 (HTML도 월드 상자하고만 충돌). 월드=1층, 캐릭터=2층
 	collision_layer = 2
-	collision_mask = 1
+	collision_mask = 1 | WorldBuilder.BOUND_LAYER  # 월드 + 맵 경계(보이지 않는 벽·천장)
 	if is_local:
 		cam.top_level = true
 		cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -246,6 +252,11 @@ func spawn_at(p: Vector3) -> void:
 	bloom = 0.0
 	swap_req = false
 	ln_t = 0.0
+	blast_air = false
+	kb_air = false
+	cn_t = 0.0
+	recoil_t = 0.0
+	cam_kick_t = 0.0
 	if not horse.is_empty():
 		(horse.g as Node).queue_free()
 		horse = {}
@@ -319,6 +330,16 @@ func head_c() -> Vector3:
 	if fall_amt() > 0.5:
 		return p + Vector3(0, 0.32, 0) + lie_dir() * 1.4
 	return p + Vector3(0, mount_h + (1.1 if crouch else 1.62), 0) + _hb(0)
+
+
+## 남이 거는 둔화(성수 웅덩이·춤 이동 감소)를 얼마나 받나 (1 = 다, 포병 0.5 — CLASSES.slow_resist)
+func slow_resist() -> float:
+	return float(GameData.CLASSES[cls].get("slow_resist", 1.0))
+
+
+## 몸통 판정 반지름 (포병은 대포 크기만큼 넓다 — CLASSES.hit_r)
+func body_r() -> float:
+	return GameData.BODY_R * float(GameData.CLASSES[cls].get("hit_r", 1.0))
 
 
 func body_a() -> Vector3:
@@ -403,6 +424,8 @@ func _physics_process(dt: float) -> void:
 		if wish.length_squared() > 0:
 			wish = wish.normalized()
 		sprinting = inp.sprint and f > 0 and not inp.crouch  # 공격·조준하면 달리기 풀림
+	if GameData.CLASSES[cls].get("no_sprint", false):  # 포병: 달리기 없음
+		sprinting = false
 	movement(wish, inp.jump, inp.crouch, dt)
 
 
@@ -415,14 +438,19 @@ func max_speed() -> float:
 		var spr := GameData.SPRINT if sprinting else 1.0
 		var wm: float = GameData.WEAPONS[wep].get("speed_mul", 1.0)  # 저격총 0.9, AK 0.95
 		sp = GameData.BASE_SPEED * GameData.CLASSES[cls].speed * wm * spr
+		if wep == "cannon" and aim_held:  # 포병 탄도 조준 중
+			sp *= float(GameData.WEAPONS.cannon.aim_slow)
 		if wep == "crossbow" and wind_t > 0 and xb_wind < int(GameData.WEAPONS.crossbow.notches):  # 석궁 휠로 감는 중 (사용자 요청)
 			sp *= float(GameData.WEAPONS.crossbow.reload_speed)
+	# 남이 거는 둔화 (성수 웅덩이·춤): 곱해서 합친 뒤, 포병은 최종 둔화량의 slow_resist만 받음 (사용자 요청)
+	var keep := 1.0
 	if slow_t > 0:
-		sp *= GameData.WEAPONS.holy.slow
+		keep *= GameData.WEAPONS.holy.slow
+	if dance_t > 0:  # 춤추는 중
+		keep *= GameData.DANCE.speed
+	sp *= 1.0 - (1.0 - keep) * slow_resist()
 	if has_chicken:
 		sp *= GameData.ITEM.chicken_speed
-	if dance_t > 0:  # 춤추는 중
-		sp *= GameData.DANCE.speed
 	if gasp_t > 0:  # 숨이 차서 헐떡임
 		sp *= GameData.WEAPONS.trumpet.gasp_speed
 	return sp
@@ -458,6 +486,7 @@ func movement(wish: Vector3, jump: bool, crouch_in: bool, dt: float) -> void:
 	var hs := Vector2(velocity.x, velocity.z).length()
 	slide_cd -= dt
 	kb_t -= dt
+	recoil_t -= dt
 	stagger -= dt
 	if stagger > 0:
 		wish = Vector3.ZERO
@@ -498,30 +527,38 @@ func movement(wish: Vector3, jump: bool, crouch_in: bool, dt: float) -> void:
 		slide_t -= dt
 		if slide_t <= 0 or not crouch_in:
 			sliding = false
+	var K: Dictionary = GameData.CLASSES[cls]
 	if grounded:
 		if jump:
-			velocity.y = GameData.JUMP_V
+			velocity.y = GameData.JUMP_V * (1.0 if mtd else sqrt(float(K.get("jump", 1.0))))  # 포병: 점프 높이 0.4배
 			grounded = false
 			sliding = false
 			jumped = true
 			if is_local:
 				Sfx.play("jump")
 		else:
-			friction(0.9 if fall_t > 0 else (0.7 if sliding else (2.0 if kb_t > 0 else 6.5)), dt)
+			friction(0.9 if fall_t > 0 else (0.7 if sliding else (2.0 if kb_t > 0 else (float(GameData.WEAPONS.cannon.recoil_fric) if recoil_t > 0 else 6.5))), dt)
 			if sliding:
 				accelerate(wish, 2, 3, dt)
 			else:
-				accelerate(wish, mx * 0.5 if crouch else mx, 12, dt)
+				accelerate(wish, mx * 0.5 if crouch else mx, 12.0 if mtd else float(K.get("accel", 12.0)), dt)
 	if not grounded:
-		accelerate(wish, 1.1, 80, dt)  # 공중 제어
-	velocity.y -= GameData.GRAV * dt
+		accelerate(wish, 1.1, 80.0 * (float(GameData.WEAPONS.cannon.air_ctrl) if blast_air else 1.0), dt)  # 공중 제어 (포탄 점프 중엔 조금만)
+	# 포탄 점프로 떠 있는 동안은 중력 ×air_grav (사용자 요청 — 일반 점프·그냥 떨어질 땐 그대로. 공중에서 또 포탄 점프하면 계속 유지)
+	velocity.y -= GameData.GRAV * dt * (float(GameData.WEAPONS.cannon.air_grav) if blast_air else 1.0)
 	var h := Vector2(velocity.x, velocity.z).length()
-	var cap := maxf(mx * 2.4, 32.0) if kb_t > 0 else mx * 2.4  # 넉백 중엔 크게 날아가도록
+	if kb_t > 0 and not grounded:
+		kb_air = true
+	# 넉백·포탄 점프 중엔 크게 날아가도록. 떠 있는 동안은 kb_t가 끝나도 그대로 → 둔화·느린 병과여도 넉백 속도가 안 깎임
+	var cap := maxf(mx * 2.4, 32.0) if kb_t > 0 or blast_air or kb_air or recoil_t > 0 else mx * 2.4
 	if h > cap:
 		velocity.x *= cap / h
 		velocity.z *= cap / h
 	var was_air := not grounded
 	_integrate(dt)
+	if grounded and velocity.y <= 0:
+		blast_air = false
+		kb_air = false
 	if was_air and grounded and jumped:
 		jumped = false
 		# 점프하고 착지할 때 일정 확률로 넘어짐 (사용자 요청 — 말 위에선 없음)
@@ -549,8 +586,24 @@ func _integrate(dt: float) -> void:
 		floor_snap_length = 0.0
 	else:
 		floor_snap_length = 0.6
+	# 지붕에 닿아 있으면 바닥 경사 한도를 줄여서 지붕을 벽으로 → 중력으로 경사면을 타고 흘러내림 (사용자 요청, GameData.ROOF)
+	floor_max_angle = deg_to_rad(float(GameData.ROOF.floor_deg) if on_roof else 46.0)
 	move_and_slide()
-	grounded = is_on_floor()
+	on_roof = false
+	var rn: Array[Vector3] = []
+	var rc := Vector3.ZERO  # 닿은 지붕 하나의 가운데 (골에서 밀 방향 고르기)
+	for i in get_slide_collision_count():
+		var k := get_slide_collision(i)
+		var o := k.get_collider() as Node
+		if o and o.is_in_group("roof"):
+			on_roof = true
+			rn.append(k.get_normal())
+			var sh := (o as CollisionObject3D).shape_owner_get_owner((o as CollisionObject3D).shape_find_owner(k.get_collider_shape_index())) as Node3D
+			if sh:
+				rc = sh.global_position
+	grounded = is_on_floor() and not on_roof
+	if on_roof:
+		_roof_unstick(rn, rc)
 	if grounded and velocity.y < 0:
 		velocity.y = 0
 	var ax: float = combat.world.half_x if combat and combat.world else GameData.ARENA  # 맵마다 이동 범위
@@ -560,6 +613,33 @@ func _integrate(dt: float) -> void:
 	if global_position.y < -5:  # 혹시 바닥을 뚫으면 복구
 		global_position.y = 0.5
 		velocity.y = 0
+
+
+## 두 지붕(또는 지붕과 벽) 사이 V자 골에 끼어 안 내려가면 골을 따라 밀어냄. 지붕 하나면 중력만으로 흘러내린다
+func _roof_unstick(rn: Array[Vector3], rc: Vector3) -> void:
+	var hv := Vector2(velocity.x, velocity.z)
+	if hv.length() > 1.0 or velocity.y < -1.0:
+		return  # 잘 내려가는 중
+	var sum := Vector3.ZERO
+	for n in rn:
+		sum += Vector3(n.x, 0, n.z)
+	var d := sum
+	if sum.length() < 0.3:  # 기울기가 서로 마주 봄 → 골을 따라 (두 법선에 수직)
+		var other := Vector3(-rn[0].x, 0, -rn[0].z)  # 지붕 하나뿐이면 맞은편은 벽이라고 봄
+		for n in rn:
+			if n.dot(rn[0]) < 0.9:
+				other = n
+		d = rn[0].cross(other)
+		d.y = 0
+		if d.length() < 0.01:
+			d = Vector3(1, 0, 0)
+		var away := global_position - rc
+		if d.dot(Vector3(away.x, 0, away.z)) < 0:
+			d = -d
+	d = d.normalized()
+	var push := float(GameData.ROOF.push)
+	velocity.x = d.x * push
+	velocity.z = d.z * push
 
 
 ## 낮은 턱(STEP_H 이하) 자동으로 올라가기 — HTML collideAxis()의 계단 처리와 같은 역할
@@ -632,6 +712,17 @@ func trip() -> void:
 
 
 # ── 카메라 ───────────────────────────────────────────────────
+## 포병 발사 화면 반동 (rad): 꼭대기까지 빨리 올라갔다가 cam_kick_t초에 정확히 0으로. 조준 방향은 그대로
+func cam_kick_now() -> float:
+	if cam_kick_t <= 0:
+		return 0.0
+	var W: Dictionary = GameData.WEAPONS.cannon
+	var u := 1.0 - cam_kick_t / float(W.cam_kick_t)  # 0 → 1
+	var pk := float(W.cam_kick_peak)
+	var f := sin(u / pk * PI / 2.0) if u < pk else pow(cos((u - pk) / (1.0 - pk) * PI / 2.0), 2.0)
+	return float(W.cam_kick) * f
+
+
 func aim_dir() -> Vector3:
 	var cp := cos(pitch)
 	return Vector3(-sin(yaw) * cp, sin(pitch), -cos(yaw) * cp)
@@ -639,6 +730,8 @@ func aim_dir() -> Vector3:
 
 func _process(dt: float) -> void:
 	if is_local:
+		if cam_kick_t > 0:  # 포병 화면 반동 (실제 시간 — 히트스톱에 안 늘어짐)
+			cam_kick_t = maxf(0.0, cam_kick_t - dt / maxf(Engine.time_scale, 0.01))
 		if alive:  # 활·석궁 1인칭 반동 스프링 — HTML updateVM의 vRec
 			var sdt := minf(dt, 0.03)
 			v_rec_v += (-260.0 * v_rec - 17.0 * v_rec_v) * sdt
@@ -740,6 +833,7 @@ func _update_camera(dt: float) -> void:
 		cam.rotation.x += randf_range(-1, 1) * shake * 0.03
 		cam.rotation.y += randf_range(-1, 1) * shake * 0.03
 	cam.rotation.x += v_rec * GameData.VREC_CAM  # 쏘면 화면만 살짝 튕긴다 (조준 방향은 그대로)
+	cam.rotation.x += cam_kick_now()  # 포병 발사 화면 반동
 	if dance_t > 0:  # 춤에 걸리면 카메라가 리듬에 맞춰 까딱 (조준 출렁임은 Trumpet이 yaw에 줌)
 		var FXT: Dictionary = GameData.WEAPONS.trumpet.fx
 		var bt := sin(Time.get_ticks_msec() / 1000.0 * TAU * float(FXT.bob_hz))

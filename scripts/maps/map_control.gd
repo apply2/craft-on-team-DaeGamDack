@@ -140,6 +140,7 @@ func build() -> void:
 	body.add_child(gcs)
 	for side: float in [1.0, -1.0]:
 		_half(side)
+	invisible_bounds(-33, -65, 33, 65, 2)  # 바깥 성벽(높이 6) 위로 날아 넘어가지 않게
 	# 거점 단상(정사각형)·우물 겉모양 (충돌은 _half가 절반씩)
 	var ch := float(GameData.MODES.control.cap_half)
 	box(0, 0, 0, ch * 2, 0.5, ch * 2, C.stone, false, true, "castle_stone")

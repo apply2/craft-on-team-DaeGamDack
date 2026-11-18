@@ -424,10 +424,29 @@ func _run() -> void:
 	await wait(int(60 * float(CM.end_gap)) + 10)
 	check("6초 뒤 결과 화면", main.state == "ended" and mode.phase == "over")
 
+	# ── 맵 경계 (포탄 점프로 바깥 성벽을 넘지 않게): 보이지 않는 벽·천장, 캐릭터 mask에 경계 층 ──
+	var wc = C.world
+	var BL: int = wc.BOUND_LAYER
+	check("쟁탈전 맵 경계 있음 + 모든 캐릭터 mask에 경계 층", wc.bounds != null and wc.bounds.is_inside_tree() and C.ents.all(func(e) -> bool: return (e.collision_mask & BL) != 0),
+		"masks %s" % [C.ents.map(func(e): return e.collision_mask)])
+	var space: PhysicsDirectSpaceState3D = wc.get_world_3d().direct_space_state
+	var hits := 0
+	for q: Array in [[Vector3(0, 15, 50), Vector3(60, 15, 50)], [Vector3(0, 15, -50), Vector3(-60, 15, -50)], [Vector3(10, 15, 40), Vector3(10, 15, 100)],
+			[Vector3(10, 15, -40), Vector3(10, 15, -100)], [Vector3(5, 20, 5), Vector3(5, 80, 5)]]:
+		var rq := PhysicsRayQueryParameters3D.create(q[0], q[1], BL)
+		if not space.intersect_ray(rq).is_empty():
+			hits += 1
+	check("경계가 동·서·남·북 성벽 위와 천장을 막음", hits == 5, "%d/5" % hits)
+
 	# ── 메뉴로 가면 개인전으로 돌아감 ──
+	# ── 지붕 경사면 (쟁탈전 맵): 올라가도 흘러내림 ──
+	await roof_drop(p, "cannoneer")
+	await wait(10)
+
 	main.go_menu("main")
 	await wait(3)
 	check("메뉴: 개인전 맵·팀 없음·봇 7명", C.mode == null and C.world.map_id == "ffa" and C.ents.all(func(e) -> bool: return e.team == "") and C.ents.size() == 8, "ents %d" % C.ents.size())
+	check("개인전으로 돌아와도 캐릭터 mask에 경계 층", C.ents.all(func(e) -> bool: return (e.collision_mask & BL) != 0) and C.world.bounds.is_inside_tree(), "")
 
 	print("ALL PASS" if fails == 0 else "FAILED %d" % fails)
 	quit(1 if fails else 0)
@@ -442,3 +461,41 @@ func _aim_at(e, pt: Vector3) -> void:
 
 func _key(a: AABB) -> String:
 	return "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f" % [a.position.x, a.position.y, a.position.z, a.size.x, a.size.y, a.size.z]
+
+
+## 지붕 경사면 흘러내림 (사용자 요청): 지붕마다 꼭대기 근처 두 곳(맵 안쪽으로)에 떨어뜨려
+## 지붕 위에 서 있는 프레임이 없고, 4초 안에 지붕 밑(처마 높이 - 0.5m)까지 내려왔는지
+func roof_drop(e, cls: String) -> void:
+	var roofs = C.world.roofs
+	check("맵에 지붕 충돌이 있음 (캐릭터만 막는 층)", roofs != null and roofs.get_child_count() > 0 and roofs.collision_layer == C.world.BOUND_LAYER, "")
+	if roofs == null:
+		return
+	var bad: Array = []
+	var n := 0
+	for cs in roofs.get_children():
+		var pts: PackedVector3Array = cs.shape.points
+		var hx: float = pts[1].x
+		var hz: float = pts[2].z
+		var hy: float = pts[4].y
+		var c: Vector3 = cs.position
+		var base: float = c.y - hy
+		var sx: float = -signf(c.x) if absf(c.x) > 0.1 else 1.0
+		var sz: float = -signf(c.z) if absf(c.z) > 0.1 else 1.0
+		for off: Vector3 in [Vector3(sx * hx * 0.4, 0, 0), Vector3(0, 0, sz * hz * 0.4)]:
+			put(e, Vector3(c.x + off.x, c.y + hy + 0.3, c.z + off.z), cls)
+			e.velocity = Vector3.ZERO
+			e.grounded = false
+			var stood := 0
+			for i in 240:
+				await physics_frame
+				if e.grounded and e.global_position.y > base + 0.05:
+					stood += 1
+			n += 1
+			var y: float = e.global_position.y
+			if stood > 0 or y > base - 0.5:
+				bad.append("(%.0f,%.0f)+%s 선 %d프레임 y=%.1f 처마 %.1f" % [c.x, c.z, off, stood, y, base])
+	check("지붕 %d곳에 떨어뜨리면 서 있지 못하고 흘러내림 (%s)" % [n, cls], bad.is_empty(), str(bad))
+	# 지붕 충돌은 투사체·레이에 안 걸림 (예전처럼 지붕을 지나감)
+	var cs0 = roofs.get_child(0)
+	var top: Vector3 = cs0.position + Vector3(0, cs0.shape.points[4].y, 0)
+	check("지붕은 투사체·레이를 막지 않음", C.world_ray(top + Vector3(0, 0.5, 0), Vector3(0, -1.2, 0)) > 1.0, "")

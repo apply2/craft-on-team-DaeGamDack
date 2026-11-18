@@ -332,6 +332,10 @@ func _run() -> void:
 		counts[k2] = m.part_count  # 조각은 합쳐서 그리므로 합치기 전 수를 센다
 		check(k2 + " 래그돌 점 8개", m.mk.size() == 8, "")
 		var body_n: int = count_meshes(m) - m.weapons.values().reduce(func(acc, w): return acc + count_meshes(w), 0)
+		if m.carriage:  # 포병 포가: 몸과 따로 셈 (포가 1 + 굴러가는 바퀴 2 — 포신은 무기로 빠짐)
+			var car_n: int = count_meshes(m.carriage) - count_meshes(m.barrel)
+			body_n -= car_n
+			check(k2 + " 포가 조각 3개 이하 (포가 + 바퀴 2)", car_n <= 3, "%d개" % car_n)
 		check(k2 + " 몸 조각을 관절별로 합침 (손에 드는 무기 빼고 14개 이하)", body_n <= 14, "합치기 전 %d개(무기 포함) → 몸 %d개" % [m.part_count, body_n])
 		var wk: String = G.CLASSES[k2].weapon
 		var wn: int = count_meshes(m.weapons[wk])

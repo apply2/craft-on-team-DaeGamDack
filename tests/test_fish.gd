@@ -310,7 +310,7 @@ func _run() -> void:
 
 	# ── 친구대전 ──
 	var net = main.get_node("Net")
-	check("무기 번호에 star", net.WEPS.has("star") and net.WEPS.find("star") == net.WEPS.size() - 1)
+	check("무기 번호에 star (번호 10 그대로 — 새 무기는 뒤에만 더함)", net.WEPS.find("star") == 10)
 	C.give_star(p)
 	var st: Array = net._my_state()
 	check("상태 비트 4096 = 무적", (int(st[4]) & 4096) != 0)

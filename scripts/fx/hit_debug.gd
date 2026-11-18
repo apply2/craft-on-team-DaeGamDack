@@ -83,7 +83,7 @@ func _process(_dt: float) -> void:
 		if not e.alive:
 			continue
 		_sphere(e.head_c(), GameData.HEAD_R, _col("head"))
-		_capsule(e.body_a(), e.body_b(), GameData.BODY_R, _col("body"))
+		_capsule(e.body_a(), e.body_b(), e.body_r(), _col("body"))
 	_im.surface_end()
 
 

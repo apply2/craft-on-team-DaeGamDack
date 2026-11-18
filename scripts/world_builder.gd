@@ -12,6 +12,7 @@ extends Node3D
 ##   - 그래픽 품질(GameData.GFX)에 따라 잔디 개수·작은 소품(clutter)을 바꾼다 (apply_gfx).
 
 const ARENA_HALF := 46.0  # 성벽 위치 (HTML의 A)
+const BOUND_LAYER := 16   # 맵 경계(보이지 않는 벽·천장) 충돌 층 — 캐릭터 mask에만 넣는다 (투사체·레이·내비는 1층만 봄)
 
 var body: StaticBody3D
 var aabbs: Array[AABB] = []
@@ -146,6 +147,31 @@ func add_col(x0: float, y0: float, z0: float, x1: float, y1: float, z1: float) -
 
 
 ## HTML box(x,y,z,w,h,d,color,collide,shadow): y는 바닥 높이, 상자는 그 위로 h만큼. style은 무늬 재질
+## 맵 경계: 바깥 성벽 가운데 선 x0·x1·z0·z1 (두께 th)에 땅부터 천장까지 보이지 않는 벽 + 그 위 천장.
+## 캐릭터만 막는다 (BOUND_LAYER) — aabbs·래그돌·투사체·내비 메시와 상관없음. 포탄 점프로 성벽을 넘어가지 않게 (사용자 요청)
+var bounds: StaticBody3D
+func invisible_bounds(x0: float, z0: float, x1: float, z1: float, th: float) -> void:
+	var top := float(GameData.MAP_BOUNDS.ceil)
+	bounds = StaticBody3D.new()
+	bounds.name = "Bounds"
+	bounds.collision_layer = BOUND_LAYER
+	bounds.collision_mask = 0
+	add_child(bounds)
+	var w := x1 - x0 + th
+	var d := z1 - z0 + th
+	var cx := (x0 + x1) / 2.0
+	var cz := (z0 + z1) / 2.0
+	for b: Array in [[Vector3(x0, top / 2.0, cz), Vector3(th, top, d)], [Vector3(x1, top / 2.0, cz), Vector3(th, top, d)],
+			[Vector3(cx, top / 2.0, z0), Vector3(w, top, th)], [Vector3(cx, top / 2.0, z1), Vector3(w, top, th)],
+			[Vector3(cx, top + 1.0, cz), Vector3(w, 2.0, d)]]:  # 마지막 = 천장
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = b[1]
+		cs.shape = bs
+		cs.position = b[0]
+		bounds.add_child(cs)
+
+
 func box(x: float, y: float, z: float, w: float, h: float, d: float, hex: int, collide := true, shadow := true, style := "") -> MeshInstance3D:
 	var m := mesh(_box, hex, Vector3(x, y + h / 2.0, z), Vector3(w, h, d), shadow, null, style)
 	if collide:
@@ -166,6 +192,29 @@ func roof(pos: Vector3, scl: Vector3, hex: int, style := "roof_tiles") -> void:
 	add_child(holder)
 	var mi := mesh(_roof, hex, Vector3.ZERO, Vector3.ONE, true, holder, style)
 	mi.rotation.y = PI / 4.0
+	_roof_col(pos, scl)
+
+
+## 지붕 경사면 충돌 (사용자 요청 — 올라가면 흘러내림). 모양 = 위 사각뿔 그대로 (꼭짓점이 대각선 → 바닥은 ±0.707×크기 직사각형).
+## 캐릭터만 막는 BOUND_LAYER에 넣는다 → 투사체·레이·내비·래그돌(aabbs)·맵 지문은 예전 그대로. 미끄러짐은 player._integrate가 처리
+var roofs: StaticBody3D
+func _roof_col(pos: Vector3, scl: Vector3) -> void:
+	if roofs == null:
+		roofs = StaticBody3D.new()
+		roofs.name = "Roofs"
+		roofs.collision_layer = BOUND_LAYER
+		roofs.collision_mask = 0
+		roofs.add_to_group("roof")
+		add_child(roofs)
+	var hx := scl.x * 0.7071
+	var hz := scl.z * 0.7071
+	var hy := scl.y / 2.0
+	var sh := ConvexPolygonShape3D.new()
+	sh.points = PackedVector3Array([Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz), Vector3(hx, -hy, hz), Vector3(-hx, -hy, hz), Vector3(0, hy, 0)])
+	var cs := CollisionShape3D.new()
+	cs.shape = sh
+	cs.position = pos
+	roofs.add_child(cs)
 
 
 ## 흙길 (땅 셰이더가 그림 — 상자를 깔지 않음). w·d는 전체 폭
@@ -280,6 +329,7 @@ func build() -> void:
 	castle_wall(Vector3(0, 0, A - 1), Vector3(0, 0, -1), 2 * A + 2, 5, 2, C.stone, A - 5)
 	castle_wall(Vector3(-A + 1, 0, 0), Vector3(1, 0, 0), 2 * A, 5, 2, C.stone, A - 5)
 	castle_wall(Vector3(A - 1, 0, 0), Vector3(-1, 0, 0), 2 * A, 5, 2, C.stone, A - 5)
+	invisible_bounds(-A, -A, A, A, 2)  # 성벽 위로 날아 넘어가지 않게
 	var i := -A + 2
 	while i <= A - 2:
 		box(i, 5, -A, 1.4, 0.9, 2, C.stone2, false, true, "castle_stone")

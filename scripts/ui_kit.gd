@@ -20,6 +20,7 @@ const ICONS := {
 	"crossbow": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M6 14c8-6 20-6 28 0" stroke="#fff8e6" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M20 9v26" stroke="#fff8e6" stroke-width="5" stroke-linecap="round"/><path d="M6 14l14 6 14-6" stroke="#fff8e6" stroke-width="1.5" fill="none"/></svg>',
 	"bard": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M7 18h17" stroke="#fff8e6" stroke-width="3.5" stroke-linecap="round"/><path d="M24 18l9-7v14z" fill="#fff8e6"/><path d="M12 18v5M16 18v5M20 18v5" stroke="#fff8e6" stroke-width="2.4" stroke-linecap="round"/></svg>',  # 트럼펫 (4.5단계 새 병과)
 	"cleric": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M16 5h8v4l-1 1v5c5 2 8 6 8 11 0 6-5 9-11 9s-11-3-11-9c0-5 3-9 8-11v-5l-1-1z" fill="#fff8e6"/><path d="M20 20v11M15.5 24.5h9" stroke="#6b45a8" stroke-width="2.6" stroke-linecap="round"/></svg>',
+	"cannoneer": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M7 20l22-8 3 6-22 8z" fill="#fff8e6"/><circle cx="33" cy="15" r="3" fill="#fff8e6"/><circle cx="15" cy="27" r="7" stroke="#fff8e6" stroke-width="3" fill="none"/><path d="M15 21v12M9 27h12" stroke="#fff8e6" stroke-width="2"/><path d="M19 30l12 5" stroke="#fff8e6" stroke-width="3.5" stroke-linecap="round"/></svg>',  # 바퀴 달린 대포 (새 병과)
 }
 
 
@@ -61,6 +62,7 @@ const WEAPON_ICONS := {
 	"fanfare": [28, '<path d="M1 12h12" stroke="#c99a2e" stroke-width="4"/><path d="M1 12h12"/><path d="M13 12l8-6v12z" fill="#f3b33d"/><path d="M6 12V8M9 12V8"/><path d="M23.5 6l3-2M24 12h3M23.5 18l3 2" stroke="#d8453b"/>'],
 	"sniper": [28, '<path d="M1 13h20l5-1.5v3H11l-2 5H5l1-4.5H1z" fill="#6b4423"/><rect x="9" y="7.5" width="9" height="3.5" rx="1" fill="#4a4a52"/><path d="M12 11v2M15 11v2"/>'],
 	"ak": [28, '<path d="M1 10h18l6-1v3h-7l-1.5 2H10l1.5 5H8l-2-5H1z" fill="#8a542b"/><path d="M13.5 13.5c0 3 1 5 3 6.5" stroke-width="3.2"/><path d="M19 10V8h3"/>'],
+	"cannon": [28, '<path d="M3 15l17-7 3 6-17 7z" fill="#4a4a52"/><circle cx="24" cy="10.5" r="2.4" fill="#4a4a52"/><circle cx="10" cy="18" r="4.6" fill="#c9bfae"/><path d="M10 15.5v5M7.5 18h5"/><path d="M14 20.5l9 3" stroke="#8a542b" stroke-width="3"/>'],
 	"chicken": [24, '<path d="M5 14c0-5 3.5-8 8-7.5.5-3 5-3.5 5.5-.5.2 1.3-.5 2.3-1.5 2.7 2 2.3 2 5.5-.3 7.8-3.4 3.4-11.7 3-11.7-2.5z" fill="#fff8e6"/><path d="M19 7.5l3 1-3 1z" fill="#f2b44a"/><path d="M15 3.8c.3-1.3 1.3-1.8 2-1.2" stroke="#d8453b" stroke-width="2.2"/><circle cx="16.3" cy="7" r=".9" fill="#2b1d12" stroke="none"/><path d="M9 20.5v2M13 20.5v2" stroke="#f2b44a"/>'],
 	"lance": [24, '<path d="M4 20L16 8" stroke="#8a542b" stroke-width="3.2"/><path d="M14 5.5L21 3l-2.5 7-2.2.3-1.6-1.6z" fill="#c9bfae"/><path d="M6 13.5l4.5 4.5" stroke-width="3"/>'],
 	"star": [24, '<path d="M2.5 12c3-5 10-6.5 14-2.3l4.5-3.2v11l-4.5-3.2c-4 4.2-11 2.7-14-2.3z" fill="#f2b44a"/><circle cx="7" cy="11" r="1.1" fill="#2b1d12" stroke="none"/><path d="M10 9.5c1 1.5 1 3.5 0 5M13 9.8c.8 1.4.8 3 0 4.4" stroke-width="1.4"/>'],

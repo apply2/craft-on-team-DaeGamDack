@@ -181,6 +181,24 @@ func _run() -> void:
 	check("돌멩이에 맞아 친구 체력이 줄어듦 (친구 쪽 판정)", pb.hp < 100 and pb.hp >= 85, "hp=%.0f" % pb.hp)
 	check("방장 쪽에선 직접 깎지 않고 상태로 받음", absf(rb.hp - pb.hp) < 1.0, "remote hp=%.0f" % rb.hp)
 
+	# ── 포병 포탄: 친구 화면에도 날아가고, 맞은 쪽(친구)이 직격 100을 판정. 체력은 상태로 방장 화면에 ──
+	put(pa, HERE, "cannoneer", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "cannoneer", PI / 2)
+	await wait(40)
+	check("방장 화면에 친구가 포병으로", rb.cls == "cannoneer" and absf(rb.hp - 150.0) < 1.0, "%s hp=%.0f" % [rb.cls, rb.hp])
+	pa.scripted_input = FIRE
+	await wait(2)
+	pa.scripted_input = IDLE
+	await wait(3)
+	check("친구 화면에도 포탄이 생김", B.combat.projectiles.any(func(p): return p.owner == ra and p.kind == "cannon"), "n=%d" % B.combat.projectiles.size())
+	await wait(30)
+	check("포탄 직격: 친구 쪽에서 100 판정", absf(pb.hp - 50.0) < 0.5, "hp=%.0f" % pb.hp)
+	check("방장 화면의 친구 체력도 같음 (상태 동기화)", absf(rb.hp - pb.hp) < 1.0, "방장 화면 %.0f / 친구 %.0f" % [rb.hp, pb.hp])
+	check("쏜 사람(방장)은 안 다침", pa.hp == 150.0, "hp=%.0f" % pa.hp)
+	put(pa, HERE, "barbarian", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
+	await wait(40)
+
 	# ── 저격총: 쏜 쪽(방장)이 판정해서 알림 → 친구 죽음, 방장 처치 +1 ──
 	A.combat.items.drop_sniper(pa.global_position, 5)
 	await wait(5)

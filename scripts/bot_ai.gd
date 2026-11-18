@@ -209,6 +209,8 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 			want_fan = react <= 0 and d < float(B.bard_fanfare) and e.fan_cd <= 0
 		else:
 			want_fire = react <= 0 and (fire_ok or e.wep == "chicken") and (d < float(fr[e.wep]) if fr.has(e.wep) else true)
+			if e.wep == "cannon" and d < float(B.cannon_min):  # 포병: 너무 가까우면 자기도 휘말려서 안 쏨
+				want_fire = false
 	# 음유시인 숨 관리: 0.5초 남으면 멈추고, 다 찰 때까지 대상에게서 물러남
 	if e.wep == "trumpet":
 		if e.playing and e.breath <= float(B.bard_breath_stop):
@@ -451,7 +453,7 @@ func _aim_solve(e: PlayerController, t: PlayerController) -> Dictionary:
 	if e.wep == "sniper" or e.wep == "ak" or e.wep == "trumpet":  # 히트스캔·트럼펫 원뿔: 곧장
 		var d := target_pt - eye
 		return {"yaw": atan2(-d.x, -d.z) + ex, "pitch": atan2(d.y, Vector2(d.x, d.z).length()) + ey}
-	if e.wep == "holy" or e.wep == "chicken":  # 포물선: 발밑(닭은 0.9 높이)에 떨어질 각도를 훑어서 찾음
+	if e.wep == "holy" or e.wep == "chicken" or e.wep == "cannon":  # 포물선: 발밑(닭은 0.9 높이)에 떨어질 각도를 훑어서 찾음 (포탄도 발밑 — 범위 피해)
 		var W: Dictionary = GameData.WEAPONS[e.wep]
 		var L := float(B.lob_lead) * lead
 		var tg := Vector3(tpos.x + tvel.x * L, tpos.y + (0.9 if e.wep == "chicken" else 0.0), tpos.z + tvel.z * L)
@@ -463,7 +465,7 @@ func _aim_solve(e: PlayerController, t: PlayerController) -> Dictionary:
 		var pp: float = lp[0]
 		while pp <= float(lp[1]) + 1e-6:
 			var vh := float(W.speed) * cos(pp)
-			var v0 := float(W.speed) * sin(pp) + float(W.lift)
+			var v0 := float(W.speed) * sin(pp) + float(W.get("lift", 0.0))
 			var tt := dx / vh
 			var y := v0 * tt - 0.5 * float(W.grav) * tt * tt
 			var er := absf(y - dyy)

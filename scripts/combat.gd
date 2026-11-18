@@ -21,6 +21,7 @@ var fx: Fx
 var bard_fx: BardFx         # 음유시인 트럼펫 이펙트 (scripts/fx/bard_fx.gd — 보기만 함)
 var star_fx: StarFx         # 황금 붕어빵 무적 반짝임 (scripts/fx/star_fx.gd — 보기만 함)
 var items: Items            # 닭·말·저격총·AK
+var cannon: Cannon          # 포병 폭발·포탄 점프·탄도 조준 (scripts/cannon.gd)
 var me: PlayerController    # 내 캐릭터 (스코프·3인칭 판단)
 var net: Net = null         # 친구대전 중이면 Net (아니면 null)
 var mode: ControlMode = null  # 쟁탈전이면 규칙 (개인전은 null — 기존 그대로)
@@ -36,7 +37,7 @@ var hit_stop := 0.0                # 남은 히트스톱 (실제 시간, 초)
 var _hs_on := false                 # 히트스톱이 Engine.time_scale을 늦춰 둔 상태
 var clock := 0.0                   # 경기 물리 시간 (춤 누적 기록에 씀)
 
-const SPINS := ["stone", "holy", "chicken"]  # 날아가며 빙글빙글 도는 투사체 (나머지는 진행 방향을 봄)
+const SPINS := ["stone", "holy", "chicken", "cannon"]  # 날아가며 빙글빙글 도는 투사체 (나머지는 진행 방향을 봄)
 
 
 func _ready() -> void:
@@ -56,6 +57,10 @@ func _ready() -> void:
 	items.name = "Items"
 	items.combat = self
 	add_child(items)
+	cannon = Cannon.new()
+	cannon.name = "Cannon"
+	cannon.combat = self
+	add_child(cannon)
 	var H: Dictionary = GameData.HOLY
 	aim_mk = MeshInstance3D.new()
 	aim_mk.mesh = Meshes.flat_ring()
@@ -314,7 +319,7 @@ static func hit_test(o: Vector3, d: Vector3, v: PlayerController, pr: float) -> 
 		res = {"t": h.t, "head": true}
 	var ba := v.body_a()
 	var s := seg_seg(o, d, ba, v.body_b() - ba)
-	var br := GameData.BODY_R + pr
+	var br := v.body_r() + pr  # 포병은 대포만큼 넓다 (CLASSES.hit_r)
 	if s.dist2 < br * br and (res.is_empty() or s.s * length < h.t * length - 0.25):
 		res = {"t": s.s, "head": false}
 	return res
@@ -389,7 +394,8 @@ func _star_touch(e: PlayerController, dt: float) -> void:
 
 # ── 피해 ─────────────────────────────────────────────────────
 ## v가 a에게 kind 무기로 base만큼 맞음. dir = 날아온 방향(넉백 방향), pt = 맞은 지점(없으면 null)
-func damage(v: PlayerController, a: PlayerController, base: float, kind: String, head: bool, dir: Vector3, pt: Variant = null) -> void:
+## kb_mul: 넉백·띄우기 배율 (포탄 폭발은 거리에 따라 줄어듦). a == v면 자기 피해 (포탄 점프) — 아군 막기에 안 걸림, 처치는 자멸
+func damage(v: PlayerController, a: PlayerController, base: float, kind: String, head: bool, dir: Vector3, pt: Variant = null, kb_mul := 1.0) -> void:
 	if not v.alive or v.invuln > 0 or v.star_t > 0:  # 황금 붕어빵 무적: 피해·넉백 다 막음
 		return
 	if ally(a, v):  # 쟁탈전: 팀킬 없음 (마상창·닭·팡파레·트럼펫·몸박치기도 여기서 막힘)
@@ -415,6 +421,8 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 	if head:
 		kb *= GameData.HEAD_KB
 		up *= GameData.HEAD_UP
+	kb *= kb_mul
+	up *= kb_mul
 	if v.mounted > 0:
 		kb *= GameData.MOUNT_KB
 		up = 0
@@ -442,7 +450,7 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 	if v.is_local:
 		hurt.emit(dmg)
 		Sfx.play("hurt")
-	if a and a.is_local:
+	if a and a.is_local and a != v:
 		hitmark.emit(false)
 		if kind != "holy" and kind != "trumpet":
 			Sfx.play("head" if head else "hit")
@@ -468,7 +476,7 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 func impact_fx(v: PlayerController, a: PlayerController, pt: Variant, kind: String, head: bool, dir: Vector3, dmg: float, dead: bool) -> void:
 	var p: Vector3 = pt if pt != null else v.global_position + Vector3(0, 1.1, 0)
 	var seen := not v.is_local or tp_on()
-	var mine := a != null and a.is_local
+	var mine := a != null and a.is_local and a != v  # 내 포탄에 내가 맞은 건 '맞힘'이 아님
 	var col: int = GameData.CLASSES[v.cls].color
 	if kind == "chicken":
 		if seen:
@@ -493,7 +501,7 @@ func impact_fx(v: PlayerController, a: PlayerController, pt: Variant, kind: Stri
 				add_hit_stop(GameData.HITSTOP.kill)
 		_hurt_me(v, a, GameData.SHAKE.holy)
 		return
-	var heavy := kind == "crossbow" or kind == "sniper" or kind == "lance"
+	var heavy := kind == "crossbow" or kind == "sniper" or kind == "lance" or kind == "cannon"
 	var light := kind == "ak" and not head and not dead
 	if seen and light:
 		fx.chunks(p, col, dir, 2, 3.5)
@@ -552,6 +560,12 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 					Sfx.play("reload")
 		else:
 			e.charge_t = 0.0
+	# 포병은 한 발 쏘면 자동 재장전 (다른 무기를 들고 있어도). 끝나면 철컥
+	if e.cn_t > 0:
+		e.cn_t -= dt
+		if e.cn_t <= 0:
+			e.cn_t = 0.0
+			Sfx.play("clank", e.global_position)
 	# 춤추는 동안엔 어떤 무기로도 공격 못 함 (사용자 요청 — 연주·팡파레·던지기·쏘기·활 당기기 전부)
 	var dancing := e.dance_t > 0
 	# 음유시인은 숨이 다른 무기를 들고 있어도 돌아온다. 연주·팡파레는 트럼펫을 들고 넘어지지·춤추지 않았을 때만
@@ -572,6 +586,9 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 		"stone":  # 누르고 있으면 재사용 대기가 끝나는 대로 쏜다
 			if held and e.cd <= 0:
 				fire(e, e.wep)
+		"cannon":  # 장전돼 있으면 쏜다 (누르고 있으면 장전되는 대로)
+			if held and e.cn_t <= 0 and e.cd <= 0:
+				fire(e, "cannon")
 		"crossbow":  # 휠로 다 감아 둔 것만 쏜다 (누르고 있으면 다 감는 대로)
 			if held and e.cd <= 0 and e.xb_wind >= int(GameData.WEAPONS.crossbow.notches):
 				fire(e, e.wep)
@@ -841,6 +858,17 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			hg.scale = Vector3.ONE * float(GameData.HOLY.size)
 			mesh = hg
 			Sfx.play("holy_throw", e.global_position)
+		"cannon":  # 포탄 (곡사). 닿거나 fuse초가 지나면 터짐
+			speed = W.speed
+			dmg = W.dmg
+			e.cd = 0.3
+			e.cn_t = float(W.reload)
+			mesh = _cannonball()
+			Sfx.play("cannon", e.global_position)
+			if not e.is_remote:  # 발사 반동 (몸이 밀림) — 친구 캐릭터는 그쪽 컴퓨터가
+				Cannon.fire_recoil(e, dir)  # dir = 실제로 쏜 방향
+			if e.is_local:
+				e.cam_kick_t = float(W.cam_kick_t)
 		"chicken":  # 닭을 던짐 → 다시 원래 무기
 			speed = W.speed
 			dmg = W.dmg
@@ -868,7 +896,10 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 	mesh.reset_physics_interpolation()
 	if W.has("lift"):
 		vel.y += float(W.lift)
-	var life: float = float(W.range) / speed if W.has("range") else GameData.PROJ_LIFE
+	var life: float = float(W.range) / speed if W.has("range") else float(W.get("fuse", GameData.PROJ_LIFE))
+	if kind == "cannon":  # 포구 연기
+		fx.puff(pos, 0x8a8478, 0.35, 5)
+		fx.puff(pos, 0xffb347, 0.18, 2)
 	projectiles.append({
 		"kind": kind, "pos": pos, "vel": vel, "grav": float(W.grav), "owner": e, "dmg": dmg,
 		"mesh": mesh, "life": life, "radius": float(W.radius), "from": from,
@@ -876,6 +907,16 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 	})
 	if mp() and not e.is_remote:  # 친구 화면에도 같은 투사체를 만든다 (맞았는지는 맞은 사람이 판정)
 		net.event(["f", Net.WEPS.find(kind), pos, vel, t], e)
+
+
+## 포탄 모양: 검은 쇠공
+func _cannonball() -> Node3D:
+	var W: Dictionary = GameData.WEAPONS.cannon
+	var mi := MeshInstance3D.new()
+	mi.mesh = Meshes.sph()
+	mi.material_override = GameData.mat(W.color)
+	mi.scale = Vector3.ONE * float(W.ball)
+	return mi
 
 
 ## 대물 저격총: 400m 히트스캔, 맞으면 즉사. 5발 쓰면 원래 무기로 — HTML fire('sniper') / hitscan
@@ -1045,6 +1086,17 @@ func update_projectiles(dt: float) -> void:
 			items.spawn_chicken(Vector3(pt.x, ground_below(pt), pt.z), GameData.ITEM.chicken_no_pick)
 			projectiles.remove_at(i)
 			continue
+		if kind == "cannon" and ((hit_e and th <= tw) or tw <= 1):  # 포탄: 무엇에든 닿으면 터짐. 직격은 dmg 그대로 + 나머지는 범위 피해
+			var pt := o0 + d0 * minf(th, tw)
+			mesh.queue_free()
+			var direct: PlayerController = hit_e if hit_e and th <= tw else null
+			if direct:
+				var hd := Vector3(vel.x, 0, vel.z).normalized()
+				damage(direct, p.owner, p.dmg, "cannon", false, hd, pt)
+			var back := vel.normalized() * 0.12  # 벽 안이 아니라 벽 앞에서 터지게
+			cannon.explode(p.owner, pt - back, direct)
+			projectiles.remove_at(i)
+			continue
 		if kind == "holy" and ((hit_e and th <= tw) or tw <= 1):  # 사람이든 땅이든 닿으면 깨짐
 			mesh.queue_free()
 			shatter(p.owner, o0 + d0 * minf(th, tw))
@@ -1101,8 +1153,10 @@ func update_projectiles(dt: float) -> void:
 			mesh.rotation.y += spin.y * dt
 		else:  # 화살은 날아가는 방향을 본다
 			mesh.global_basis = WeaponModels.face(vel)
-		if p.life <= 0:  # 사거리 끝
+		if p.life <= 0:  # 사거리 끝 (포탄은 공중에서 터짐)
 			mesh.queue_free()
+			if kind == "cannon":
+				cannon.explode(p.owner, pos)
 			projectiles.remove_at(i)
 
 
@@ -1241,6 +1295,12 @@ func remote_fire(e: PlayerController, kind: String, pos: Vector3, vel: Vector3, 
 			hg.scale = Vector3.ONE * float(GameData.HOLY.size)
 			mesh = hg
 			Sfx.play("holy_throw", pos)
+		"cannon":
+			mesh = _cannonball()
+			dmg = W.dmg
+			Sfx.play("cannon", pos)
+			e.rec_v += 12
+			fx.puff(pos, 0x8a8478, 0.35, 5)
 		_:
 			return
 	e.fire_anim = 1.0
@@ -1252,7 +1312,7 @@ func remote_fire(e: PlayerController, kind: String, pos: Vector3, vel: Vector3, 
 	var speed := maxf(1.0, vel.length())
 	projectiles.append({
 		"kind": kind, "pos": pos, "vel": vel, "grav": float(W.grav), "owner": e, "dmg": dmg,
-		"mesh": mesh, "life": float(W.range) / speed if W.has("range") else GameData.PROJ_LIFE, "radius": float(W.radius),
+		"mesh": mesh, "life": float(W.range) / speed if W.has("range") else float(W.get("fuse", GameData.PROJ_LIFE)), "radius": float(W.radius),
 		"spin": Vector3(randf_range(-15, 15), randf_range(-15, 15), randf_range(-15, 15)),
 	})
 
