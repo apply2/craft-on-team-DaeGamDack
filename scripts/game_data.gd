@@ -283,7 +283,8 @@ const WEAPONS := {
 	"fanfare": {"name": "팡파레", "range": 3.5, "half_angle": 45.0, "dmg": 15, "kb": 9, "up": 3, "cd": 6.0},
 	# 흡혈귀 틀니 (사용자 요청 새 병과): 근접 물기. 눈에서 range m 안, 조준 방향 반각 half_angle° 원뿔 안의 가장 가까운 적 1명
 	#   heal: 적을 맞히면 그만큼 회복 (최대 체력은 안 넘음). 머리 판정 없음 (늘 dmg)
-	"teeth": {"name": "틀니", "dmg": 28, "cd": 0.5, "range": 2.3, "half_angle": 30.0, "heal": 15, "kb": 3, "up": 1.5,
+	# 범위 사용자 요청으로 2.3→3.0m, 반각 30→40°
+	"teeth": {"name": "틀니", "dmg": 28, "cd": 0.5, "range": 3.0, "half_angle": 40.0, "heal": 15, "kb": 3, "up": 1.5,
 		"color": 0xf4f1e6, "gum": 0xd2465a},
 	# 흡혈귀 박쥐 돌진 (우클릭): 바라보는 쪽으로 time초 동안 dist m. 위아래는 ±pitch_max°로 자름
 	#   첫 번째로 부딪힌 적(몸까지 거리 r m)에게 dmg + 약한 넉백, 그 자리에서 멈춤. 맞히면 물기 1회로 쳐서 회복 + 물기 재사용 초기화
@@ -300,6 +301,14 @@ const BURN := {"tick": 0.25, "dmg": 2.5, "grace": 3.0, "credit": 5.0, "low_hp": 
 	"vig_col": 0xff4a1a, "vig_alpha": 0.75, "flicker_hz": 9.0}
 # 흡혈귀 연출 (보기만 함 — scripts/fx/burn_fx.gd). 불꽃·연기는 MultiMesh 풀 둘 (그리기 2번)
 #   flame_every / smoke_every: 한 명당 몇 초마다 하나 / pool: 전체 상한 / blood: 물었을 때 피 조각 수
+## 흡혈귀 물기 효과 (사용자 요청 — 범위가 눈에 보이게, 보기만 함). scripts/fx/bite_fx.gd
+##   fan: 물 때 발밑에서 앞쪽 바닥으로 퍼지는 빨간 부채꼴 (반지름 = 물기 범위 + 몸 두께, 반각 = half_angle). grow초에 펼쳐지고 life초에 사라짐
+##   jaw: 문 자리(빗나가면 범위 끝)에 커다란 반투명 틀니가 snap초에 딱 다물리고 life초에 사라짐. scale = 틀니 배율
+const BITE_FX := {
+	"fan": {"y": 0.06, "grow": 0.06, "life": 0.28, "alpha": 0.7, "rim": 0.1, "col": 0xe0102a, "rim_col": 0xff8a96},  # y = 발밑에서 높이 (바닥에 깔림)
+	"jaw": {"scale": 4.0, "snap": 0.08, "life": 0.32, "alpha": 0.85, "miss_alpha": 0.45, "pop": 0.2, "open_up": 0.75, "open_lo": 0.95},
+	"ring": 0.7, "pool": 8,
+}
 const VAMP_FX := {"flame_every": 0.05, "flame_life": 0.45, "flame_size": 0.16, "flame_up": 1.6, "flame_r": 0.35,
 	"smoke_every": 0.12, "smoke_life": 1.1, "smoke_size": 0.22, "smoke_up": 1.2, "pool": 160,
 	"flame_cols": [0xffd23a, 0xff8a1e, 0xff4a1a], "smoke_col": 0x4a4448, "smoke_alpha": 0.45,
@@ -367,7 +376,7 @@ const BOT := {
 	"pref_band": 5.0,            # 선호 거리 ±5m면 다가가지도 물러나지도 않음
 	"bat_min": 3.5, "bat_max": 8.5,  # 흡혈귀 봇: 대상이 이 거리 사이에 있고 보이면 박쥐 돌진
 	"cannon_min": 4.5,  # 포병 봇: 대상이 이보다 가까우면 안 쏨 (자기 폭발에 휘말림)
-	"fire_range": {"teeth": 2.2, "cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
+	"fire_range": {"teeth": 2.9, "cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
 	"knight_avoid": 12.0,        # 말 탄 사람 피하기 반경
 	"zone_margin": 0.6,          # 남의 성수 웅덩이 반경 + 이만큼 안이면 밖으로 나감
 	"smooth": 3.5,               # 이동 방향을 부드럽게 (급회전 넘어짐 줄이기)

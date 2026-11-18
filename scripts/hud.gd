@@ -851,6 +851,11 @@ func _update_weapon() -> void:
 			st = "물면 %d 피해 + %d 회복" % [int(TW.dmg), int(TW.heal)]
 			if e.dash_t > 0:
 				st = "박쥐 돌진!"
+			elif combat and Vampire.bite_target(combat, e):  # 물 수 있는 적이 범위 안: 조준점 고리가 빨갛게 꽉 참
+				ring = 1.0
+				ring_col = BLOOD
+				ring_label = "물기!"
+				st += " · 물 수 있음!"
 			elif e.bat_cd > 0:
 				ring = 1.0 - e.bat_cd / float(BW.cd)
 				ring_col = STEEL

@@ -88,9 +88,16 @@ static func bite_fx(combat: Combat, e: PlayerController, v: PlayerController, fe
 	if e.is_local:
 		e.vm_kick = 0.5
 	Sfx.play("bite", e.global_position)
+	# 범위가 보이게: 빨간 부채꼴 + 문 자리(빗나가면 범위 끝)에 유령 틀니가 딱 (BiteFx)
+	var eye := e.eye_pos()
+	var ad := e.aim_dir()
+	var at := _bite_pt(e, v) if v else eye + ad * float(GameData.WEAPONS.teeth.range)
+	if combat.bite_fx:
+		combat.bite_fx.bite(e.global_position + Vector3(0, e.mount_h, 0), ad, at, v != null)
 	if v:
 		var VF: Dictionary = GameData.VAMP_FX
 		combat.fx.chunks(_bite_pt(e, v), int(VF.blood_col), _flat_dir(e, v), int(VF.blood), 3.5)
+		combat.fx.ring(_bite_pt(e, v), int(VF.blood_col), float(GameData.BITE_FX.ring), 0.25)
 	if fed:
 		heal_num(combat, e)
 

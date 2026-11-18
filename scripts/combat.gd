@@ -21,6 +21,7 @@ var fx: Fx
 var bard_fx: BardFx         # 음유시인 트럼펫 이펙트 (scripts/fx/bard_fx.gd — 보기만 함)
 var star_fx: StarFx         # 황금 붕어빵 무적 반짝임 (scripts/fx/star_fx.gd — 보기만 함)
 var burn_fx: BurnFx         # 흡혈귀 몸에서 나는 불꽃·연기 (scripts/fx/burn_fx.gd — 보기만 함)
+var bite_fx: BiteFx         # 흡혈귀 물기 부채꼴·유령 틀니 (scripts/fx/bite_fx.gd — 보기만 함)
 var items: Items            # 닭·말·저격총·AK
 var cannon: Cannon          # 포병 폭발·포탄 점프·탄도 조준 (scripts/cannon.gd)
 var me: PlayerController    # 내 캐릭터 (스코프·3인칭 판단)
@@ -58,6 +59,9 @@ func _ready() -> void:
 	burn_fx.name = "BurnFx"
 	burn_fx.combat = self
 	add_child(burn_fx)
+	bite_fx = BiteFx.new()
+	bite_fx.name = "BiteFx"
+	add_child(bite_fx)
 	items = Items.new()
 	items.name = "Items"
 	items.combat = self
@@ -87,6 +91,7 @@ func warm_mats() -> Array:
 	a.append_array(bard_fx.keep_mats)
 	a.append_array(star_fx.keep_mats)
 	a.append_array(burn_fx.keep_mats())
+	a.append_array(bite_fx.keep_mats())
 	return a
 
 
@@ -251,6 +256,7 @@ func clear_match_objects() -> void:
 	bard_fx.clear()
 	star_fx.clear()
 	burn_fx.clear()
+	bite_fx.clear()
 	items.clear()
 
 
