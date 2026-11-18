@@ -25,7 +25,7 @@ signal start_requested(rem: float) # 경기 시작 (HTML mpStart)
 signal end_requested               # 방장이 경기를 끝냄
 signal closed(reason: String)      # 연결이 끊겨 방을 나감
 
-const WEPS := ["stone", "bow", "crossbow", "sniper", "holy", "chicken", "lance", "ak", "trumpet", "fanfare", "star", "cannon"]  # 번호가 바뀌지 않게 뒤에만 더함
+const WEPS := ["stone", "bow", "crossbow", "sniper", "holy", "chicken", "lance", "ak", "trumpet", "fanfare", "star", "cannon", "teeth", "bat", "burn"]  # 번호가 바뀌지 않게 뒤에만 더함
 const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 
@@ -1029,7 +1029,7 @@ func _state_of(p: PlayerController) -> Array:
 	var fl := (1 if p.crouch else 0) | (2 if p.sliding else 0) | (4 if p.grounded else 0) | (8 if p.alive and playing else 0) \
 		| (16 if p.sprinting else 0) | (32 if p.charging else 0) | (64 if p.helmet else 0) | (128 if p.has_sniper else 0) \
 		| (256 if p.invuln > 0 else 0) | (512 if p.has_ak else 0) | (1024 if p.playing else 0) | (2048 if p.dance_t > 0 else 0) \
-		| (4096 if p.star_t > 0 else 0)
+		| (4096 if p.star_t > 0 else 0) | (8192 if p.dash_t > 0 else 0)
 	return [p.global_position, p.yaw, p.pitch, p.velocity, fl, p.fall_t, p.fall_rx, p.fall_rz, p.fall_yaw, p.mounted,
 		maxf(0.0, ceilf(p.hp)), maxi(0, WEPS.find(p.wep)), p.charge, p.cls, p.kills, p.deaths, "play" if playing else "lobby", p.xb_wind]
 
@@ -1135,6 +1135,7 @@ func _apply_remote(e: PlayerController, dt: float) -> void:
 	e.has_ak = (fl & 512) != 0
 	e.playing = (fl & 1024) != 0  # 연주 중이면 내 쪽에서 원뿔 안인지 계산한다 (Trumpet.update_victims)
 	e.dance_t = 0.2 if (fl & 2048) != 0 else 0.0  # 춤은 친구 컴퓨터가 정하고, 나는 모습만
+	e.dash_t = 0.2 if (fl & 8192) != 0 else 0.0   # 흡혈귀 박쥐 돌진 중 (모습만 — 부딪힘은 돌진한 쪽이 판정)
 	var was_star := e.star_t > 0
 	e.star_t = float(GameData.STAR_FX.end_t) + 1.0 if (fl & 4096) != 0 else 0.0
 	if e.star_t > 0 and not was_star:  # 친구가 먹었다: 배너 + 그 자리에서 작게 반짝 소리
@@ -1159,7 +1160,7 @@ func _apply_remote(e: PlayerController, dt: float) -> void:
 
 
 # ── 사건 (HTML mpEvent / handleEvent) ───────────────────────
-## x = [종류, …]. f 발사 / sn 저격총 / ak / ln 마상창 / fan 팡파레 / h 맞음 / k 죽음 / st 몸박치기
+## x = [종류, …]. f 발사 / sn 저격총 / ak / ln 마상창 / fan 팡파레 / h 맞음 / k 죽음 / st 몸박치기 / bt 흡혈귀 물기 / bd 박쥐 돌진
 ## from = 누구 일인가 (방장 봇이면 그 봇 id를 같이 보냄, 아니면 보낸 사람)
 func event(x: Array, from: PlayerController = null) -> void:
 	if on:
@@ -1186,6 +1187,12 @@ func _ev(x: Array, who: int) -> void:
 			var v := mine(int(x[3]))
 			if v and v.alive:
 				combat.damage(v, e, clampf(float(x[5]), 0, GameData.WEAPONS.ak.dmg), "ak", bool(x[4]), ((x[2] as Vector3) - (x[1] as Vector3)).normalized(), x[2])
+		"bt", "bd":  # [bt|bd, 물린 사람(0 = 허공), 피를 빨았나] — 흡혈귀 물기·박쥐 돌진. 문 쪽이 판정, 내 캐릭터(내 봇)면 여기서 피해
+			if e.alive:
+				var id := int(x[1])
+				var mv := mine(id)
+				var tv: PlayerController = mv if mv else (remotes.get(id) if id != 0 else null)
+				combat.remote_bite(e, tv, mv != null, bool(x[2]) if x.size() > 2 else false, str(x[0]) == "bd")
 		"fan":  # [fan] — 친구 음유시인의 팡파레. 내가 앞에 있었는지는 내 쪽에서 판정
 			if e.alive:
 				combat.remote_fanfare(e)

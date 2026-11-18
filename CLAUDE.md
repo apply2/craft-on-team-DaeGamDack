@@ -72,6 +72,9 @@ tests/test_fish.gd     황금 붕어빵: 등장 자리·먹기·8초 무적·막
 tests/test_bard_fx.gd  트럼펫 이펙트: 풀 상한(한 명 24·전체 120)·원뿔 안 퍼짐·벽 튕김·1인칭 비켜 감·고리 주기·게이지 1→3·춤 조명·면역·팡파레·삑사리·숨 참·정리 자동 테스트
 scripts/cannon.gd      포병 대포 (class Cannon, Combat 아래 "Cannon" 노드): 폭발 explode(범위 피해·벽 차단·거리 감소·포탄 점프 blast_jump), 효과·흔들림, 우클릭 탄도 조준(궤적 점 MultiMesh + 착탄 고리)
 tests/test_cannon.gd   포병: 스탯·달리기 없음·느린 가속·낮은 점프, 한 발·5초 재장전, 발밑 사격(피해 1/3·높이 뜸), 직격 100, 범위 80→25, 넉백 감소, 벽 차단, 같은 팀, 자멸, 넓은 판정, 탄도 조준, 공중 폭발 자동 테스트
+scripts/vampire.gd     흡혈귀 규칙 (class Vampire, static): 물기 bite·bite_target, 박쥐 돌진 start_dash·_dash_hits, 햇빛 화상 burn·burn_killer, 회복 heal
+scripts/fx/burn_fx.gd  흡혈귀 몸의 불꽃·연기 (Combat 아래 BurnFx 노드, MultiMesh 2개, 보기만 함)
+tests/test_vampire.gd  흡혈귀: 스탯·화상 3초 뒤 시작·15초에 죽음·처치 인정(5초)·물기 28+15·120 상한·원뿔·한 명·벽·아군·무적·돌진 9m·±20°·적중 멈춤·재사용·벽·비네트·불꽃·봇 자동 테스트
 tests/screenshot_class.gd 병과 하나 자세히 (3방향·걷는 중·1인칭 우클릭·3인칭): godot --path . --resolution 1280x720 -s tests/screenshot_class.gd -- cls=cannoneer tag=now
 scripts/trumpet_voice.gd  연주 멜로디 (AudioStreamGenerator, 톱니파+비브라토+로우패스). 음유시인 모델마다 하나
 tests/test_bard.gd     원뿔 안/밖·벽 차단·피해 주기·누적 0.75초 춤·1.5초 창·3초 면역·넘어짐 우선·숨 소진·삑사리·팡파레·봇 오차·베레모·볼·숨 막대 자동 테스트
@@ -256,6 +259,7 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 | 석궁병 | 석궁 | 0.85 (휠로 감는 중 ×0.75) | 110 | 파란 갑옷 |
 | 성직자 | 성수 | 1.0 | 100 | 체력 재생 2배 (초당 20) |
 | 음유시인 (4.5단계) | 트럼펫 | 1.05 | 95 | 적을 춤추게 만드는 방해형. 깃털 베레모 (투구와 같은 규칙으로 날아감) |
+| 흡혈귀 (사용자 요청) | 틀니 | 1.25 | 120 (회복도 120까지) | 햇빛에 초당 10씩 탐, 자연 회복 없음, 물어서 회복. 창백한 피부·올백 머리·높은 깃 망토·송곳니 — 아래 "흡혈귀 명세" |
 | 포병 (사용자 요청) | 대포 | 0.7 (사용자 요청 0.65→0.7. 달리기 없음, 가속 6, 점프 높이 0.4배) | 150 (사용자 요청 200→150) | 바퀴 달린 포가에 앉은 탱커. 몸 판정 1.4배. 둔화 절반만. 샤코 모자 — 아래 "포병 명세" |
 
 ### 피해 공통
@@ -458,6 +462,29 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 - **친구대전**: 포탄은 "f" 사건 (`Net.WEPS` 끝에 "cannon" — 번호는 뒤에만 더함). 터지면 각자 자기 캐릭터(방장은 + 봇)만 피해 판정, 포탄 점프는 쏜 사람 컴퓨터만. 체력은 상태로.
 - **UI**: 병과 카드가 늘면 5장 너비에 맞춰 줄어듦 (`menu._build_class`). 숫자키는 class_1~7. 병과 아이콘 `UiKit.ICONS.cannoneer`, 킬피드 `WEAPON_ICONS.cannon`.
 
+## 흡혈귀 명세 (사용자 요청 새 병과 — HTML에 없음)
+
+수치는 `GameData.CLASSES.vampire`·`WEAPONS.teeth`·`WEAPONS.bat`·`WEAPONS.burn`·`BURN`·`VAMP_FX`. 규칙 코드는 `scripts/vampire.gd` (Trumpet처럼 static), 상태는 player.gd (`dash_t`·`dash_dir`·`bat_cd`·`burn_wait`·`burn_acc`).
+- **스탯**: 체력 120 (모든 회복이 120까지), 속도 1.25, 자연 재생 0 (`class_regen` — 재생이 있으면 화상을 상쇄해서). 스폰룸 회복(쟁탈전)은 그대로 받는다.
+- **햇빛 화상** (`Vampire.burn`, Combat._tick_timers에서 내 컴퓨터가 정하는 흡혈귀만): 스폰 뒤 `grace` 3초는 안 탐, 그 뒤 0.25초마다 2.5 (초당 10) → 가만히 있으면 15초에 죽음.
+  - `damage()`를 안 거침 → `last_hit`(누가·언제 `t`)이 안 덮임. 죽으면 `credit` 5초 안에 때린 사람이 있으면 그 사람 처치, 아니면 자멸(처치 +0). 킬피드 무기 = `burn`.
+  - 황금 붕어빵 무적·쟁탈전 피해 없는 때(`mode.no_damage()`)엔 안 탐. 다른 회복(물기·스폰룸)은 받고 화상은 계속.
+- **물기** (좌클릭, `teeth`): 눈에서 2.3m(몸 겉면까지), 조준 원뿔 반각 30°(조준선이 몸에 닿으면 원뿔 밖이어도), 벽 너머 안 됨, 가장 가까운 한 명. 28 피해 고정 (헤드샷 배율·투구 날림 없음), 0.5초 간격.
+  - 적에게 피해가 들어가면(`can_feed` — 살아 있고 스폰 무적·붕어빵 무적·라운드 사이가 아님) +15 회복 + 머리 위 초록 "+15" (`num` 스타일 `heal`). 벽·허공·아군은 회복 없음.
+  - 봇은 틀니에 맞아도 경직 없음 (물기 연타로 묶이지 않게).
+- **박쥐 돌진** (우클릭, `bat`): 바라보는 쪽으로 9m를 0.3초 (위아래 ±20°로 자름), 재사용 7초. 돌진 중엔 공격 못 함, 말 위에선 안 됨.
+  - 이동은 `player._dash_move` (벽에 막히면 끝, 끝나면 속도를 걷기 속도·위 `end_vy`로 자름). 부딪힘은 Combat이 이동 다음에 `Vampire.tick` → `_dash_hits` (움직인 선분 vs 몸, 반지름 + `r`).
+  - 처음 걸린 적: 20 피해 + 약한 넉백, 그 자리에서 멈춤, 물기 1회로 쳐서 +15 회복 + 물기 재사용 바로.
+- **모습**: 창백한 피부(`skin`), 올백 검은 머리(`helm` 자리 — 헤드샷이면 가발처럼 날아감), 높은 깃(겉 검정·안 빨강), 망토(따로 노드 `cape`, 속도에 따라 펄럭), 빨간 입술·송곳니.
+  손에 큰 틀니(`WeaponModels.make_teeth`, 3인칭 `jaws` 위·아래 턱이 물 때 딱). 돌진 중엔 팔을 펼치고 앞으로 기욺. 몸에서 늘 작은 불꽃·연기 (`BurnFx`, 1인칭인 내 몸은 안 뿌림).
+  1인칭: 오른쪽 아래 틀니 옆모습, 물면 다물리며 앞으로. 내 체력이 `low_hp` 40 이하면 화면 가장자리 붉게 일렁이는 비네트 + 불꽃 혀 (hud `BurnEdge`). 왼쪽 아래 쪽지 "화상까지 N초"/"햇빛에 타는 중".
+  무기 칸 "물면 28 피해 + 15 회복 · 우클릭 박쥐 돌진", 조준점 고리 = 돌진 재사용.
+- **소리** (임시 합성 `Sfx.RECIPES`): `bite`(딱!) · `bat`(돌진 휙) · `burn`(지글, 0.5초마다). 파일로 바꾸려면 `audio/sfx/`에 넣고 `Sfx.FILES`에 더한 뒤 RECIPES에서 지움.
+- **봇** (`bot_ai.gd`): 거리 유지 없이 달라붙음, 3.5~8.5m(`BOT.bat_min`·`bat_max`)이고 돌진이 차 있으면 우클릭 돌진, `fire_range.teeth` 2.2m에서 묾. 쟁탈전 역할 = 거점.
+- **친구대전**: 물기·돌진은 저격총처럼 **문 쪽**이 판정해서 사건 `"bt"`·`"bd"` [표적 id, fed]를 보냄 → 맞은 쪽 `Combat.remote_bite`가 피해, 모두 모습·소리. 회복은 흡혈귀 컴퓨터가 바로, 화상도 흡혈귀 컴퓨터가 → 체력은 상태로 맞춰짐 (`test_net`).
+  상태 비트 8192 = 돌진 중 (남의 화면 돌진 자세). `Net.WEPS` 끝에 "teeth"·"bat"·"burn".
+- **UI**: 병과 카드 7번째 (숫자키 7), 아이콘 `UiKit.ICONS.vampire`, 킬피드 `WEAPON_ICONS.teeth`·`bat`·`burn`.
+
 ## 쟁탈전 명세 (7.5단계 — 구현됨, 사용자 요청. AI대전 + 친구대전)
 
 수치는 전부 `GameData.MODES.control`. 개인전(ffa)은 그대로 — `GameData.mode`("ffa"/"control", 설정 파일에 저장)로 고른다.
@@ -542,7 +569,7 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 | `cluck` · `horn` · `nyam` · `neigh` | 같은 이름 .ogg | 닭 · 쟁탈전 뿔나팔 · 황금 붕어빵 · 말 울음 |
 | `gallop` | `gallop_loop.ogg` | 말 달리는 동안 계속 (반복 소리) |
 
-- 합성 그대로: `trip`·`hit`·`head`·`kill`·`hurt`·`pickup`·`chime`·`bell`·`slide`·`slip`·`jump`·`sizzle`·`reload`(성수 한 병 참)·`seat`(볼트 끼우기)·`stamp`. 결과 화면 `play_stinger`는 따로.
+- 합성 그대로: `bite`·`bat`·`burn`(흡혈귀)·`trip`·`hit`·`head`·`kill`·`hurt`·`pickup`·`chime`·`bell`·`slide`·`slip`·`jump`·`sizzle`·`reload`(성수 한 병 참)·`seat`(볼트 끼우기)·`stamp`. 결과 화면 `play_stinger`는 따로.
 - **크기·음높이 조절**은 `game_data.gd`만: `SFX_GAIN`(소리별 크기 배율, 기본 1) · `SFX_PITCH`(소리별 음높이 배율). 크기 = `vol_at(위치)` × `SFX_GAIN` × `SFX_VOL`.
   파일 소리는 칠 때마다 음높이 ±`PITCH_JITTER`(0.04), 음악인 `SFX_NO_JITTER`(fanfare·horn)는 안 흔듦.
 - **거리·남의 소리** (사용자 요청, `GameData.SFX_DIST`, `Sfx.vol_at`): 1/(1+(거리/8)^1.5) — 8m 절반, 50~80m에서 0까지 (HTML 1/(1+거리/9)보다 거리감이 큼).
@@ -797,6 +824,7 @@ godot --headless --fixed-fps 60 --path . -s tests/test_close_range.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_hitbox.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_holy.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_cannon.gd
+godot --headless --fixed-fps 60 --path . -s tests/test_vampire.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_bot.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_match.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_items.gd

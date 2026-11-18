@@ -336,6 +336,10 @@ func _run() -> void:
 			var car_n: int = count_meshes(m.carriage) - count_meshes(m.barrel)
 			body_n -= car_n
 			check(k2 + " 포가 조각 3개 이하 (포가 + 바퀴 2)", car_n <= 3, "%d개" % car_n)
+		if m.cape:  # 흡혈귀 망토: 따로 펄럭여서 몸과 따로 셈 (겉·안감 2개)
+			var cape_n: int = count_meshes(m.cape)
+			body_n -= cape_n
+			check(k2 + " 망토 조각 2개 이하", cape_n <= 2, "%d개" % cape_n)
 		check(k2 + " 몸 조각을 관절별로 합침 (손에 드는 무기 빼고 14개 이하)", body_n <= 14, "합치기 전 %d개(무기 포함) → 몸 %d개" % [m.part_count, body_n])
 		var wk: String = G.CLASSES[k2].weapon
 		var wn: int = count_meshes(m.weapons[wk])

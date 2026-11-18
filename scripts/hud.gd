@@ -59,6 +59,7 @@ var _hurt := 0.0       # 붉은 테두리 세기 (HTML hurt)
 var _dance: DanceEdge  # 내가 춤에 걸리면: 분홍 테두리 + 테두리를 도는 음표 (트럼펫 이펙트 7)
 var _dirs: DmgDir
 var _star: StarEdge          # 황금 붕어빵 무적 (1인칭): 금색 비네트 두근 + 테두리 반짝이
+var _burn: BurnEdge          # 흡혈귀 체력이 BURN.low_hp 이하: 가장자리가 붉게 일렁이며 타오름 (불꽃 혀)
 var _star_box: VBoxContainer # 화면 위 가운데: "무적 3.2초" + 금색 막대
 var _star_lbl: Label
 var _star_bar: ProgressBar
@@ -95,6 +96,7 @@ const NUM_STYLE := {
 	"kill": {"size": 30, "color": GOLD},
 	"dance": {"size": 34, "color": Color("#ff7eb6")},  # 춤춰라! (트럼펫 이펙트)
 	"squeak": {"size": 22, "color": Color("#d6d6d6")},  # 삑!
+	"heal": {"size": 26, "color": Color("#6cff7a")},    # 흡혈귀 +15 (초록)
 }
 const NUM_LIFE := 0.85
 const NUM_MAX := 14
@@ -176,6 +178,20 @@ func _ready() -> void:
 	_star.add_child(_star.vig)
 	_star.visible = false
 	root.add_child(_star)
+	_burn = BurnEdge.new()
+	_burn.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_burn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bsm := ShaderMaterial.new()
+	bsm.shader = sh
+	var bcol := GameData.col(GameData.BURN.vig_col)
+	bsm.set_shader_parameter("col", Vector3(bcol.r, bcol.g, bcol.b))
+	_burn.vig = ColorRect.new()
+	_burn.vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_burn.vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_burn.vig.material = bsm
+	_burn.add_child(_burn.vig)
+	_burn.visible = false
+	root.add_child(_burn)
 
 	_build_topbar(root)
 	_build_feed(root)
@@ -627,6 +643,7 @@ func _process(dt: float) -> void:
 	_dance.tick(dt, e.alive and e.dance_t > 0)
 	var starred := e.alive and e.star_t > 0
 	_star.tick(dt, starred and not e.tp_view(), e.star_t)
+	_burn.tick(dt, e.alive and e.cls == "vampire" and e.hp <= float(GameData.BURN.low_hp))
 	_star_box.visible = starred
 	if starred:
 		_star_lbl.text = "무적 %.1f초" % e.star_t
@@ -657,6 +674,8 @@ func _process(dt: float) -> void:
 		notes.append("투구 없음")
 	if e.alive and e.slow_t > 0:
 		notes.append("성수에 젖어 느려짐")
+	if e.alive and e.cls == "vampire":
+		notes.append("햇빛에 타는 중" if e.burn_wait <= 0 else "화상까지 %d초" % ceili(e.burn_wait))
 	var note := " · ".join(notes)
 	if e.next_cls != "" and e.next_cls != e.cls:
 		note += (" " if note != "" else "") + "→ 다음 부활 %s" % GameData.CLASSES[e.next_cls].name
@@ -672,7 +691,7 @@ func _process(dt: float) -> void:
 	var hc := MOSS if hpp > 0.5 else GOLD
 	if hpp <= float(V.low):  # 낮으면 빨갛게 깜빡
 		hc = BLOOD.lerp(GameData.col(V.blink_col), 0.5 + 0.5 * sin(_clock * TAU * float(V.blink_hz)))
-	_hp.set_state(hpp, hc, e.alive and e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh)  # 재생 중엔 둘레가 초록으로 빛남
+	_hp.set_state(hpp, hc, e.alive and e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh and GameData.class_regen(e.cls) > 0)  # 재생 중엔 둘레가 초록으로 빛남 (흡혈귀는 재생 없음)
 	_vitals_regen = _hp.glow
 	_hp_num.text = str(hp)
 	# 속도·조준점
@@ -826,6 +845,18 @@ func _update_weapon() -> void:
 				st = "누르고 있으면 연주 · 우클릭 팡파레"
 			if e.fan_cd > 0:
 				st += " · 팡파레 %.0f초" % ceilf(e.fan_cd)
+		"teeth":  # 흡혈귀: 조준점 고리 = 박쥐 돌진 재사용 대기
+			var TW: Dictionary = GameData.WEAPONS.teeth
+			var BW: Dictionary = GameData.WEAPONS.bat
+			st = "물면 %d 피해 + %d 회복" % [int(TW.dmg), int(TW.heal)]
+			if e.dash_t > 0:
+				st = "박쥐 돌진!"
+			elif e.bat_cd > 0:
+				ring = 1.0 - e.bat_cd / float(BW.cd)
+				ring_col = STEEL
+				st += " · 돌진 %.0f초" % ceilf(e.bat_cd)
+			else:
+				st += " · 우클릭 박쥐 돌진"
 		"lance":
 			st = "말 타는 중 %.1f초 · 찌르면 70 피해 + 멀리 날림" % maxf(0.0, e.mounted)
 			ring = e.mounted / GameData.HORSE_TIME
@@ -1242,6 +1273,47 @@ class StarEdge extends Control:
 			draw_colored_polygon(PackedVector2Array([Vector2(0, -r), Vector2(q, -q), Vector2(r, 0), Vector2(q, q),
 				Vector2(0, r), Vector2(-q, q), Vector2(-r, 0), Vector2(-q, -q)]), c)  # 네 갈래 별
 		draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## 흡혈귀 체력이 낮을 때 (1·3인칭 모두): 붉은 비네트가 불꽃처럼 일렁이고, 화면 아래·옆 가장자리에 불꽃 혀가 날름거림.
+## 수치는 GameData.BURN (vig_col·vig_alpha·flicker_hz). 불꽃 혀는 삼각형 묶음 하나로 그림 (UiKit.Tris)
+class BurnEdge extends Control:
+	var vig: ColorRect
+	var k := 0.0
+	var t := 0.0
+
+	func tick(dt: float, on: bool) -> void:
+		k = move_toward(k, 1.0 if on else 0.0, dt * 3.0)
+		t += dt
+		visible = k > 0.001
+		if visible:
+			var B: Dictionary = GameData.BURN
+			var fl := 0.75 + 0.15 * sin(t * TAU * float(B.flicker_hz)) + 0.1 * sin(t * 23.0)
+			(vig.material as ShaderMaterial).set_shader_parameter("alpha", k * float(B.vig_alpha) * fl)
+			queue_redraw()
+
+	func _draw() -> void:
+		var tr := UiKit.Tris.new()
+		var w := size.x
+		var h := size.y
+		var cols := [Color("#ffd23a"), Color("#ff8a1e"), Color("#ff4a1a")]
+		var n := 18
+		for i in n:  # 아래 가장자리
+			var x := (i + 0.5) / n * w
+			var fh := (34.0 + 26.0 * absf(sin(t * 7.0 + i * 1.7))) * k
+			var c: Color = cols[i % 3]
+			c.a = 0.55 * k
+			tr.poly(PackedVector2Array([Vector2(x - 22, h), Vector2(x + sin(t * 9.0 + i) * 8.0, h - fh), Vector2(x + 22, h)]), c)
+		for side in 2:  # 양옆 아래쪽 절반
+			for i in 6:
+				var y := h - (i + 0.5) / 6.0 * h * 0.5
+				var fw := (22.0 + 18.0 * absf(sin(t * 6.0 + i * 2.1 + side))) * k
+				var c: Color = cols[(i + side) % 3]
+				c.a = 0.45 * k
+				var x0 := 0.0 if side == 0 else w
+				var sg := 1.0 if side == 0 else -1.0
+				tr.poly(PackedVector2Array([Vector2(x0, y - 20), Vector2(x0 + sg * fw, y + sin(t * 8.0 + i) * 6.0), Vector2(x0, y + 20)]), c)
+		tr.draw(self)
 
 
 ## 왼쪽 아래 체력 막대 (시안: 어두운 홈 + 초록 채움, 둘 다 잉크 테두리, 채움 아래쪽 그늘). 재생 중엔 둘레가 초록으로 빛남

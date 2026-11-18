@@ -186,6 +186,8 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 			pref = B.pref[e.cls]
 		if not vis:
 			move = to
+		elif e.wep == "teeth":  # 흡혈귀: 거리 유지 없이 달라붙음 (붙으면 살짝만 좌우로)
+			move = to + Vector3(-to.z, 0, to.x) * strafe * (0.3 if d < 2.0 else 0.15)
 		else:
 			var band: float = B.pref_band
 			if d > pref + band:
@@ -211,6 +213,8 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 			want_fire = react <= 0 and (fire_ok or e.wep == "chicken") and (d < float(fr[e.wep]) if fr.has(e.wep) else true)
 			if e.wep == "cannon" and d < float(B.cannon_min):  # 포병: 너무 가까우면 자기도 휘말려서 안 쏨
 				want_fire = false
+			if e.wep == "teeth":  # 흡혈귀: 조금 떨어져 있으면 박쥐 돌진으로 달라붙음 (우클릭)
+				want_fan = react <= 0 and e.bat_cd <= 0 and e.dash_t <= 0 and d > float(B.bat_min) and d < float(B.bat_max)
 	# 음유시인 숨 관리: 0.5초 남으면 멈추고, 다 찰 때까지 대상에게서 물러남
 	if e.wep == "trumpet":
 		if e.playing and e.breath <= float(B.bard_breath_stop):
@@ -450,7 +454,7 @@ func _aim_solve(e: PlayerController, t: PlayerController) -> Dictionary:
 	var tpos := t.global_position
 	var tvel := t.velocity
 	var target_pt := tpos + Vector3(0, float(B.aim_head) if aim_head or e.wep == "sniper" else float(B.aim_body), 0)
-	if e.wep == "sniper" or e.wep == "ak" or e.wep == "trumpet":  # 히트스캔·트럼펫 원뿔: 곧장
+	if e.wep == "sniper" or e.wep == "ak" or e.wep == "trumpet" or e.wep == "teeth":  # 히트스캔·트럼펫 원뿔·틀니: 곧장
 		var d := target_pt - eye
 		return {"yaw": atan2(-d.x, -d.z) + ex, "pitch": atan2(d.y, Vector2(d.x, d.z).length()) + ey}
 	if e.wep == "holy" or e.wep == "chicken" or e.wep == "cannon":  # 포물선: 발밑(닭은 0.9 높이)에 떨어질 각도를 훑어서 찾음 (포탄도 발밑 — 범위 피해)

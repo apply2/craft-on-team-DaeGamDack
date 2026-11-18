@@ -199,6 +199,40 @@ func _run() -> void:
 	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
 	await wait(40)
 
+	# ── 흡혈귀 (친구): 문 쪽(친구)이 판정해서 알림 → 방장이 피해 적용, 회복은 친구 쪽. 양쪽 화면 체력이 같음 ──
+	put(pa, HERE, "archer", -PI / 2)
+	put(pb, HERE + Vector3(1.5, 0, 0), "vampire", PI / 2)  # 서쪽(-X) = 방장 쪽을 봄
+	pb.burn_wait = 999.0
+	pb.hp = 60.0
+	await wait(30)
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(20)
+	var TW: Dictionary = G.WEAPONS.teeth
+	check("흡혈귀 물기: 방장이 28 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(TW.dmg))) < 0.5, "hp=%.0f" % pa.hp)
+	check("  친구(흡혈귀)는 15 회복", absf(pb.hp - (60.0 + float(TW.heal))) < 0.5, "hp=%.0f" % pb.hp)
+	check("  두 화면 체력이 같음 (방장 화면의 친구 / 친구 화면의 방장)", absf(rb.hp - pb.hp) < 1.0 and absf(ra.hp - pa.hp) < 1.0,
+		"친구 %.0f/%.0f 방장 %.0f/%.0f" % [pb.hp, rb.hp, pa.hp, ra.hp])
+	check("  방장 화면에서도 틀니가 딱 (모습)", rb.cls == "vampire" and rb.fire_anim >= 0.0, "")
+	# 화상은 친구 컴퓨터가 깎고 방장 화면엔 상태로
+	pb.burn_wait = 0.0
+	await wait(70)
+	check("흡혈귀 화상: 친구 쪽에서 타고 방장 화면도 같음", pb.hp < 75.0 - 9.0 and absf(rb.hp - pb.hp) < 3.0, "친구 %.1f / 방장 화면 %.0f" % [pb.hp, rb.hp])
+	# 박쥐 돌진: 6m 밖에서 돌진해 방장에게 부딪힘
+	put(pa, HERE, "archer", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "vampire", PI / 2)
+	pb.burn_wait = 999.0
+	await wait(30)
+	pb.scripted_input = {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "aim": true}
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(30)
+	check("박쥐 돌진: 방장이 20 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(G.WEAPONS.bat.dmg))) < 0.5, "hp=%.0f" % pa.hp)
+	put(pa, HERE, "barbarian", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
+	await wait(40)
+
 	# ── 저격총: 쏜 쪽(방장)이 판정해서 알림 → 친구 죽음, 방장 처치 +1 ──
 	A.combat.items.drop_sniper(pa.global_position, 5)
 	await wait(5)

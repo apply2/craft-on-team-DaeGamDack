@@ -25,6 +25,8 @@ var _horse_head: Node3D     # 마상창 아래 보이는 말 머리
 var _tr: Node3D             # 트럼펫 (나팔이 화면 오른쪽 아래에 보임)
 const TR_POS := Vector3(0.2, -0.24, -0.34)
 const CN_POS := Vector3(0.0, -0.36, -0.42)  # 포병 포신 (화면 아래 가운데)
+const TE_POS := Vector3(0.24, -0.2, -0.55)  # 흡혈귀 틀니 (화면 오른쪽 아래, 앞을 보고 벌어져 있음)
+var _teeth := {}            # {g, up, lo}
 var _bob := 0.0
 var _sway := Vector2.ZERO  # 마우스를 움직이면 손이 살짝 늦게 따라옴 (HTML swayX/swayY)
 
@@ -158,6 +160,15 @@ func _build() -> void:
 		_rx(_part(Meshes.cyl(), GameData.C.gold, Vector3(0.11, 0.03, 0.11), Vector3(0, 0, z), cw), PI / 2)
 	for sx in [1.0, -1.0]:
 		_part(Meshes.sph(), SKIN, Vector3(0.055, 0.05, 0.065), Vector3(sx * 0.13, -0.02, -0.12), cw)
+	# 흡혈귀 틀니: 커다란 틀니를 손에 쥐고 앞으로 내밂. 물면 딱! 다물림
+	var tg := _group("teeth", TE_POS)
+	var ti := Node3D.new()
+	ti.rotation = Vector3(0.15, -PI / 2 - 0.5, 0)  # 틀니 앞(+Z)이 왼쪽 안쪽으로 → 옆모습이라 이·송곳니가 보임
+	ti.scale = Vector3.ONE * 0.6
+	tg.add_child(ti)
+	_teeth = WeaponModels.make_teeth(ti)
+	_part(Meshes.sph(), int(GameData.CLASSES.vampire.skin), Vector3(0.05, 0.045, 0.06), Vector3(0.0, -0.06, 0.04), tg)   # 쥔 손
+	_part(Meshes.cyl(), int(GameData.CLASSES.vampire.arm), Vector3(0.06, 0.3, 0.06), Vector3(0.02, -0.2, 0.22), tg).rotation.x = 0.9  # 검은 소매
 	_build_items()
 
 
@@ -338,6 +349,16 @@ func _process(dt: float) -> void:
 			_cn_ads += ((1.0 if e.aim_held else 0.0) - _cn_ads) * minf(1.0, dt * 10.0)
 			g.position = CN_POS + Vector3(0, -dip + kick * 0.03 - _cn_ads * 0.14, kick * 0.2 + _cn_ads * 0.06)
 			g.rotation.x = 0.12 + kick * 0.18 - _cn_ads * 0.1
+		"teeth":  # 평소엔 딱딱 떨며 벌어져 있고, 물면 앞으로 쑥 내밀며 딱! 다물림. 돌진 중엔 앞으로 쭉
+			var g: Node3D = _vm.teeth
+			var snap := sqrt(clampf(e.fire_anim, 0.0, 1.0))
+			var lunge := sin(clampf(e.fire_anim, 0.0, 1.0) * PI)
+			var tt := Time.get_ticks_msec() / 1000.0
+			var open := (0.5 + sin(tt * 9.0) * 0.06) * (1.0 - snap)
+			(_teeth.up as Node3D).rotation.x = -open * 0.45
+			(_teeth.lo as Node3D).rotation.x = open
+			var dash := 1.0 if e.dash_t > 0 else 0.0
+			g.position = TE_POS + Vector3(-lunge * 0.05 - dash * 0.03, lunge * 0.04 + dash * 0.02, -lunge * 0.14 - dash * 0.08)
 		"holy":  # 던지면 앞으로 뻗고, 빈손이면 아래로 내려 새 병을 꺼냄
 			var t := e.fire_anim
 			var g: Node3D = _vm.holy

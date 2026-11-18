@@ -60,7 +60,7 @@ const HIT_WOB_HEAD := 1.3
 ## lance: 탄 사람 말의 마상창 — 굵기만 (길이를 늘리면 판정 창끝 3.5m보다 길어 보임), 창끝 뾰족한 부분은 tip배 (끝점은 그대로)
 const HELD_SCALE := {
 	"stone": 1.7, "bow": 1.45, "crossbow": 1.4, "holy": 1.6, "trumpet": 1.35,
-	"sniper": 1.3, "ak": 1.45, "chicken": 1.35,
+	"sniper": 1.3, "ak": 1.45, "chicken": 1.35, "teeth": 1.7,
 	"lance": {"thick": 1.6, "len": 1.0, "tip": 1.3},
 }
 ## 내 캐릭터만 다르게 할 무기 (어깨 너머 화면에서 조준점을 가리면). 없는 무기는 HELD_SCALE
@@ -167,11 +167,17 @@ const CLASSES := {
 		"no_sprint": true, "accel": 6.0, "jump": 0.4, "hit_r": 1.4, "slow_resist": 0.5,
 		"color": 0x5e7d3c, "leg": 0x4a3a2a, "arm": 0x5e7d3c, "foot": 0x2e241c, "pips": [1, 5, 4, 1],
 		"desc": "느리고 크지만 한 방이 세다. 포탄은 터지며 주변을 날리고, 발밑에 쏘면 높이 뛴다."},
+	# 사용자 요청 새 병과 (HTML에 없음): 대낮이라 몸에 불이 붙은 드라큘라. 틀니로 물어 피를 채워야 버팀 (화상은 BURN)
+	#   regen 0: 자연 회복 없음 (화상 초당 10을 상쇄하지 않게 — 사용자 확인). 성수 웅덩이·스폰룸 회복은 받음
+	#   skin: 머리·손 피부색 (없으면 C.skin)
+	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.25, "hp": 120, "regen": 0,
+		"skin": 0xe4e6ee, "color": 0x1c1a24, "leg": 0x1c1a24, "arm": 0x1c1a24, "foot": 0x111014, "pips": [4, 3, 1, 3],
+		"desc": "햇빛에 계속 타들어간다. 틀니로 물어뜯어 피를 채우고, 박쥐로 돌진해 달라붙는 근접형."},
 }
-const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard", "cannoneer"]
+const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard", "cannoneer", "vampire"]
 const STAT_LABELS := ["이동속도", "공격력", "사거리", "연사"]  # 병과 카드의 pips 순서
-const CLASS_EMBLEM := {"barbarian": 0xe8811f, "archer": 0xb8322a, "crossbow": 0x4d72b8, "cleric": 0x8c63c9, "bard": 0x7a3fa8, "cannoneer": 0x5e7d3c}  # 카드 동그라미
-const CLASS_CHIP := {"barbarian": 0xf2a04e, "archer": 0xe8857a, "crossbow": 0x9fc0ea, "cleric": 0xcdb8ef, "bard": 0xc9a2e8, "cannoneer": 0xb4cc8c}    # 점수판 꼬리표
+const CLASS_EMBLEM := {"barbarian": 0xe8811f, "archer": 0xb8322a, "crossbow": 0x4d72b8, "cleric": 0x8c63c9, "bard": 0x7a3fa8, "cannoneer": 0x5e7d3c, "vampire": 0x8e1b2a}  # 카드 동그라미
+const CLASS_CHIP := {"barbarian": 0xf2a04e, "archer": 0xe8857a, "crossbow": 0x9fc0ea, "cleric": 0xcdb8ef, "bard": 0xc9a2e8, "cannoneer": 0xb4cc8c, "vampire": 0xe89aa6}    # 점수판 꼬리표
 
 # ── 무기 ─────────────────────────────────────────────────────
 # 단위: dmg 피해, cd 재사용(초), speed 투사체 속도(m/s), grav 중력, kb 넉백, up 띄우기, radius 판정 반경
@@ -275,7 +281,30 @@ const WEAPONS := {
 		}},
 	# 팡파레 (음유시인 우클릭): 앞쪽 range m, 반각 half_angle 도 안의 적에게 dmg, 넉백 kb, 띄우기 up, 재사용 cd초
 	"fanfare": {"name": "팡파레", "range": 3.5, "half_angle": 45.0, "dmg": 15, "kb": 9, "up": 3, "cd": 6.0},
+	# 흡혈귀 틀니 (사용자 요청 새 병과): 근접 물기. 눈에서 range m 안, 조준 방향 반각 half_angle° 원뿔 안의 가장 가까운 적 1명
+	#   heal: 적을 맞히면 그만큼 회복 (최대 체력은 안 넘음). 머리 판정 없음 (늘 dmg)
+	"teeth": {"name": "틀니", "dmg": 28, "cd": 0.5, "range": 2.3, "half_angle": 30.0, "heal": 15, "kb": 3, "up": 1.5,
+		"color": 0xf4f1e6, "gum": 0xd2465a},
+	# 흡혈귀 박쥐 돌진 (우클릭): 바라보는 쪽으로 time초 동안 dist m. 위아래는 ±pitch_max°로 자름
+	#   첫 번째로 부딪힌 적(몸까지 거리 r m)에게 dmg + 약한 넉백, 그 자리에서 멈춤. 맞히면 물기 1회로 쳐서 회복 + 물기 재사용 초기화
+	#   end_vy: 끝날 때 위로 남기는 속도 상한 (위로 돌진하고 끝나면 살짝만 뜸)
+	"bat": {"name": "박쥐 돌진", "dmg": 20, "cd": 7.0, "dist": 9.0, "time": 0.3, "pitch_max": 20.0, "r": 0.55, "kb": 4, "up": 2, "end_vy": 3.0},
+	# 화상 (흡혈귀가 햇빛에 탐): 킬피드·사망 화면 이름만 (피해는 BURN)
+	"burn": {"name": "햇빛"},
 }
+# 흡혈귀 햇빛 화상 (사용자 요청): tick초마다 dmg (초당 10). 스폰 뒤 grace초는 면제
+# 화상으로 죽으면 credit초 안에 그 흡혈귀를 때린 사람이 있으면 마지막으로 때린 사람이 처치, 없으면 자멸
+# 황금 붕어빵 무적·쟁탈전 라운드 사이엔 안 탐. low_hp 이하면 내 화면 가장자리에 타는 비네트 (hud BurnEdge)
+# snd_every: 지글 소리 간격 (임시 합성 "burn" — audio/sfx/burn.ogg를 넣고 Sfx.FILES에 더하면 바뀜)
+const BURN := {"tick": 0.25, "dmg": 2.5, "grace": 3.0, "credit": 5.0, "low_hp": 40.0, "snd_every": 0.5,
+	"vig_col": 0xff4a1a, "vig_alpha": 0.75, "flicker_hz": 9.0}
+# 흡혈귀 연출 (보기만 함 — scripts/fx/burn_fx.gd). 불꽃·연기는 MultiMesh 풀 둘 (그리기 2번)
+#   flame_every / smoke_every: 한 명당 몇 초마다 하나 / pool: 전체 상한 / blood: 물었을 때 피 조각 수
+const VAMP_FX := {"flame_every": 0.05, "flame_life": 0.45, "flame_size": 0.16, "flame_up": 1.6, "flame_r": 0.35,
+	"smoke_every": 0.12, "smoke_life": 1.1, "smoke_size": 0.22, "smoke_up": 1.2, "pool": 160,
+	"flame_cols": [0xffd23a, 0xff8a1e, 0xff4a1a], "smoke_col": 0x4a4448, "smoke_alpha": 0.45,
+	"blood": 7, "blood_col": 0xb3122a, "heal_col": 0x6cff7a,
+	"cape": 0x14121a, "lining": 0xb3122a, "hair": 0x0e0d12, "fang": 0xffffff, "lip": 0x7a1426, "eye_red": 0xd21c2c}
 
 # ── 춤 디버프 (트럼펫, 4.5단계) ──────────────────────────────
 # 원뿔 안에 window초 동안 누적 need초 이상 있으면 dur초 동안 춤. 끝나면 immune초 동안 다시 안 춤
@@ -330,14 +359,15 @@ const BOT := {
 	"strafe_t": [0.6, 1.8],      # 좌우 무빙 방향을 바꾸는 간격
 	"strafe_stop": 0.2,          # 무빙 안 할 확률
 	"strafe_k": 0.9,
-	"pref": {"barbarian": 4.0, "archer": 22.0, "crossbow": 30.0, "cleric": 15.0, "bard": 8.0, "cannoneer": 16.0},  # 병과별 선호 거리
+	"pref": {"barbarian": 4.0, "archer": 22.0, "crossbow": 30.0, "cleric": 15.0, "bard": 8.0, "cannoneer": 16.0, "vampire": 0.5},  # 병과별 선호 거리
 	"pref_sniper": 28.0, "pref_ak": 16.0,
 	"item_seek": 45.0, "horse_seek": 40.0, "fish_seek": 40.0,  # 황금 붕어빵은 40m
 	"star_avoid": 10.0,          # 무적인 적에게서 이만큼은 도망감 (대상으로도 안 고름)  # 이 거리 안의 저격총·AK / 말은 주우러 감
 	"item_busy": 8.0,            # 단, 보이는 적이 이보다 가까우면 싸움이 먼저
 	"pref_band": 5.0,            # 선호 거리 ±5m면 다가가지도 물러나지도 않음
+	"bat_min": 3.5, "bat_max": 8.5,  # 흡혈귀 봇: 대상이 이 거리 사이에 있고 보이면 박쥐 돌진
 	"cannon_min": 4.5,  # 포병 봇: 대상이 이보다 가까우면 안 쏨 (자기 폭발에 휘말림)
-	"fire_range": {"cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
+	"fire_range": {"teeth": 2.2, "cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
 	"knight_avoid": 12.0,        # 말 탄 사람 피하기 반경
 	"zone_margin": 0.6,          # 남의 성수 웅덩이 반경 + 이만큼 안이면 밖으로 나감
 	"smooth": 3.5,               # 이동 방향을 부드럽게 (급회전 넘어짐 줄이기)
@@ -396,12 +426,13 @@ const MODES := {
 			"cleric": {0xeee6d2: "pale", 0x7a52b8: "accent", "helm_gold": "accent"},                 # 영대·모자 띠
 			"bard": {0x7a3fa8: "body", 0xf4ecd6: "accent", 0xd94a3a: "accent"},                     # 조끼·모자 깃털
 			"cannoneer": {0x5e7d3c: "body", 0x3f5a28: "dark"},                                      # 군복·모자
+			"vampire": {0xb3122a: "accent"},                                                         # 망토 안감
 		},
 		# 봇
 		"bot_hold_in": 2,                           # 우리 거점이면 원 안에 이만큼, 나머지는 감시 지점
-		"bot_roles": {"barbarian": "point", "cleric": "point", "bard": "point", "cannoneer": "point", "archer": "watch", "crossbow": "watch"},
+		"bot_roles": {"barbarian": "point", "cleric": "point", "bard": "point", "cannoneer": "point", "vampire": "point", "archer": "watch", "crossbow": "watch"},
 		"lane_weight": {                            # 3갈래(왼쪽 시장 골목 / 가운데 큰길 / 오른쪽 성벽 길) 고르는 가중치
-			"barbarian": [5, 2, 1], "archer": [1, 2, 4], "crossbow": [1, 2, 4], "cleric": [2, 3, 2], "bard": [3, 3, 1], "cannoneer": [1, 4, 2]},
+			"barbarian": [5, 2, 1], "archer": [1, 2, 4], "crossbow": [1, 2, 4], "cleric": [2, 3, 2], "bard": [3, 3, 1], "cannoneer": [1, 4, 2], "vampire": [5, 2, 1]},
 		"lane_reach": 3.5,                          # 갈래 길 지점에 이만큼 다가가면 다음 지점으로
 		"path_every": 0.6,                          # 경로 다시 찾기 간격
 		"path_reach": 1.2,                          # 경로 점에 이만큼 다가가면 다음 점
@@ -599,7 +630,7 @@ const MAIN_MENU := {
 const CLASS_PAGE := {
 	"lines": {  # 개구 한마디
 		"barbarian": "생각 없음. 돌 있음.", "archer": "당기다 손 미끄러짐 주의.", "crossbow": "한 발이면 끝. 휠로 감아라.",
-		"cleric": "성수 맛 좀 봐라.", "bard": "내 연주에 춤춰라.", "cannoneer": "발밑에 쏘면 난다.",
+		"cleric": "성수 맛 좀 봐라.", "bard": "내 연주에 춤춰라.", "cannoneer": "발밑에 쏘면 난다.", "vampire": "덥다... 피 좀 줘.",
 	},
 	# 아래 한 줄 설명. {..}는 WEAPONS 값으로 채움 (game_data를 고치면 문구도 따라감)
 	"blurbs": {
@@ -609,6 +640,7 @@ const CLASS_PAGE := {
 		"cleric": "성수병 {max_charges}개를 모아 던진다. 웅덩이가 적을 지지고 느리게 만든다.",
 		"bard": "트럼펫을 불면 적이 춤춘다. 춤추는 적은 느리고 공격을 못 한다.",
 		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 한 발 쏘면 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
+		"vampire": "햇빛에 초당 10씩 탄다. 물면 {dmg} 피해 + {heal} 회복. 우클릭 박쥐 돌진.",
 	},
 	"eye_h": 1.62,   # 사거리 계산: 눈높이(player.eye_pos)에서 정면으로 쏴서 땅에 닿는 거리 (무기 range가 있으면 거기까지)
 	"bar_cols": {"hp": 0xe5484d, "speed": 0x3fa7e0, "range": 0x6cc35a, "track": 0xe2c992},

@@ -59,6 +59,15 @@ var blast_air := false    # 포탄 점프로 떠 있음 (착지할 때까지 공
 var cn_t := 0.0           # 포병: 재장전 남은 시간
 var recoil_t := 0.0       # 포병: 발사 반동으로 밀리는 중 (땅 마찰 WEAPONS.cannon.recoil_fric)
 var cam_kick_t := 0.0     # 포병: 발사 화면 반동 남은 시간 (실제 시간) (0이면 장전됨 — WEAPONS.cannon.reload)
+# 흡혈귀 (사용자 요청 새 병과 — scripts/vampire.gd가 관리)
+var dash_t := 0.0         # 박쥐 돌진 남은 시간 (이동은 _dash_move가 덮어씀)
+var dash_dir := Vector3.ZERO
+var dash_prev := Vector3.ZERO  # 돌진 판정: 지난 물리 프레임 위치 (이 선분으로 적과 부딪혔나 봄)
+var dash_seg := false     # 이번 물리 프레임에 돌진으로 움직였음 (Combat이 판정하고 끔)
+var bat_cd := 0.0         # 박쥐 돌진 재사용 대기
+var burn_wait := 0.0      # 스폰 뒤 화상 면제 남은 시간
+var burn_acc := 0.0       # 다음 화상 틱까지 쌓인 시간
+var burn_snd := 0.0       # 지글 소리 간격
 var swap_req := false     # Q를 눌렀음 (Combat이 처리)
 var ak_flash := 0.0       # 내 1인칭 AK 총구 불꽃
 var hp := 100.0
@@ -257,6 +266,12 @@ func spawn_at(p: Vector3) -> void:
 	cn_t = 0.0
 	recoil_t = 0.0
 	cam_kick_t = 0.0
+	dash_t = 0.0
+	dash_dir = Vector3.ZERO
+	bat_cd = 0.0
+	burn_wait = float(GameData.BURN.grace)
+	burn_acc = 0.0
+	burn_snd = 0.0
 	if not horse.is_empty():
 		(horse.g as Node).queue_free()
 		horse = {}
@@ -286,6 +301,7 @@ func die(dir: Vector3) -> void:
 	charging = false
 	playing = false
 	dance_t = 0.0
+	dash_t = 0.0
 	if model:
 		model.visible = false
 
@@ -479,6 +495,9 @@ func friction(fr: float, dt: float) -> void:
 
 
 func movement(wish: Vector3, jump: bool, crouch_in: bool, dt: float) -> void:
+	if dash_t > 0:  # 흡혈귀 박쥐 돌진: 입력·중력 없이 정해진 속도로
+		_dash_move(dt)
+		return
 	var mtd := mounted > 0
 	var spr_k := GameData.SPRINT if sprinting and not mtd else 1.0
 	var mx := max_speed()
@@ -613,6 +632,37 @@ func _integrate(dt: float) -> void:
 	if global_position.y < -5:  # 혹시 바닥을 뚫으면 복구
 		global_position.y = 0.5
 		velocity.y = 0
+
+
+## 흡혈귀 박쥐 돌진 이동 (Vampire.start_dash가 dash_t·dash_dir을 정함). 벽에 막히면 바로 끝.
+## 적과 부딪혔는지는 Combat(이동 다음)이 dash_prev → 지금 위치 선분으로 본다
+func _dash_move(dt: float) -> void:
+	var B: Dictionary = GameData.WEAPONS.bat
+	dash_prev = global_position
+	dash_seg = true
+	velocity = dash_dir * (float(B.dist) / float(B.time))
+	floor_snap_length = 0.0
+	floor_max_angle = deg_to_rad(46.0)
+	move_and_slide()
+	grounded = is_on_floor()
+	on_roof = false
+	for i in get_slide_collision_count():
+		var n := get_slide_collision(i).get_normal()
+		if absf(n.y) < 0.7:  # 벽 (바닥·천장이 아님)
+			dash_t = 0.0
+	dash_t -= dt
+	if dash_t <= 1e-4:  # 0.3초 = 18프레임 (빼기 오차로 한 프레임 더 가지 않게)
+		end_dash()
+
+
+## 돌진 끝: 날아가던 속도를 걷기 속도로 줄여 둠 (위로는 end_vy까지만)
+func end_dash() -> void:
+	dash_t = 0.0
+	var mx := max_speed()
+	var h := Vector2(velocity.x, velocity.z)
+	if h.length() > mx:
+		h = h.normalized() * mx
+	velocity = Vector3(h.x, minf(velocity.y, float(GameData.WEAPONS.bat.end_vy)), h.y)
 
 
 ## 두 지붕(또는 지붕과 벽) 사이 V자 골에 끼어 안 내려가면 골을 따라 밀어냄. 지붕 하나면 중력만으로 흘러내린다

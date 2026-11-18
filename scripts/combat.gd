@@ -20,6 +20,7 @@ var world: WorldBuilder
 var fx: Fx
 var bard_fx: BardFx         # 음유시인 트럼펫 이펙트 (scripts/fx/bard_fx.gd — 보기만 함)
 var star_fx: StarFx         # 황금 붕어빵 무적 반짝임 (scripts/fx/star_fx.gd — 보기만 함)
+var burn_fx: BurnFx         # 흡혈귀 몸에서 나는 불꽃·연기 (scripts/fx/burn_fx.gd — 보기만 함)
 var items: Items            # 닭·말·저격총·AK
 var cannon: Cannon          # 포병 폭발·포탄 점프·탄도 조준 (scripts/cannon.gd)
 var me: PlayerController    # 내 캐릭터 (스코프·3인칭 판단)
@@ -53,6 +54,10 @@ func _ready() -> void:
 	star_fx.name = "StarFx"
 	star_fx.combat = self
 	add_child(star_fx)
+	burn_fx = BurnFx.new()
+	burn_fx.name = "BurnFx"
+	burn_fx.combat = self
+	add_child(burn_fx)
 	items = Items.new()
 	items.name = "Items"
 	items.combat = self
@@ -81,6 +86,7 @@ func warm_mats() -> Array:
 	a.append_array(fx.keep_mats)
 	a.append_array(bard_fx.keep_mats)
 	a.append_array(star_fx.keep_mats)
+	a.append_array(burn_fx.keep_mats())
 	return a
 
 
@@ -192,10 +198,14 @@ func _tick_timers(dt: float) -> void:
 				e.star_t -= dt
 				if e.star_t <= 0:
 					end_star(e)
-			# 체력 재생: REGEN_DELAY초 동안 안 맞으면 1씩 차오른다
+			if e.cls == "vampire":  # 흡혈귀: 햇빛에 탐 (죽을 수 있음)
+				Vampire.burn(self, e, dt)
+				if not e.alive:
+					continue
+			# 체력 재생: REGEN_DELAY초 동안 안 맞으면 1씩 차오른다 (흡혈귀는 regen 0 = 없음)
 			var mh := float(GameData.class_hp(e.cls))
 			e.no_hit_t += dt
-			if e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh:
+			if e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh and GameData.class_regen(e.cls) > 0:
 				e.regen_acc += dt
 				var rs := 1.0 / GameData.class_regen(e.cls)
 				while e.regen_acc >= rs:
@@ -240,6 +250,7 @@ func clear_match_objects() -> void:
 	fx.clear()
 	bard_fx.clear()
 	star_fx.clear()
+	burn_fx.clear()
 	items.clear()
 
 
@@ -407,7 +418,7 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 	var knocked := head and v.helmet
 	var dmg := base * (GameData.HEADSHOT if v.helmet else GameData.BARE_HEAD) if head else base
 	v.hp -= dmg
-	v.last_hit = {"by": a, "kind": kind, "head": head}
+	v.last_hit = {"by": a, "kind": kind, "head": head, "t": clock}  # t: 흡혈귀 화상 사망 처치 인정 (BURN.credit)
 	v.hit_squash = 1.0
 	v.flash = 0.14
 	v.no_hit_t = 0.0
@@ -436,7 +447,7 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 			v.kb_t = maxf(v.kb_t, GameData.KB_TIME_AK)
 	elif kind != "holy" and kind != "trumpet" and v.mounted <= 0:  # 성수·트럼펫은 지속 피해라 경직·미끄러짐 없음
 		v.kb_t = GameData.KB_TIME
-		if v.is_bot:
+		if v.is_bot and kind != "teeth":  # 틀니는 0.5초마다라 봇 경직은 안 줌 (계속 못 움직이게 되니까)
 			v.stagger = GameData.BOT_STAGGER_XBOW if kind == "crossbow" else GameData.BOT_STAGGER
 	# 맞은 방향으로 몸이 출렁 (스프링)
 	if v.model:
@@ -566,6 +577,8 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 		if e.cn_t <= 0:
 			e.cn_t = 0.0
 			Sfx.play("clank", e.global_position)
+	if e.cls == "vampire":  # 흡혈귀: 돌진 재사용 대기·돌진 부딪힘 (공격 금지여도 돌진은 이어짐)
+		Vampire.tick(self, e, dt)
 	# 춤추는 동안엔 어떤 무기로도 공격 못 함 (사용자 요청 — 연주·팡파레·던지기·쏘기·활 당기기 전부)
 	var dancing := e.dance_t > 0
 	# 음유시인은 숨이 다른 무기를 들고 있어도 돌아온다. 연주·팡파레는 트럼펫을 들고 넘어지지·춤추지 않았을 때만
@@ -606,6 +619,8 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 				fire(e, "ak")
 		"trumpet":  # 위에서 Trumpet.update가 처리
 			pass
+		"teeth":  # 흡혈귀: 좌클릭 물기 (누르고 있으면 0.5초마다) / 우클릭 박쥐 돌진
+			Vampire.update(self, e, held)
 	e.trig_prev = held
 	e.cancel_req = false
 
@@ -1337,6 +1352,15 @@ func remote_fanfare(e: PlayerController) -> void:
 	for v in ents:
 		if v.alive and not v.is_remote:
 			Trumpet.hit_fanfare(self, e, v)
+
+
+## 친구 흡혈귀가 물거나(bat = false) 돌진으로 부딪힘(bat = true) — 모습·소리·피는 모두, 피해는 맞은 게 내 캐릭터(내 봇)일 때만
+func remote_bite(e: PlayerController, v: PlayerController, mine: bool, fed: bool, bat: bool) -> void:
+	Vampire.bite_fx(self, e, v, fed)
+	if v and mine and v.alive:
+		var B: Dictionary = GameData.WEAPONS.bat if bat else GameData.WEAPONS.teeth
+		var d := Vector3(v.global_position.x - e.global_position.x, 0, v.global_position.z - e.global_position.z)
+		damage(v, e, float(B.dmg), "bat" if bat else "teeth", false, d.normalized() if d.length_squared() > 1e-4 else Vector3(0, 0, 1))
 
 
 ## 친구가 맞음 (친구 쪽에서 판정해서 알려줌): 맞은 효과·숫자·히트마크

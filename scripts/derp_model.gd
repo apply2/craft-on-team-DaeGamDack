@@ -38,6 +38,8 @@ var carriage: Node3D = null     # 포병: 바퀴 달린 나무 포가 (모델 �
 var wheels: Array[Node3D] = []  # 포병 바퀴 (이동하면 굴러감 — 합치지 않는 따로 노드)
 var barrel: Node3D = null       # 포병 포신 (= weapons.cannon, 조준 높이를 따라 들림)
 var _wheel_rot := 0.0
+var jaws := {}                  # 흡혈귀 틀니 {g, up, lo} — 물면 딱 다물림 (WeaponModels.make_teeth)
+var cape: Node3D = null         # 흡혈귀 망토 (달리면 뒤로 펄럭)
 
 # 애니메이션 상태 (HTML 엔티티의 wob/nk/eye 필드)
 var phase := 0.0
@@ -259,6 +261,7 @@ func _build() -> void:
 		_build_robe()
 	head = _group(Vector3(0, 0.36, 0), neck)
 	head.scale = Vector3.ONE * 1.12
+	skin = int(K.get("skin", skin))  # 흡혈귀: 창백한 피부
 	_part(_sph, skin, Vector3.ZERO, Vector3(0.3, 0.28, 0.29), head)
 	# 짝짝이 왕눈
 	var eye_r := [randf_range(0.095, 0.11), randf_range(0.068, 0.082)]
@@ -271,7 +274,7 @@ func _build() -> void:
 		_part(_sph, 0xffffff, Vector3.ZERO, Vector3.ONE * er, eg, false)
 		var pu := _part(_sph, 0x15151b, Vector3(0, 0, er * 0.8), Vector3(er * 0.45, er * 0.45, er * 0.3), eg, false)
 		pupils.append({"m": pu, "r": er})
-	_part(_sph, 0xe8b28a, Vector3(0, -0.075, 0.29), Vector3(0.06, 0.05, 0.065), head)
+	_part(_sph, 0xc9cbd6 if cls == "vampire" else 0xe8b28a, Vector3(0, -0.075, 0.29), Vector3(0.06, 0.05, 0.065), head)
 	var mouth := _part(_sph, 0x6b2a2a, Vector3(randf_range(-0.03, 0.04), -0.165, 0.245), Vector3(0.08, 0.035, 0.03), head, false)
 	mouth.rotation.z = randf_range(-0.3, 0.3)
 	var tongue: MeshInstance3D = null
@@ -374,6 +377,8 @@ func _build_outfit() -> void:
 				_part(_sph, GameData.C.gold, _on_body(Vector3(0, 0.35 - i * 0.22, 1)), Vector3.ONE * 0.03, body)
 			_part(_cyl, 0xb8322a, Vector3(0, 0.5, 0), Vector3(0.25, 0.08, 0.23), body)
 			_part(_cyl, 0x3f5a28, Vector3(0, -0.24, 0), Vector3(0.44, 0.08, 0.4), body)
+		"vampire":
+			_vampire_outfit()
 
 
 ## 음유시인: 화려한 광대풍 옷 (사용자 요청). 색은 GameData.TRUMPET_LOOK
@@ -438,6 +443,29 @@ func _flatten(g: Node3D) -> void:
 	g.free()
 
 
+## 흡혈귀: 검은 연미복 + 흰 셔츠 앞섶·빨간 보석 + 높은 깃 + 안감 빨간 망토 (망토는 따로 노드 — 달리면 뒤로 펄럭)
+func _vampire_outfit() -> void:
+	var VF: Dictionary = GameData.VAMP_FX
+	_part(_box, 0xf2f0ea, _on_body(Vector3(0, 0.2, 1)) + Vector3(0, -0.02, -0.02), Vector3(0.16, 0.36, 0.03), body)   # 셔츠 앞섶
+	_part(_sph, int(VF.lining), _on_body(Vector3(0, 0.45, 1)), Vector3(0.06, 0.05, 0.035), body)                      # 목 보석
+	for sx in [1.0, -1.0]:  # 연미복 앞깃 (V자)
+		_rot(_part(_box, 0x2c2836, _on_body(Vector3(sx * 0.22, 0.15, 1)), Vector3(0.07, 0.42, 0.03), body), Vector3(0, 0, sx * 0.3))
+	for i in 3:
+		_part(_sph, 0xb8b8c0, _on_body(Vector3(0, -0.1 - i * 0.18, 1)), Vector3.ONE * 0.022, body)
+	# 높은 깃: 어깨 뒤에서 귀 높이까지 부채꼴로 서 있음 (바깥 검정, 안쪽 빨강)
+	for sx in [1.0, -1.0]:
+		var c := _group(Vector3(sx * 0.17, 0.42, -0.2), body)
+		c.rotation = Vector3(-0.25, sx * 0.55, sx * -0.35)
+		_part(_box, int(VF.cape), Vector3(0, 0.2, 0), Vector3(0.26, 0.42, 0.025), c)
+		_part(_box, int(VF.lining), Vector3(0, 0.2, 0.016), Vector3(0.22, 0.38, 0.012), c)
+	# 망토: 어깨에서 발목까지 뒤로 (바깥 검정 + 안감 빨강이 가장자리로 보임)
+	cape = _group(Vector3(0, 0.42, -0.36), body)
+	_part(_box, int(VF.cape), Vector3(0, -0.62, -0.02), Vector3(0.92, 1.3, 0.035), cape)
+	_part(_box, int(VF.lining), Vector3(0, -0.6, 0.01), Vector3(0.84, 1.24, 0.02), cape)
+	for sx in [1.0, -1.0]:  # 아래 끝이 박쥐 날개처럼 뾰족
+		_rot(_part(_cone, int(VF.cape), Vector3(sx * 0.3, -1.3, -0.02), Vector3(0.16, 0.18, 0.02), cape), Vector3(PI, 0, 0))
+
+
 ## 성직자: 긴 사제복 + 보라 영대 + 밧줄 허리띠 + 금 십자가
 func _build_robe() -> void:
 	_part(_skirt, 0xeee6d2, Vector3(0, -0.52, 0), Vector3.ONE, body)
@@ -484,6 +512,14 @@ func _build_head_extras(mouth: MeshInstance3D, tongue: MeshInstance3D) -> void:
 				_part(_sph, 0xf09a9a, Vector3(sx * 0.18, -0.09, 0.23), Vector3(0.06, 0.04, 0.02), head)
 		"crossbow":  # 사슬 목가리개
 			_part(_sph, STEEL_D, Vector3(0, -0.15, -0.1), Vector3(0.31, 0.18, 0.29), head)
+		"vampire":  # 송곳니 둘 + 검붉은 입 + 치켜 올라간 눈썹 (머리는 투구 자리 = 헤드샷이면 가발처럼 날아감)
+			var VF: Dictionary = GameData.VAMP_FX
+			mouth.material_override = _mat(int(VF.lip))
+			for sx in [1.0, -1.0]:
+				_rot(_part(_cone, int(VF.fang), mouth.position + Vector3(sx * 0.035, -0.035, 0.025), Vector3(0.016, 0.055, 0.016), head, false), Vector3(PI, 0, 0))
+				_rot(_part(_box, int(VF.hair), Vector3(sx * 0.12, 0.13, 0.25), Vector3(0.12, 0.025, 0.02), head), Vector3(0, 0, -sx * 0.4))
+			if tongue:
+				tongue.visible = false
 		"bard":  # 연주하면 빵빵해지는 볼 + 뒤로 넘긴 갈색 머리
 			for sx in [1, -1]:
 				var ck := _part(_sph, GameData.TRUMPET_LOOK.cheek, Vector3(sx * 0.15, -0.12, 0.2), Vector3(0.075, 0.065, 0.06), head)
@@ -521,6 +557,8 @@ func _build_weapons(K: Dictionary) -> void:
 				WeaponModels.make_sniper(w, _mat)
 			"ak":
 				WeaponModels.make_ak(w, _mat)
+			"teeth":
+				jaws = WeaponModels.make_teeth(w, _mat)
 			"chicken":
 				var c := WeaponModels.make_chicken(_mat)
 				c.g.scale = Vector3.ONE * 0.75
@@ -569,7 +607,7 @@ func set_mine(mine: bool) -> void:
 func _make_arm(sx: float, K: Dictionary) -> Node3D:
 	var g := _group(Vector3(sx * 0.44, 1.22, 0), upper)
 	_part(_cyl, K.get("arm", K.color), Vector3(0, -0.2, 0), Vector3(0.085, 0.4, 0.085), g)
-	_part(_sph, GameData.C.skin, Vector3(0, -0.44, 0), Vector3.ONE * 0.1, g)
+	_part(_sph, int(K.get("skin", GameData.C.skin)), Vector3(0, -0.44, 0), Vector3.ONE * 0.1, g)
 	return g
 
 
@@ -619,6 +657,11 @@ func _build_helm() -> void:
 			_rot(_part(_box, 0x2a2a2e, Vector3(0, 0.23, 0.27), Vector3(0.3, 0.03, 0.15), helm), Vector3(0.35, 0, 0))
 			_part(_box, GameData.C.gold, Vector3(0, 0.38, 0.24), Vector3(0.11, 0.13, 0.02), helm)
 			_part(_sph, 0xd2463c, Vector3(0, 0.62, 0.14), Vector3.ONE * 0.065, helm)
+		"vampire":  # 뒤로 바짝 넘긴 검은 머리 + 이마 가운데 뾰족 (헤드샷이면 가발처럼 날아감)
+			var HC := int(GameData.VAMP_FX.hair)
+			_part(_sph, HC, Vector3(0, 0.07, -0.05), Vector3(0.315, 0.27, 0.31), helm)
+			_rot(_part(_cone, HC, Vector3(0, 0.2, 0.2), Vector3(0.1, 0.16, 0.05), helm), Vector3(PI + 0.5, 0, 0))   # 이마 V
+			_part(_sph, HC, Vector3(0, -0.04, -0.2), Vector3(0.24, 0.2, 0.13), helm)                              # 뒤통수
 		"cleric":  # 주교 모자
 			_part(_mitre, 0xf4efe2, Vector3(0, 0.43, 0), Vector3.ONE, helm)
 			_part(_cyl, GameData.C.gold, Vector3(0, 0.22, 0), Vector3(0.245, 0.05, 0.245), helm)
@@ -746,6 +789,8 @@ func animate(p, dt: float) -> void:
 		arm_r.rotation = Vector3(-1.25, 0, 0.35)
 		arm_l.rotation = Vector3(-0.9 + sin(t * 9) * 0.15, 0, -0.2)
 		upper.rotation.x = 0.15 + wob.x
+	if not jaws.is_empty() or cape:
+		_anim_vampire(p, wep, hs, fa)
 	for key: String in weapons:
 		(weapons[key] as Node3D).visible = key == wep
 	p.fire_anim = maxf(0.0, p.fire_anim - dt * (GameData.THROW_ANIM if thrower else GameData.FIRE_ANIM))
@@ -764,6 +809,28 @@ func animate(p, dt: float) -> void:
 		if helm:
 			_set_emission(_helm_mats, c)
 		_fl = p.flash > 0
+
+
+## 흡혈귀: 틀니가 물 때 딱 다물렸다 벌어짐(평소엔 딱딱 떨림), 망토는 달리면 뒤로 날림, 박쥐 돌진 중엔 두 팔을 날개처럼 펴고 앞으로 숙임
+func _anim_vampire(p, wep: String, hs: float, fa: float) -> void:
+	if not jaws.is_empty():
+		var snap := sqrt(clampf(p.fire_anim, 0.0, 1.0))  # 물면 1 → 딱 다물렸다가 천천히 벌어짐
+		var open := (0.42 + sin(t * 9.0 + seed_off) * 0.05) * (1.0 - snap)
+		(jaws.up as Node3D).rotation.x = -open * 0.45
+		(jaws.lo as Node3D).rotation.x = open
+		if wep == "teeth" and p.fire_anim > 0 and fa == 0.0:
+			arm_r.rotation.x -= sin(p.fire_anim * PI) * 0.7  # 앞으로 쑥 내밀어 문다
+	var dash: Variant = p.get("dash_t")
+	var dashing := dash != null and float(dash) > 0.0
+	if dashing and fa == 0.0 and p.mounted <= 0:
+		arm_l.rotation = Vector3(-0.6, 0, 1.45)
+		arm_r.rotation = Vector3(-0.6, 0, -1.45)
+		upper.rotation.x += 0.65
+		leg_l.rotation = Vector3(0.7, 0, 0.15)
+		leg_r.rotation = Vector3(0.7, 0, -0.15)
+	if cape:
+		var fl := clampf(hs / 8.0, 0.0, 1.0)
+		cape.rotation.x = -fl * 0.55 - (0.5 if dashing else 0.0) + sin(t * 7.0 + seed_off) * 0.05 * (0.3 + fl)
 
 
 ## 포병: 포가 위에 걸터앉은 자세. 바퀴는 앞뒤로 움직인 만큼 구르고, 포신은 조준 높이를 따라 들림

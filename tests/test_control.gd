@@ -387,7 +387,9 @@ func _run() -> void:
 	mode.unlock_left = 0.05
 	for e in C.ents:
 		if e != p:
-			e.scripted_input = {}
+			e.scripted_input = {} if e.team == p.team else IDLE  # 상대 팀은 스폰룸에 세워 둠 (싸움 결과에 따라 흔들리지 않게 — 거점으로 가는지만 봄)
+			if e.team == p.team:
+				e.next_cls = "barbarian"  # 거점 역할 병과로 (궁수·석궁병은 감시 지점, 흡혈귀는 가는 길에 타 죽을 수 있음)
 			e.spawn_at(mode.spawn_pos(e))
 	G.ai_enabled = true
 	p.spawn_at(Vector3(0, 0, 60))
