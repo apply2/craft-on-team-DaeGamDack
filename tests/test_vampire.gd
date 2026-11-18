@@ -108,13 +108,13 @@ func _run() -> void:
 	# ── 기본 스탯 ──
 	put(p, HOME, "vampire", 0.0)
 	await wait(2)
-	check("흡혈귀: 체력 135 · 무기 틀니 · 모델에 틀니·망토", p.hp == 135.0 and float(G.class_hp("vampire")) == 135.0 and p.wep == "teeth" and not p.model.jaws.is_empty() and p.model.cape != null, "hp=%.0f wep=%s" % [p.hp, p.wep])
+	check("흡혈귀: 체력 125 · 무기 틀니 · 모델에 틀니·망토", p.hp == 125.0 and float(G.class_hp("vampire")) == 125.0 and p.wep == "teeth" and not p.model.jaws.is_empty() and p.model.cape != null, "hp=%.0f wep=%s" % [p.hp, p.wep])
 	check("걷기 속도 = 5.4 × 1.125 (밸런스 ×0.9)", near(p.max_speed(), G.BASE_SPEED * 1.125, 0.001), "%.3f" % p.max_speed())
 	check("자연 회복 없음 (regen 0)", G.class_regen("vampire") == 0.0, "")
 	check("병과 목록·봇 병과에 흡혈귀", G.CLASS_ORDER.has("vampire") and G.bot_classes().has("vampire"), "")
 	check("친구대전 무기 번호에 틀니·박쥐·화상", main.get_node("Net").WEPS.has("teeth") and main.get_node("Net").WEPS.has("bat") and main.get_node("Net").WEPS.has("burn"), "")
 
-	# ── 화상: 가만히 있으면 3초 뒤부터 타서 12초 뒤에 죽음 (총 15초) ──
+	# ── 화상: 가만히 있으면 1.5초 뒤부터 타서 12.5초 뒤에 죽음 (총 14초) ──
 	kills.clear()
 	put(p, HOME, "vampire", 0.0)
 	var k0: int = p.kills
@@ -136,7 +136,7 @@ func _run() -> void:
 	var die_f := int(round((float(BU.grace) + MAXHP / (float(BU.dmg) / float(BU.tick))) / DT))
 	check("스폰 뒤 3초 동안은 안 탐", hp3 == MAXHP, "%.1f" % hp3)
 	check("그 뒤 0.25초마다 2.5씩 (0.5초 = 5)", near(hp35, MAXHP - 5.0, 0.01), "%.1f" % hp35)
-	check("가만히 있으면 16.5초(3 + 135/10)에 죽음", absi(died_at - die_f) <= 2 and die_f == 990, "%d프레임 (%.2f초)" % [died_at, died_at * DT])
+	check("가만히 있으면 14초(1.5 + 125/10)에 죽음", absi(died_at - die_f) <= 2 and die_f == 840, "%d프레임 (%.2f초)" % [died_at, died_at * DT])
 	check("  아무도 안 때렸으면 자멸 (처치 +0, 킬피드 공격자 = 자기, 무기 burn)",
 		kills.size() == 1 and kills[0][1] == p and kills[0][2] == "burn" and p.kills == k0, str(kills))
 	await wait(200)  # 부활
@@ -202,7 +202,7 @@ func _run() -> void:
 	vamp(MH - 2.0)
 	await wait(3)
 	await press(BITE)
-	check("회복해도 최대 체력(135)을 안 넘음", p.hp == MH, "hp=%.1f" % p.hp)
+	check("회복해도 최대 체력(125)을 안 넘음", p.hp == MH, "hp=%.1f" % p.hp)
 	await wait(40)
 	# 처치하면 추가 30 (물기 15 + 처치 30 = 45)
 	put(dm, HOME + Vector3(0, 0, -1.5), "archer", 0.0)

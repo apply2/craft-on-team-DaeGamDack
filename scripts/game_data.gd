@@ -171,7 +171,7 @@ const CLASSES := {
 	# 사용자 요청 새 병과 (HTML에 없음): 대낮이라 몸에 불이 붙은 드라큘라. 틀니로 물어 피를 채워야 버팀 (화상은 BURN)
 	#   regen 0: 자연 회복 없음 (화상 초당 10을 상쇄하지 않게 — 사용자 확인). 성수 웅덩이·스폰룸 회복은 받음
 	#   skin: 머리·손 피부색 (없으면 C.skin)
-	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.125, "hp": 135, "regen": 0,  # 속도 (1.25). 체력 120→150→120→135 (밸런스: 150은 너무 세고 120은 너무 약함)
+	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.125, "hp": 125, "regen": 0,  # 속도 (1.25). 체력 120→150→120→135→125 (밸런스)
 		"skin": 0xe4e6ee, "color": 0x1c1a24, "leg": 0x1c1a24, "arm": 0x1c1a24, "foot": 0x111014, "pips": [4, 3, 1, 3],
 		"desc": "햇빛에 계속 타들어간다. 틀니로 물어뜯어 피를 채우고, 박쥐로 돌진해 달라붙는 근접형."},
 }
@@ -203,7 +203,7 @@ const WEAPONS := {
 		"self_mul": 1.0 / 3.0, "jump_r": 2.5, "jump_up": 22.0, "jump_side": 5.0, "air_ctrl": 0.3, "air_grav": 0.75, "aim_slow": 0.7,
 		"ball": 0.17, "color": 0x2a2a2e, "shake": {"max": 1.1, "near": 4.0, "far": 26.0},
 		"aim_every": 2, "aim_dots": 28},
-	"stone": {"name": "돌멩이", "dmg": 10, "cd": 0.4, "speed": 32, "grav": 16, "range": 15, "kb": 4, "up": 2.6, "radius": 0.12,
+	"stone": {"name": "돌멩이", "dmg": 11, "cd": 0.4, "speed": 32, "grav": 16, "range": 15, "kb": 4, "up": 2.6, "radius": 0.12,
 		"color": 0x8b8f96, "size": 0.11},  # size: 돌 모양 반지름 (손에 든 것·날아가는 것)
 	# 사용자 요청 궁수 버프 (계속 압박하는 무기): 짧게 끊어 연사, 꽉 당기면 세고 곧게. 차지 비율 = bow_t(당긴 시간)
 	# nock: 쏜 뒤 다음 화살 거는 시간 (1.0→0.3) / full: 끝까지 당기는 시간 (1.5→1.0)
@@ -301,7 +301,7 @@ const WEAPONS := {
 # 화상으로 죽으면 credit초 안에 그 흡혈귀를 때린 사람이 있으면 마지막으로 때린 사람이 처치, 없으면 자멸
 # 황금 붕어빵 무적·쟁탈전 라운드 사이엔 안 탐. low_hp 이하면 내 화면 가장자리에 타는 비네트 (hud BurnEdge)
 # snd_every: 지글 소리 간격 (임시 합성 "burn" — audio/sfx/burn.ogg를 넣고 Sfx.FILES에 더하면 바뀜)
-const BURN := {"tick": 0.25, "dmg": 2.5, "grace": 3.0, "credit": 5.0, "low_hp": 40.0, "snd_every": 0.5,
+const BURN := {"tick": 0.25, "dmg": 2.5, "grace": 1.5, "credit": 5.0, "low_hp": 40.0, "snd_every": 0.5,
 	"vig_col": 0xff4a1a, "vig_alpha": 0.75, "flicker_hz": 9.0}
 # 흡혈귀 연출 (보기만 함 — scripts/fx/burn_fx.gd). 불꽃·연기는 MultiMesh 풀 둘 (그리기 2번)
 #   flame_every / smoke_every: 한 명당 몇 초마다 하나 / pool: 전체 상한 / blood: 물었을 때 피 조각 수
