@@ -5,6 +5,11 @@ extends Node
 
 # ── 공통 상수 (HTML 386번째 줄) ──────────────────────────────
 const FALL_TIME := 0.6       # 넘어져 있는 시간(초)
+## 급회전 넘어짐 (사용자 요청 — 예전 HTML은 "자기 최고 속도의 75%"라 느린 병과도 똑같이 넘어졌음):
+## 실제 속도(m/s)가 min_speed 이상일 때 window초 안에 반대쪽을 누르면 넘어짐. 빠를수록 덜 꺾어도 넘어짐 —
+## 꺾은 각도가 min_speed에서 angle_slow° 이상, fast_speed 이상에서 angle_fast° 이상 (사이는 속도에 비례).
+## 지금 병과 속도로: 포병(3.8)·석궁병(걷기 4.1·달리기 5.6)은 안 넘어짐, 궁수·음유시인·성직자는 달릴 때만, 야만인·흡혈귀는 걸어도 넘어짐
+const TRIP := {"min_speed": 5.8, "fast_speed": 9.0, "angle_slow": 120.0, "angle_fast": 95.0, "window": 0.25}
 const LAND_TRIP := 0.2       # 점프하고 착지할 때 넘어질 확률 (사용자 요청으로 다시 넣음)
 const HEADSHOT := 1.5        # 투구 쓴 머리 배율
 const BARE_HEAD := 2.0       # 투구 벗겨진 머리 배율

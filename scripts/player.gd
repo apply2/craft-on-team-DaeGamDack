@@ -28,6 +28,7 @@ var fall_yaw := 0.0
 var trip_cd := 0.0
 var fast_t := 0.0
 var fast_dir := Vector2.ZERO
+var fast_v := 0.0  # 급회전 판정에 쓰는 마지막 빠른 속도 (m/s)
 var kb_t := 0.0       # 넉백 중 (속도 제한 완화, 넘어짐 판정 정지)
 var stagger := 0.0    # 경직 (입력 무시)
 var slow_t := 0.0     # 성수 둔화
@@ -503,7 +504,6 @@ func movement(wish: Vector3, jump: bool, crouch_in: bool, dt: float) -> void:
 		_dash_move(dt)
 		return
 	var mtd := mounted > 0
-	var spr_k := GameData.SPRINT if sprinting and not mtd else 1.0
 	var mx := max_speed()
 	slow_t -= dt
 	var hs := Vector2(velocity.x, velocity.z).length()
@@ -523,12 +523,14 @@ func movement(wish: Vector3, jump: bool, crouch_in: bool, dt: float) -> void:
 		crouch_in = false
 	trip_cd -= dt
 	fast_t -= dt
-	# 관성: 빠르게 달린 뒤 0.25초 안에 반대 방향을 누르면 (키를 바꾸는 틈에 속도가 줄어도) 넘어짐
+	# 관성: 실제 속도가 TRIP.min_speed 이상이었던 뒤 window초 안에 반대쪽을 누르면 넘어짐
+	# (키를 바꾸는 틈에 속도가 줄어도). 빠를수록 덜 꺾어도 넘어짐 — trip_dot()
 	if not mtd and grounded and fall_t <= 0 and not sliding and stagger <= 0 and kb_t <= 0 and trip_cd <= 0 and not crouch_in:
-		if hs >= mx / spr_k * 0.75:
+		if hs >= float(GameData.TRIP.min_speed):
 			fast_dir = Vector2(velocity.x, velocity.z) / hs
-			fast_t = 0.25
-		if wish.length_squared() > 0.01 and fast_t > 0 and fast_dir.dot(Vector2(wish.x, wish.z)) < -0.34:
+			fast_v = hs
+			fast_t = float(GameData.TRIP.window)
+		if wish.length_squared() > 0.01 and fast_t > 0 and fast_dir.dot(Vector2(wish.x, wish.z).normalized()) < trip_dot(fast_v):
 			fast_t = 0
 			trip()
 			toast.emit("급회전하다 넘어짐!")
@@ -730,6 +732,14 @@ func fall_amt() -> float:
 	if fall_t <= 0:
 		return 0.0
 	return maxf(0.0, minf(1.0, minf((GameData.FALL_TIME - fall_t) / 0.08, fall_t / 0.06)))
+
+
+## 급회전 넘어짐 기준: 이 속도(m/s)로 가다가 누른 방향과의 내적이 이 값보다 작으면 넘어짐
+## (min_speed → angle_slow°, fast_speed 이상 → angle_fast°, 사이는 속도에 비례)
+static func trip_dot(speed: float) -> float:
+	var T: Dictionary = GameData.TRIP
+	var k := clampf(inverse_lerp(float(T.min_speed), float(T.fast_speed), speed), 0.0, 1.0)
+	return cos(deg_to_rad(lerpf(float(T.angle_slow), float(T.angle_fast), k)))
 
 
 func trip() -> void:

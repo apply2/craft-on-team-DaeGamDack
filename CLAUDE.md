@@ -52,6 +52,7 @@ scripts/hud.gd         경기 중 화면 (HTML updateHUD, 모양은 시안 Hud �
 scripts/menu.gd        메뉴 (메인·난이도·병과·설정·친구대전 자리·나가기), 일시정지, 결과 화면, 아래쪽 알림 상자(toast)
 scripts/ui_kit.gd      메뉴·HUD 공용 조각 (HTML CSS의 .panel·.primary·.ghost·.navbtn·병과 카드·난이도 카드·점수판, 병과 아이콘 SVG) + 마을 게시판 재료 (Board·Face·KitButton·tilted·쇠못) — 아래 "UI: 마을 게시판 스타일"
 tests/test_movement.gd 이동 자동 테스트 (HTML과 같은 값이 나오는지)
+tests/test_trip.gd     급회전 넘어짐 기준: 병과별 걷기·달리기 → 넘어짐 여부, 속도별 꺾는 각도, 둔화
 tests/test_combat.gd   피격·피해·투구·재생·부활·스폰 자동 테스트
 tests/test_stone.gd    돌멩이·투사체·맞은 효과 자동 테스트
 tests/test_bow.gd      활 당기기·세기·후들거림·손 미끄러짐·꽂힘·반동 자동 테스트
@@ -250,7 +251,10 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 - **슬라이드**: 최대속도의 55% 이상으로 달리다 Ctrl/C를 누른 순간 시작한다.
   - 0.8초 동안 미끄러지고, 시작할 때 속도 +3.2(최대속도 2배까지)
   - 다시 쓰려면 1.1초 기다려야 함
-- **급회전 넘어짐**: 최대 걷기속도의 75% 이상으로 움직인 뒤 0.25초 안에 반대쪽(내적 < -0.34)을 누르면 넘어진다.
+- **급회전 넘어짐** (사용자 요청으로 기준을 바꿈 — 예전 HTML은 "자기 최고 걷기속도의 75%"라 느린 병과도 똑같이 넘어졌음. 수치 `GameData.TRIP`, 함수 `player.trip_dot`):
+  **실제 속도**가 5.8m/s(`min_speed`) 이상이었던 뒤 0.25초 안에 많이 꺾은 쪽을 누르면 넘어진다. 빠를수록 덜 꺾어도 넘어짐:
+  5.8m/s에선 120° 이상, 9.0m/s(`fast_speed`) 이상에선 95° 이상 (사이는 속도에 비례). 둔화되면 실제 속도가 줄어서 덜 넘어진다.
+  지금 병과로: 포병·석궁병은 안 넘어짐(석궁병 달리기 5.58), 궁수·음유시인·성직자는 달릴 때만, 야만인·흡혈귀는 걸어도 넘어짐. `tests/test_trip.gd`가 병과마다 확인 (병과 속도를 바꾸면 이 표도 볼 것).
   - 키를 바꾸는 틈에 속도가 줄어도 넘어지게 하려고 0.25초 창을 둔다.
   - 넘어진 상태로 0.6초 동안 미끄러지고, 그동안 입력이 막힌다.
   - 일어난 뒤 0.5초 동안은 다시 넘어지지 않는다.
@@ -843,6 +847,7 @@ godot --headless --path . --quit-after 120
 
 # 이동·전투·돌멩이 자동 테스트 — 모두 "ALL PASS"가 나와야 함
 godot --headless --fixed-fps 60 --path . -s tests/test_movement.gd
+godot --headless --fixed-fps 60 --path . -s tests/test_trip.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_combat.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_stone.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_bow.gd
