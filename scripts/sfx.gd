@@ -228,8 +228,12 @@ func loop(owner: Object, sound: String, pos: Vector3, pitch: float = 1.0) -> voi
 	var p: AudioStreamPlayer = L.p
 	if p:
 		var vol := vol_at(pos) * float(GameData.SFX_GAIN.get(sound, 1.0)) * GameData.SFX_VOL
-		p.volume_db = linear_to_db(maxf(vol, 0.0001))
-		p.pitch_scale = maxf(0.01, pitch * float(GameData.SFX_PITCH.get(sound, 1.0)))
+		var db := linear_to_db(maxf(vol, 0.0001))
+		if absf(p.volume_db - db) > 0.2:  # 바뀔 때만 (웹은 넣을 때마다 브라우저에 명령이 감)
+			p.volume_db = db
+		var ps := maxf(0.01, pitch * float(GameData.SFX_PITCH.get(sound, 1.0)))
+		if absf(p.pitch_scale - ps) > 0.005:
+			p.pitch_scale = ps
 		if not p.playing:
 			p.play()
 
@@ -263,7 +267,7 @@ func _update_loops() -> void:
 			continue
 		if paused:
 			L.frame = now  # 일시정지 동안엔 안 불려도 그대로 둠
-		if p:
+		if p and p.stream_paused != paused:
 			p.stream_paused = paused
 
 

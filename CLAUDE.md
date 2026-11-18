@@ -711,6 +711,12 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
       말은 꼬리(따로 흔들림)·마상창(`Items.held_lance`가 창끝 조각을 찾음)을 skip. 새 모델에 쓸 땐 따로 움직이는 MeshInstance3D를 skip에 넣을 것.
     - 웹 그림자 거리 `GFX.*.web_shadow_dist` (보통 70m, 높음 220m) → `GameData.shadow_dist_now()`.
     - 메뉴 병과 무리·병과 액자·결과 무대·1인칭 손 SubViewport의 MSAA도 `GameData.msaa_now()`를 따름.
+  - **웹 렉 대응 3** (사용자 "웹이 메뉴·경기 내내 끊기고 노래도 끊김", 탭 하나여도):
+    - 웹은 그래픽 품질을 직접 고르기 전엔 `WEB_PERF.quality`("low" — 그림자·잔디·소품 끔)로 시작. 설정에서 고르면 `[video] quality_set = true`로 저장하고 그걸 씀 (예전 파일의 기본 '보통'은 무시). PC는 그대로.
+      측정(PC 1280×720): 개인전 274 → 484 FPS·그리기 358 → 242, 쟁탈전 218 → 343·466 → 298.
+    - 소리 속성은 **바뀔 때만** 넣는다 (`Music.set_db`·`set_paused`, Sfx 반복 소리). 웹은 음악을 브라우저 소리(Sample)로 틀어서 넣을 때마다 브라우저에 명령이 가는데, 예전엔 매 프레임 `stream_paused = false`·`volume_db`를 넣었다.
+    - 트럼펫 멜로디(`TrumpetVoice`)는 조용하면 플레이어를 멈춤 (예전엔 메뉴 무리·봇 음유시인마다 늘 돌며 0을 채움 — 웹은 소리 섞기가 화면 프레임 안이라 부담). 동시에 소리를 만드는 건 가장 큰 `MAX_VOICES`(2)개, 음높이는 32샘플마다 계산.
+    - 병과 고르기·대기실처럼 화면을 다 덮는 페이지(`Menu.COVER_PAGES`)에선 뒤의 3D를 안 그림 (`viewport.disable_3d`, `menu._sync_3d`).
 
 ## PC 내보내기 (exe)
 

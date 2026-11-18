@@ -170,18 +170,30 @@ func _process(dt: float) -> void:
 	dt /= maxf(Engine.time_scale, 0.01)  # 페이드는 실제 시간대로 (히트스톱·결과 화면 느린 화면과 상관없이)
 	_duck = move_toward(_duck, _duck_target, _duck_rate * dt)
 	_ov_gain = move_toward(_ov_gain, _ov_target, _ov_rate * dt)
-	_ov.volume_db = linear_to_db(maxf(_ov_gain, 0.0001))
+	set_db(_ov, linear_to_db(maxf(_ov_gain, 0.0001)))
 	if _ov_gain <= 0.0 and _ov_target <= 0.0 and _ov.playing:
 		_ov.stop()
 	for i in 2:
 		var g: float = move_toward(_gain[i], _target[i], _rate[i] * dt)
 		_gain[i] = g
-		_p[i].volume_db = linear_to_db(maxf(g * _duck, 0.0001))
+		set_db(_p[i], linear_to_db(maxf(g * _duck, 0.0001)))
 		if g <= 0.0 and _target[i] <= 0.0 and _p[i].playing:
 			_p[i].stop()
 			_paths[i] = ""
 		# 덮어쓰는 동안 원래 곡은 다 줄면 일시정지 (끝나면 그 자리부터 이어서)
-		_p[i].stream_paused = _duck <= 0.0 and _duck_target <= 0.0
+		set_paused(_p[i], _duck <= 0.0 and _duck_target <= 0.0)
+
+
+## 소리 크기·일시정지는 바뀔 때만 넣는다. 웹은 음악을 브라우저 소리(Sample)로 틀어서
+## 넣을 때마다 브라우저에 명령이 가는데, Godot은 같은 값이어도 매번 보낸다 (매 프레임 일시정지 풀기 = 음악 끊김·렉)
+static func set_db(p: AudioStreamPlayer, db: float) -> void:
+	if absf(p.volume_db - db) > 0.05:
+		p.volume_db = db
+
+
+static func set_paused(p: AudioStreamPlayer, on: bool) -> void:
+	if p.stream_paused != on:
+		p.stream_paused = on
 
 
 ## 웹: 첫 클릭·키 입력에서 소리 잠금이 풀린다

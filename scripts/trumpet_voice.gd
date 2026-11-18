@@ -4,6 +4,12 @@ extends AudioStreamPlayer
 ## 연주하는 동안 "도-미-솔-미-도-솔-도"를 반복하고, 음마다 ±detune 센트씩 음정이 살짝 틀어진다.
 ## DerpModel이 음유시인 몸에 하나씩 붙이고 매 프레임 update(연주 중?, 위치)를 부른다.
 ## 크기는 Sfx.vol_at(거리)를 따른다. 소리가 꺼진 환경(헤드리스)에선 만들지 않는다.
+## 가볍게 (웹 렉 대응): 조용하면 플레이어를 멈추고(generator가 안 돎), 동시에 만드는 건 가장 큰 MAX_VOICES개만,
+##   음높이(비브라토·센트)는 PITCH_EVERY샘플마다 한 번만 계산한다.
+
+const MAX_VOICES := 2      # 동시에 소리를 만드는 트럼펫 수 (가장 크게 들리는 것부터)
+const PITCH_EVERY := 32    # 음높이를 다시 계산하는 간격 (샘플). 22050Hz에서 1.5ms — 비브라토 6Hz엔 충분
+static var _all: Array[TrumpetVoice] = []
 
 var _pb: AudioStreamGeneratorPlayback
 var _on := false
@@ -25,8 +31,20 @@ func _ready() -> void:
 	stream = gen
 	bus = "SFX"
 	playback_type = AudioServer.PLAYBACK_TYPE_STREAM  # 웹의 Sample 재생 방식에선 generator가 안 돈다
-	play()
-	_pb = get_stream_playback()
+	_all.append(self)
+
+
+func _exit_tree() -> void:
+	_all.erase(self)
+
+
+## 이 트럼펫보다 크게 들리는 트럼펫 수 (MAX_VOICES 이상이면 이번엔 소리를 안 만듦)
+func _rank() -> int:
+	var r := 0
+	for v in _all:
+		if v != self and (v._want > _want or (v._want == _want and v.get_instance_id() < get_instance_id())):
+			r += 1
+	return r
 
 
 func update(on: bool, pos: Vector3) -> void:
@@ -39,16 +57,20 @@ func update(on: bool, pos: Vector3) -> void:
 
 
 func _process(_dt: float) -> void:
+	var want := _want if _want > 0.001 and _rank() < MAX_VOICES else 0.0
+	if want <= 0.0 and _vol < 0.0005:  # 조용하면 멈춤 (웹에선 소리 섞기를 화면 프레임이 맡아서, 도는 generator마다 부담)
+		_vol = 0.0
+		if playing:
+			stop()
+			_pb = null
+		return
+	if not playing:
+		play()
+		_pb = get_stream_playback()
 	if not _pb:
 		return
 	var n := _pb.get_frames_available()
 	if n <= 0:
-		return
-	if _vol < 0.0005 and _want <= 0.0:  # 조용하면 0만 채움
-		var z := PackedVector2Array()
-		z.resize(n)
-		_pb.push_buffer(z)
-		_vol = 0.0
 		return
 	var S: Dictionary = GameData.TRUMPET_SND
 	var rate := float(S.rate)
@@ -63,17 +85,23 @@ func _process(_dt: float) -> void:
 	var buf := PackedVector2Array()
 	buf.resize(n)
 	var inv := 1.0 / rate
+	var df := 0.0  # 한 샘플에 위상이 도는 양 (PITCH_EVERY마다 다시 계산)
 	for i in n:
-		_vol += (_want - _vol) * 0.0015
+		_vol += (want - _vol) * 0.0015
 		_nt += inv
+		var fresh := i % PITCH_EVERY == 0
 		if _nt >= step:
 			_nt -= step
 			_ni = (_ni + 1) % mel.size()
 			_cents = randf_range(-1, 1) * detune
+			fresh = true
 		_vt += inv
-		var cents := float(mel[_ni]) * 100.0 + _cents + sin(_vt * TAU * vib_hz) * vib_c
-		var f := base * pow(2.0, cents / 1200.0)
-		_ph = fmod(_ph + f * inv, 1.0)
+		if fresh:
+			var cents := float(mel[_ni]) * 100.0 + _cents + sin(_vt * TAU * vib_hz) * vib_c
+			df = base * pow(2.0, cents / 1200.0) * inv
+		_ph += df
+		if _ph >= 1.0:
+			_ph -= 1.0
 		var env := 0.0
 		if _nt < note_len:
 			env = minf(1.0, _nt / 0.012) * minf(1.0, (note_len - _nt) / 0.03)

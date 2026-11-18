@@ -21,7 +21,8 @@ const SETTINGS_SCENE := preload("res://scenes/ui/settings_panel.tscn")
 const MENU_CROWD := preload("res://scripts/ui/menu_crowd.gd")
 const MODEL_STAGE := preload("res://scripts/ui/model_stage.gd")
 const RESULT_STAGE := preload("res://scripts/ui/result_stage.gd")
-const FULL_PAGES := ["main", "class", "lobby"]  # 화면 전체를 자기 배경으로 쓰는 페이지 (메뉴 그늘 끔)
+const FULL_PAGES := ["main", "class", "lobby"]
+const COVER_PAGES := ["class", "lobby"]  # 화면을 다 덮는 페이지: 뒤의 3D 맵은 그리지 않음 (웹 렉 대응)  # 화면 전체를 자기 배경으로 쓰는 페이지 (메뉴 그늘 끔)
 const PAGES := ["main", "diff", "mode", "class", "settings", "exit", "friend", "lobby"]
 
 var cur_page := "main"
@@ -2110,6 +2111,7 @@ func show_screen(id: String) -> void:
 		_end_fx_reset()
 	for k: String in screens:
 		(screens[k] as Control).visible = k == id
+	_sync_3d()
 
 
 func show_page(id: String) -> void:
@@ -2120,6 +2122,14 @@ func show_page(id: String) -> void:
 	if id == "main" and cur_page != "main":
 		_roll_tip()
 	cur_page = id
+	_sync_3d()
+
+
+## 화면을 다 덮는 페이지(병과 고르기·대기실)가 보이면 뒤의 3D(맵·봇)를 안 그림. 그 페이지 안의 모델 액자는 자기 SubViewport라 그대로
+func _sync_3d() -> void:
+	var vp := get_viewport()
+	if vp:
+		vp.disable_3d = (screens.menu as Control).visible and COVER_PAGES.has(cur_page)
 
 
 func _unhandled_input(event: InputEvent) -> void:

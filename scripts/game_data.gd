@@ -437,7 +437,8 @@ const RES_SCALES := [1.0, 0.85, 0.7, 0.5]
 # 웹 전용: 프레임이 늦어도 물리를 한 프레임에 이만큼까지만 따라잡음 (기본 8 → 느린 프레임 뒤에 물리가 몰려서 더 느려지는 걸 막음)
 # auto_mpix: 웹에서 해상도를 직접 고르기 전엔, 3D로 그리는 점이 이만큼(백만 개)을 넘지 않게 RES_SCALES에서 골라 줌
 #   (브라우저 화면은 창 전체 × 화면 배율이라 PC 창 1280x720보다 점이 몇 배 많을 때가 많다)
-const WEB_PERF := {"max_physics_steps": 3, "auto_mpix": 1.9}
+## quality: 웹에서 그래픽 품질을 직접 고르기 전 기본값 (사용자 피드백 "웹이 메뉴부터 계속 끊김" — 그림자·잔디·소품 끔)
+const WEB_PERF := {"max_physics_steps": 3, "auto_mpix": 1.9, "quality": "low"}
 # 성능 표시 (F3): 숫자 바꾸는 간격, 소프트웨어 그래픽(하드웨어 가속 꺼짐)으로 보는 이름
 const PERF_HUD := {"key": KEY_F3, "every": 0.5, "font": 14,
 	"soft_gpu": ["swiftshader", "llvmpipe", "basic render", "software", "softpipe"]}
@@ -839,6 +840,7 @@ var mode := "ffa"           # 지금 고른 게임 모드 (ffa 개인전 / contr
 var gfx_quality := "normal"  # 그래픽 품질 (low / normal / high — GFX)
 var res_scale := 1.0         # 3D 해상도 (RES_SCALES 중 하나, [video] scale)
 var res_scale_saved := false # 설정 파일에 해상도가 있었나 (없으면 웹은 화면 크기로 자동)
+var gfx_saved := false       # 그래픽 품질을 직접 고른 적이 있나 (없으면 웹은 WEB_PERF.quality로 시작)
 
 signal gfx_changed  # 그래픽 품질이 바뀜 (Main: 그림자, 맵: 잔디·소품)
 var chosen_cls := "archer"   # AI대전에서 고른 내 병과
@@ -855,6 +857,8 @@ var _mat_cache := {}
 func _ready() -> void:
 	_setup_input()
 	_setup_font_fallbacks()
+	if OS.has_feature("web"):  # 웹은 가벼운 품질로 시작 (설정에서 직접 고르면 그걸 씀)
+		gfx_quality = str(WEB_PERF.quality)
 	load_settings()
 	apply_volumes()
 
@@ -884,7 +888,8 @@ func load_settings() -> void:
 	if md == "ffa" or MODES.has(md):
 		mode = md
 	var gq: String = cf.get_value("video", "quality", gfx_quality)
-	if GFX.has(gq):
+	gfx_saved = bool(cf.get_value("video", "quality_set", false))
+	if GFX.has(gq) and (gfx_saved or not OS.has_feature("web")):  # 웹: 직접 고른 적이 없으면 가벼운 품질 (예전 파일의 기본 '보통'은 무시)
 		gfx_quality = gq
 	if cf.has_section_key("video", "scale"):
 		var rs := float(cf.get_value("video", "scale", res_scale))
@@ -912,6 +917,8 @@ func save_settings() -> void:
 	cf.set_value("game", "third_person", third_person)
 	cf.set_value("game", "nick", nick)
 	cf.set_value("video", "quality", gfx_quality)
+	if gfx_saved:
+		cf.set_value("video", "quality_set", true)
 	if res_scale_saved:  # 직접 고른 적이 있을 때만 (웹 자동 해상도는 저장 안 함)
 		cf.set_value("video", "scale", res_scale)
 	for k: String in VOL_DEFAULT:
@@ -1010,6 +1017,7 @@ func set_gfx(q: String) -> void:
 	if not GFX.has(q):
 		return
 	gfx_quality = q
+	gfx_saved = true
 	save_settings()
 	gfx_changed.emit()
 

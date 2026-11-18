@@ -7,6 +7,8 @@
 
 Three.js로 만든 HTML 프로토타입을 **Godot 4.7**로 옮긴 프로젝트입니다. 웹 브라우저와 Windows에서 돌아갑니다.
 
+**▶ 바로 하기: https://jungse-nanjangpan.vercel.app** (PC 브라우저, 설치 없음. 친구대전도 이 주소에서)
+
 ![경기 화면](tests/screenshots/hud_after_control_1280.png)
 
 ---
@@ -82,7 +84,10 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
 npx vercel deploy export/web --prod
 ```
 
-끝나면 `https://○○○.vercel.app` 주소가 나옵니다. 이 주소를 친구에게 보내면 됩니다. 다시 올릴 때도 같은 명령을 씁니다.
+지금 올라가 있는 주소는 **https://jungse-nanjangpan.vercel.app** 입니다 (Vercel 프로젝트 `jungse-nanjangpan`). 이 주소를 친구에게 보내면 됩니다.
+`export/web`이 이 프로젝트에 연결돼 있어서(`export/web/.vercel`) 다시 올려도 같은 주소가 바뀝니다.
+처음 받은 저장소라 연결이 없으면 한 번만 `npx vercel link --project jungse-nanjangpan --cwd export/web` 하세요.
+연결하면 `export/web/.env.local`(접속 토큰)이 생기는데, 사이트에 같이 올라가지 않게 **올리기 전에 지우세요**.
 
 ### 친구대전이 돌아가는 방식
 - 게임 데이터는 **방장 ↔ 친구가 WebRTC로 직접** 주고받습니다. 게임 서버를 따로 띄우지 않습니다.
