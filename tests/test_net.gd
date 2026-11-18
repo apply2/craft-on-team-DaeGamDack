@@ -210,7 +210,7 @@ func _run() -> void:
 	pb.scripted_input = IDLE
 	await wait(20)
 	var TW: Dictionary = G.WEAPONS.teeth
-	check("흡혈귀 물기: 방장이 22 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(TW.dmg))) < 0.5, "hp=%.0f" % pa.hp)
+	check("흡혈귀 물기: 방장이 20 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(TW.dmg))) < 0.5, "hp=%.0f" % pa.hp)
 	check("  친구(흡혈귀)는 15 회복", absf(pb.hp - (60.0 + float(TW.heal))) < 0.5, "hp=%.0f" % pb.hp)
 	check("  두 화면 체력이 같음 (방장 화면의 친구 / 친구 화면의 방장)", absf(rb.hp - pb.hp) < 1.0 and absf(ra.hp - pa.hp) < 1.0,
 		"친구 %.0f/%.0f 방장 %.0f/%.0f" % [pb.hp, rb.hp, pa.hp, ra.hp])
