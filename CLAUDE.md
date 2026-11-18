@@ -77,7 +77,7 @@ scripts/fx/burn_fx.gd  흡혈귀 몸의 불꽃·연기 (Combat 아래 BurnFx 노
 scripts/fx/bite_fx.gd  흡혈귀 물기 효과 (Combat 아래 BiteFx 노드, 보기만 함): 바닥 빨간 부채꼴(범위) + 문 자리 유령 틀니
 tests/screenshot_bite.gd 물기 효과 사진 6칸 → tests/screenshots/bite_<tag>.png (화면 있어야 함: godot --path . --resolution 1280x720 -s tests/screenshot_bite.gd -- tag=now)
 scripts/meat.gd        야만인 우클릭 고기 먹기 (class Meat, static): tick·can_eat·try_eat·eat·cleanse(상태이상 풀기)·eat_fx
-tests/test_meat.gd     고기 먹기: 30 회복·9.7초 재사용·최대 체력·춤/둔화/경직 풀기·먹는 동안 못 던짐·넘어짐/저격총/다른 병과 안 됨·HUD·봇 자동 테스트
+tests/test_meat.gd     고기 먹기: 30 회복·8.3초 재사용·최대 체력·춤/둔화/경직 풀기·먹는 동안 못 던짐·넘어짐/저격총/다른 병과 안 됨·HUD·봇 자동 테스트
 tests/screenshot_meat.gd 고기 먹기 사진 6칸 → tests/screenshots/meat_<tag>.png (화면 있어야 함)
 tests/test_vampire.gd  흡혈귀: 스탯·화상 1.5초 뒤 시작·14.5초에 죽음·처치 인정(5초)·물기 20+15·최대 체력 상한·원뿔·한 명·벽·아군·무적·돌진 9m·±20°·적중 멈춤·재사용·벽·비네트·불꽃·봇 자동 테스트
 tests/screenshot_class.gd 병과 하나 자세히 (3방향·걷는 중·1인칭 우클릭·3인칭): godot --path . --resolution 1280x720 -s tests/screenshot_class.gd -- cls=cannoneer tag=now
@@ -286,7 +286,7 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 ### 무기
 - **돌멩이**: 피해 11 (사용자 요청 10→11 밸런스), 0.4초마다 연사.
   - 속도 32, 사거리 15m (넘으면 사라짐)
-- **고기 먹기** (야만인 우클릭, 사용자 요청 — HTML에 없음. `WEAPONS.meat`, `scripts/meat.gd`): 돌멩이를 들고 우클릭하면 바로 30 회복(최대 체력까지) + 상태이상 풀기, 재사용 9.7초 (사용자 요청 6→9.7).
+- **고기 먹기** (야만인 우클릭, 사용자 요청 — HTML에 없음. `WEAPONS.meat`, `scripts/meat.gd`): 돌멩이를 들고 우클릭하면 바로 30 회복(최대 체력까지) + 상태이상 풀기, 재사용 8.3초 (사용자 요청 6→9.7→8.3).
   - 푸는 것: 춤(+ 쌓이던 춤 게이지 `dance_log`), 성수 둔화 `slow_t`, 봇 경직 `stagger`. 넘어짐은 안 풂 (넘어진 동안은 못 먹음). 춤추는 중·웅덩이 안에서도 먹을 수 있다 (공격이 아니라서). 체력이 꽉 차도 먹어짐.
   - 0.6초(`eat_t`) 동안 왼손 고기를 입에 대고 우걱우걱 — 그동안 돌은 안 던짐. 3인칭 `derp_model.meat`, 1인칭 뷰모델 `_meat`(왼쪽 아래에서 올라옴), 소리 `nyam`, 초록 "+30", 부스러기(내 1인칭 땐 안 뿌림).
   - HUD: 무기 칸 "· 우클릭 고기 먹기" / "· 고기 N초" / "냠냠...", 조준점 고리 = 재사용 대기. 저격총·AK를 들면 우클릭은 그 무기 조준.

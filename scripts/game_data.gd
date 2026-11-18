@@ -294,7 +294,7 @@ const WEAPONS := {
 	"bat": {"name": "박쥐 돌진", "dmg": 20, "cd": 7.0, "dist": 9.0, "time": 0.3, "pitch_max": 20.0, "r": 0.55, "kb": 4, "up": 2, "end_vy": 3.0},
 	# 야만인 우클릭 "고기 먹기" (사용자 요청): cd초마다 heal 회복 + 상태이상(춤·춤 게이지·성수 둔화·봇 경직) 바로 풀림.
 	#   eat_t초 동안 고기를 입에 대고 있음 (그동안 돌은 못 던짐). 춤추는 중에도 먹을 수 있음 (공격이 아니라서)
-	"meat": {"name": "고기 먹기", "cd": 9.7, "heal": 30, "eat_t": 0.6, "color": 0x9c4a26, "fat": 0xe8b08a, "bone": 0xf2ead8},
+	"meat": {"name": "고기 먹기", "cd": 8.3, "heal": 30, "eat_t": 0.6, "color": 0x9c4a26, "fat": 0xe8b08a, "bone": 0xf2ead8},
 	# 화상 (흡혈귀가 햇빛에 탐): 킬피드·사망 화면 이름만 (피해는 BURN)
 	"burn": {"name": "햇빛"},
 }
