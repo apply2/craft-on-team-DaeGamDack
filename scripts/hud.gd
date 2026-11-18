@@ -801,6 +801,14 @@ func _update_weapon() -> void:
 				st = "성수 %s · 클릭: 던지기" % pips
 				if e.charges < mx:
 					st += " · 다음 %.1f초" % (rc - e.charge_t)
+		"cannon":  # 한 발 쏘면 자동 재장전: 조준점 고리 = 장전 진행도
+			var CW: Dictionary = GameData.WEAPONS.cannon
+			if e.cn_t > 0:
+				ring = 1.0 - e.cn_t / float(CW.reload)
+				ring_col = STEEL
+				st = "장전 중 %.1f초" % e.cn_t
+			else:
+				st = "장전 완료 · 우클릭 탄도 조준 · 발밑에 쏘면 점프"
 		"ak":
 			st = "%d/%d발 · 누르고 있으면 연사 · 우클릭 정조준" % [e.ak_ammo, int(GameData.WEAPONS.ak.mag)]
 		"sniper":

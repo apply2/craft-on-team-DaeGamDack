@@ -25,7 +25,7 @@ signal start_requested(rem: float) # 경기 시작 (HTML mpStart)
 signal end_requested               # 방장이 경기를 끝냄
 signal closed(reason: String)      # 연결이 끊겨 방을 나감
 
-const WEPS := ["stone", "bow", "crossbow", "sniper", "holy", "chicken", "lance", "ak", "trumpet", "fanfare", "star"]  # 번호가 바뀌지 않게 뒤에만 더함
+const WEPS := ["stone", "bow", "crossbow", "sniper", "holy", "chicken", "lance", "ak", "trumpet", "fanfare", "star", "cannon"]  # 번호가 바뀌지 않게 뒤에만 더함
 const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 

@@ -34,6 +34,10 @@ var _deflate_from := 1.0
 var _spin := 0.0                # 춤: 한 바퀴 도는 진행도 (0이면 안 돔)
 var _spin_wait := 0.0
 var voice: Node = null          # 트럼펫 멜로디 (TrumpetVoice, 소리가 켜져 있을 때만)
+var carriage: Node3D = null     # 포병: 바퀴 달린 나무 포가 (모델 뿌리에 붙음 — 몸 출렁임과 상관없음)
+var wheels: Array[Node3D] = []  # 포병 바퀴 (이동하면 굴러감 — 합치지 않는 따로 노드)
+var barrel: Node3D = null       # 포병 포신 (= weapons.cannon, 조준 높이를 따라 들림)
+var _wheel_rot := 0.0
 
 # 애니메이션 상태 (HTML 엔티티의 wob/nk/eye 필드)
 var phase := 0.0
@@ -64,6 +68,7 @@ static var _box: BoxMesh
 static var _skirt: CylinderMesh  # HTML skirtGeo (위 0.36, 아래 0.5, 높이 0.55)
 static var _tonsure: TorusMesh   # 성직자 머리 고리
 static var _mitre: CylinderMesh  # 성직자 주교 모자
+static var _rim: TorusMesh       # 포병 바퀴 테
 
 const STEEL := 0xaab3bd
 const STEEL_D := 0x7d858f
@@ -109,6 +114,11 @@ static func _make_shapes() -> void:
 	_tonsure.outer_radius = 0.27 + 0.075
 	_tonsure.rings = 22
 	_tonsure.ring_segments = 8
+	_rim = TorusMesh.new()  # 포병 바퀴 테 (반지름 0.38 근처)
+	_rim.inner_radius = 0.34
+	_rim.outer_radius = 0.42
+	_rim.rings = 16
+	_rim.ring_segments = 6
 	_mitre = CylinderMesh.new()
 	_mitre.top_radius = 0.12
 	_mitre.bottom_radius = 0.24
@@ -354,6 +364,16 @@ func _build_outfit() -> void:
 			em.rotation.x = PI / 2
 		"bard":
 			_bard_outfit()
+		"cannoneer":  # 초록 군복: 흰 가죽띠 엇갈림 + 금 단추 + 빨간 깃
+			for sx in [1.0, -1.0]:  # 몸통 겉면을 따라 짧은 조각으로 (곧은 막대면 둥근 몸 밖으로 삐져나옴)
+				for i in 7:
+					var u := -0.6 + i * 0.2
+					var bp := _on_body(Vector3(u * 0.75 * sx, u, 0.9))
+					_rot(_part(_box, 0xf4ecd6, bp * 0.99, Vector3(0.07, 0.15, 0.03), body), Vector3(-u * 0.6, 0, sx * 0.62))
+			for i in 4:
+				_part(_sph, GameData.C.gold, _on_body(Vector3(0, 0.35 - i * 0.22, 1)), Vector3.ONE * 0.03, body)
+			_part(_cyl, 0xb8322a, Vector3(0, 0.5, 0), Vector3(0.25, 0.08, 0.23), body)
+			_part(_cyl, 0x3f5a28, Vector3(0, -0.24, 0), Vector3(0.44, 0.08, 0.4), body)
 
 
 ## 음유시인: 화려한 광대풍 옷 (사용자 요청). 색은 GameData.TRUMPET_LOOK
@@ -476,6 +496,9 @@ func _build_head_extras(mouth: MeshInstance3D, tongue: MeshInstance3D) -> void:
 ## 마상창은 말 모양에 붙어 있다 (WeaponModels.make_horse)
 func _build_weapons(K: Dictionary) -> void:
 	for key: String in [K.weapon, "sniper", "chicken", "ak"]:
+		if key == "cannon":  # 대포는 손이 아니라 포가 위에 (모델 뿌리)
+			weapons[key] = _build_carriage()
+			continue
 		if key == "trumpet":  # 트럼펫은 손이 아니라 입에 붙인다 (고개를 들면 같이 들림)
 			var w := _group(Vector3(0, -0.15, 0.27), head)
 			WeaponModels.make_trumpet(w, _mat)
@@ -505,6 +528,36 @@ func _build_weapons(K: Dictionary) -> void:
 				w.add_child(c.g)
 		w.scale = Vector3.ONE * GameData.held_scale(key)  # 3인칭에서 잘 보이게 (원점 = 손잡이라 손에서 안 떨어짐)
 		weapons[key] = w
+
+
+## 포병 포가: 바퀴 2개 + 축 + 앉는 판 + 땅에 끌리는 꼬리. 돌려주는 값 = 포신 (조준 높이를 따라 들림)
+## 앞 = +Z (얼굴 쪽). 사람은 축 위에 걸터앉고 포신은 다리 사이로 앞으로 뻗는다
+func _build_carriage() -> Node3D:
+	const WOOD := 0x7a5230
+	const WOOD_D := 0x5b3a22
+	const IRON := 0x3b3b42
+	carriage = _group(Vector3.ZERO, self)
+	_rot(_part(_cyl, IRON, Vector3(0, 0.42, 0.05), Vector3(0.05, 1.26, 0.05), carriage), Vector3(0, 0, PI / 2))  # 축
+	_part(_box, WOOD, Vector3(0, 0.5, -0.05), Vector3(0.52, 0.12, 0.5), carriage)                              # 앉는 판
+	for sx in [1.0, -1.0]:  # 양옆 뺨판 (뒤로 갈수록 낮아짐)
+		_rot(_part(_box, WOOD_D, Vector3(sx * 0.27, 0.44, -0.2), Vector3(0.07, 0.26, 0.85), carriage), Vector3(-0.3, 0, 0))
+	_rot(_part(_box, WOOD, Vector3(0, 0.3, -0.62), Vector3(0.18, 0.12, 1.0), carriage), Vector3(-0.42, 0, 0))   # 꼬리
+	_part(_box, IRON, Vector3(0, 0.1, -1.06), Vector3(0.22, 0.06, 0.1), carriage)                              # 꼬리 끝 쇠
+	for sx in [1.0, -1.0]:
+		var wg := _group(Vector3(sx * 0.62, 0.42, 0.05), carriage)
+		_rot(_part(_rim, WOOD_D, Vector3.ZERO, Vector3.ONE, wg), Vector3(0, 0, PI / 2))
+		_rot(_part(_cyl, IRON, Vector3.ZERO, Vector3(0.1, 0.13, 0.1), wg), Vector3(0, 0, PI / 2))  # 바퀴통
+		for k in 3:  # 바퀴살 6개 (지나가는 막대 3개)
+			_rot(_part(_box, WOOD, Vector3.ZERO, Vector3(0.05, 0.72, 0.05), wg), Vector3(k * PI / 3.0, 0, 0))
+		wheels.append(wg)
+	barrel = _group(Vector3(0, 0.66, 0.22), carriage)
+	_rot(_part(_cyl, IRON, Vector3(0, 0, 0.45), Vector3(0.13, 1.0, 0.13), barrel), Vector3(PI / 2, 0, 0))   # 포신
+	_rot(_part(_cyl, IRON, Vector3(0, 0, 0.93), Vector3(0.165, 0.12, 0.165), barrel), Vector3(PI / 2, 0, 0))  # 포구
+	_part(_sph, IRON, Vector3(0, 0, -0.04), Vector3(0.18, 0.18, 0.2), barrel)                              # 약실
+	_part(_sph, IRON, Vector3(0, 0, -0.26), Vector3.ONE * 0.06, barrel)                                      # 꼭지
+	for z in [0.15, 0.62]:
+		_rot(_part(_cyl, GameData.C.gold, Vector3(0, 0, z), Vector3(0.145, 0.04, 0.145), barrel), Vector3(PI / 2, 0, 0))
+	return barrel
 
 
 ## 내 캐릭터: HELD_SCALE_SELF가 있는 무기만 배율을 바꿈 (어깨 너머 화면에서 조준점을 가리지 않게)
@@ -560,6 +613,12 @@ func _build_helm() -> void:
 			_rot(_part(_sph, T.diamond, Vector3(-0.12, 0.4, -0.24), Vector3(0.03, 0.26, 0.05), helm), Vector3(-1.0, 0, 0.15))  # 두 번째 깃털
 			_part(_sph, GameData.C.gold, Vector3(-0.17, 0.3, -0.1), Vector3(0.06, 0.06, 0.04), helm)  # 깃털 꽂은 금 브로치
 			_part(_sph, T.gem, Vector3(-0.17, 0.3, -0.06), Vector3(0.035, 0.035, 0.025), helm)
+		"cannoneer":  # 포병 샤코 모자 (높은 원통 + 챙 + 금 휘장 + 빨간 방울)
+			_part(_cyl, 0x3f5a28, Vector3(0, 0.38, 0), Vector3(0.24, 0.32, 0.24), helm)
+			_part(_cyl, 0x2a2a2e, Vector3(0, 0.55, 0), Vector3(0.26, 0.04, 0.26), helm)
+			_rot(_part(_box, 0x2a2a2e, Vector3(0, 0.23, 0.27), Vector3(0.3, 0.03, 0.15), helm), Vector3(0.35, 0, 0))
+			_part(_box, GameData.C.gold, Vector3(0, 0.38, 0.24), Vector3(0.11, 0.13, 0.02), helm)
+			_part(_sph, 0xd2463c, Vector3(0, 0.62, 0.14), Vector3.ONE * 0.065, helm)
 		"cleric":  # 주교 모자
 			_part(_mitre, 0xf4efe2, Vector3(0, 0.43, 0), Vector3.ONE, helm)
 			_part(_cyl, GameData.C.gold, Vector3(0, 0.22, 0), Vector3(0.245, 0.05, 0.245), helm)
@@ -677,6 +736,8 @@ func animate(p, dt: float) -> void:
 		var up := -2.9 + sin(t * 18) * 0.25
 		arm_l.rotation.x += (up - arm_l.rotation.x) * fa
 		arm_r.rotation.x += (up - arm_r.rotation.x) * fa
+	if carriage:
+		_anim_carriage(p, hs, fa, dt)
 	if p.mounted > 0:  # 말 위 자세: 다리 벌려 걸터앉고, 오른팔은 창, 왼팔은 고삐
 		leg_l.rotation = Vector3(-0.5, 0, 0.95)
 		leg_r.rotation = Vector3(-0.5, 0, -0.95)
@@ -703,6 +764,31 @@ func animate(p, dt: float) -> void:
 		if helm:
 			_set_emission(_helm_mats, c)
 		_fl = p.flash > 0
+
+
+## 포병: 포가 위에 걸터앉은 자세. 바퀴는 앞뒤로 움직인 만큼 구르고, 포신은 조준 높이를 따라 들림
+func _anim_carriage(p, hs: float, fa: float, dt: float) -> void:
+	carriage.visible = p.mounted <= 0  # 말을 타면 대포는 두고 감 (부활하면 다시)
+	if p.mounted > 0:
+		return
+	var yw: float = p.yaw
+	var vel: Vector3 = p.velocity
+	var fwd_speed := -(vel.x * sin(yw) + vel.z * cos(yw))  # 바라보는 쪽으로 움직인 속도 (뒤로 가면 음수)
+	if p.grounded:
+		_wheel_rot += fwd_speed * dt / 0.38
+	for wg in wheels:
+		wg.rotation.x = _wheel_rot
+	var rec: float = p.rec
+	barrel.rotation.x = -clampf(p.pitch, -0.35, 1.0)
+	barrel.position.z = 0.22 - rec * 0.12  # 쏘면 포신이 뒤로 밀렸다 돌아옴
+	if fa > 0:
+		return
+	leg_l.position.y = 0.62
+	leg_r.position.y = 0.62
+	leg_l.rotation = Vector3(-1.35 + sin(t * 3 + seed_off) * 0.05, 0, 0.45)
+	leg_r.rotation = Vector3(-1.35 - sin(t * 3 + seed_off) * 0.05, 0, -0.45)
+	var k := clampf(hs / 3.0, 0.0, 1.0)
+	upper.position = Vector3(0, absf(sin(_wheel_rot * 2.0)) * 0.035 * k, 0)  # 덜컹덜컹
 
 
 ## 흔들린 자세가 선 자세에서 얼마나 벗어났나 → hb_*. 행렬 몇 번뿐이라 가볍다 (캐릭터마다 화면 프레임에 한 번)

@@ -15,6 +15,13 @@ const MOUNT_H := 0.95        # 말 위 높이
 const BASE_SPEED := 5.4      # 기본 걷기 속도 m/s (병과 speed 배율을 곱함)
 const JUMP_V := 8.0
 const GRAV := 22.0
+## 맵 경계: 바깥 성벽 자리에 보이지 않는 벽 + 천장 (캐릭터만 막음 — 포탄 점프로 성벽을 넘어 날아가지 않게, 사용자 요청).
+##   ceil = 천장 높이(m, 맵에서 가장 높이 올라설 수 있는 곳 + 포탄 점프 높이보다 위). 투사체·레이는 안 막는다
+const MAP_BOUNDS := {"ceil": 40.0}
+## 지붕 경사면 (사용자 요청 — 포탄 점프로 지붕에 올라가도 서 있지 못하고 흘러내림).
+## 지붕에 닿아 있는 동안은 바닥으로 치는 최대 경사가 floor_deg로 줄어 → 지붕(16°~43°)은 벽이 되어 중력으로 미끄러진다
+## 두 지붕이 맞닿은 V자 골에 끼어 멈추면 골을 따라 push m/s로 밀어냄
+const ROOF := {"floor_deg": 8.0, "push": 3.0}
 const MATCH_TIME := 240.0
 const KILL_LIMIT := 20
 const BOT_COUNT := 7
@@ -43,7 +50,7 @@ const BOT_STAGGER_XBOW := 0.5
 const HEAD_KB := 1.25        # 헤드샷 넉백 배율
 const HEAD_UP := 1.15        # 헤드샷 띄우기 배율
 const MOUNT_KB := 0.2        # 말 탄 대상 넉백 배율
-const HIT_WOB := {"crossbow": 14.0, "bow": 10.0, "holy": 2.5, "ak": 2.5, "trumpet": 1.0, "fanfare": 10.0}  # 맞은 쪽으로 몸 출렁 (나머지 6)
+const HIT_WOB := {"cannon": 16.0, "crossbow": 14.0, "bow": 10.0, "holy": 2.5, "ak": 2.5, "trumpet": 1.0, "fanfare": 10.0}  # 맞은 쪽으로 몸 출렁 (나머지 6)
 const HIT_WOB_DEFAULT := 6.0
 const HIT_WOB_HEAD := 1.3
 
@@ -60,7 +67,7 @@ const HELD_SCALE := {
 const HELD_SCALE_SELF := {"chicken": 1.0}  # 닭: 1.35면 어깨 너머 화면에서 조준점 둘레(화면 높이 10%)를 13%, 1.1이면 1% 가려서 내 닭만 원래 크기
 const FIRE_FWD := 0.35       # 눈에서 조준 방향으로 이만큼 앞에서 나감
 const FIRE_DROP := 0.08      # 내가 쏠 땐 살짝 아래에서 (손 위치 느낌)
-const FIRE_RIGHT := {"stone": 0.12, "bow": 0.16}  # 내가 쏠 땐 오른쪽으로 (나머지 0.08)
+const FIRE_RIGHT := {"stone": 0.12, "bow": 0.16, "cannon": 0.0}  # 내가 쏠 땐 오른쪽으로 (나머지 0.08)
 const FIRE_RIGHT_DEFAULT := 0.08
 const FIRE_NEAR := 0.05      # 조준점이 나가는 자리보다 이만큼 이내로 가깝거나 더 가까우면 '초근접' → 판정 시작점(눈 쪽)에서 조준점으로 쏨
 # 명중 판정 디버그 표시 (scripts/fx/hit_debug.gd). key로 켜고 끔, 기본 꺼짐 (debug_hits). life: 경로·표시가 남는 초
@@ -98,12 +105,13 @@ const XBOW_NUT := 0x3a3e46    # 걸쇠
 # ── 반동 (HTML fire의 recV / vRecV, animModel·updateVM의 스프링) ──
 # 몸(3인칭 팔·상체)이 튕기는 양 = rec[0] + rec[1]×당긴 정도, 1인칭 화면·손 = vrec[0] + vrec[1]×당긴 정도
 const RECOIL := {"bow": {"rec": [5.0, 4.0], "vrec": [4.0, 4.0]}, "crossbow": {"rec": [10.0, 0.0], "vrec": [11.0, 0.0]},
-	"ak": {"rec": [1.2, 0.0], "vrec": [1.4, 0.0]}}
+	"ak": {"rec": [1.2, 0.0], "vrec": [1.4, 0.0]}, "cannon": {"rec": [12.0, 0.0], "vrec": [0.0, 0.0]}}  # 포병 1인칭·3인칭 화면 반동은 WEAPONS.cannon.cam_kick (0.2초 안에 돌아옴)
 const VREC_CAM := 0.022          # 화면이 위로 튕기는 양 (조준 방향은 그대로)
 
 # ── 우클릭 조준 시 카메라 (HTML updateCamera) ──
 const AIM_CAM := {"bow": {"tp_fov": 64.0, "fp_fov": 72.0}, "crossbow": {"tp_fov": 55.0, "fp_fov": 58.0},
-	"ak": {"tp_fov": 47.0, "fp_fov": 53.0}}  # AK = 75/1.6, 85/1.6
+	"ak": {"tp_fov": 47.0, "fp_fov": 53.0},  # AK = 75/1.6, 85/1.6
+	"cannon": {"tp_fov": 57.7, "fp_fov": 65.4}}  # 포병 탄도 조준 1.3배 = 75/1.3, 85/1.3
 const SCOPE_FOV := 24.0      # 저격총 스코프 (우클릭)
 const MOUNT_CAM := 5.0       # 말 타면 3인칭 카메라가 뒤로
 const AIM_TP_DIST := 2.3         # 3인칭 조준 중 카메라 거리 (평소 3.6)
@@ -111,7 +119,7 @@ const AIM_TP_RIGHT := 0.85       # 3인칭 조준 중 어깨 옆 거리 (평소 
 
 # ── 1인칭 무기 화면 (HTML vmCam / buildVM / updateVM) ──
 const VM_FOV := 60.0
-const VM_KICK := {"sniper": 1.0, "ak": 0.12, "crossbow": 0.0, "bow": 0.0}  # 쏘면 손이 앞뒤로 튐 (나머지 0.2)
+const VM_KICK := {"cannon": 0.6, "sniper": 1.0, "ak": 0.12, "crossbow": 0.0, "bow": 0.0}  # 쏘면 손이 앞뒤로 튐 (나머지 0.2)
 const VM_KICK_DEFAULT := 0.2
 
 # ── 성수 웅덩이 (HTML shatter / updateZones / updateHolyAim) ──
@@ -150,15 +158,44 @@ const CLASSES := {
 	"bard": {"name": "음유시인", "weapon": "trumpet", "speed": 1.05, "hp": 95,
 		"color": 0x7a3fa8, "leg": 0xf3b33d, "arm": 0x7a3fa8, "foot": 0x5b3a22, "pips": [3, 1, 2, 5],
 		"desc": "트럼펫을 불어 적을 춤추게 만든다. 춤추는 적은 느리고 조준이 흔들린다."},
+	# 사용자 요청 새 병과 (HTML에 없음): 바퀴 달린 나무 대포에 올라탄 느린 탱커. 포탄 점프로 움직이는 게 핵심
+	#   no_sprint: 달리기 없음 / accel: 땅 가속 (기본 12) / jump: 점프 '높이' 배율 (점프 속도 = JUMP_V × √jump)
+	#   hit_r: 몸통 판정 반지름 배율 (대포 크기 — 머리는 그대로)
+	#   slow_resist: 남이 거는 둔화(성수 웅덩이·춤 이동 감소)를 이 비율만 받음. 겹치면 합친 최종 둔화량에 곱함 (춤 자체·자기 조준 감속은 그대로) — 사용자 요청 (면역 → 50%)
+	#   speed: 사용자 요청 0.65 → 0.7
+	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.7, "hp": 150,  # 사용자 요청 200 → 150
+		"no_sprint": true, "accel": 6.0, "jump": 0.4, "hit_r": 1.4, "slow_resist": 0.5,
+		"color": 0x5e7d3c, "leg": 0x4a3a2a, "arm": 0x5e7d3c, "foot": 0x2e241c, "pips": [1, 5, 4, 1],
+		"desc": "느리고 크지만 한 방이 세다. 포탄은 터지며 주변을 날리고, 발밑에 쏘면 높이 뛴다."},
 }
-const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard"]
+const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard", "cannoneer"]
 const STAT_LABELS := ["이동속도", "공격력", "사거리", "연사"]  # 병과 카드의 pips 순서
-const CLASS_EMBLEM := {"barbarian": 0xe8811f, "archer": 0xb8322a, "crossbow": 0x4d72b8, "cleric": 0x8c63c9, "bard": 0x7a3fa8}  # 카드 동그라미
-const CLASS_CHIP := {"barbarian": 0xf2a04e, "archer": 0xe8857a, "crossbow": 0x9fc0ea, "cleric": 0xcdb8ef, "bard": 0xc9a2e8}    # 점수판 꼬리표
+const CLASS_EMBLEM := {"barbarian": 0xe8811f, "archer": 0xb8322a, "crossbow": 0x4d72b8, "cleric": 0x8c63c9, "bard": 0x7a3fa8, "cannoneer": 0x5e7d3c}  # 카드 동그라미
+const CLASS_CHIP := {"barbarian": 0xf2a04e, "archer": 0xe8857a, "crossbow": 0x9fc0ea, "cleric": 0xcdb8ef, "bard": 0xc9a2e8, "cannoneer": 0xb4cc8c}    # 점수판 꼬리표
 
 # ── 무기 ─────────────────────────────────────────────────────
 # 단위: dmg 피해, cd 재사용(초), speed 투사체 속도(m/s), grav 중력, kb 넉백, up 띄우기, radius 판정 반경
 const WEAPONS := {
+	# 포병 대포 (사용자 요청): 곡사 포탄. 무엇에든 닿거나 fuse초가 지나면 터짐
+	#   dmg: 직격 피해(총) / blast: 폭발 반경 m, 피해는 가운데 blast_max → 가장자리 blast_min (몸까지 거리로 선형)
+	#   폭발과 대상 사이가 벽에 막히면 범위 피해 없음. 넉백 kb(수평)·up(위)도 거리에 따라 줄어듦
+	#   reload: 한 발 쏘면 자동 재장전 시간 / grav: 포탄 중력 (사람 GRAV 22보다 작게 — 아치가 길게)
+	#   포탄 점프: 자기 폭발은 피해 ×self_mul. jump_r 안이면 위로 jump_up, 폭발 반대쪽으로 jump_side (m/s)
+	#     그 뒤 착지할 때까지 공중 조작 ×air_ctrl. 자기 포탄으로 죽으면 자멸
+	#   우클릭 조준: 예상 궤적·착탄 지점 + 확대(AIM_CAM.cannon), 이동 ×aim_slow
+	#   shake: 폭발 화면 흔들림 (near m 안이면 max, far m에서 0)
+	#   aim_every: 탄도 조준 궤적을 물리 프레임 몇 개마다 재나 (포탄과 같은 적분식이라 착탄 지점이 실제와 같음)
+	#   사용자 요청 밸런스: reload 5 → 4, blast 4.5 → 3.5 → 2.5 (피해 80→25는 그대로), speed 26 → 32 (사거리 약 1.5배), fuse 4 → 5. jump_r 2.5 그대로
+	#   발사 반동 (사용자 요청, 6 → 10): 쏘는 순간 조준 반대쪽으로 recoil m/s. 땅에 있으면 위로 recoil_up 더하고 recoil_t초 동안 땅 마찰 recoil_fric.
+	#     반동의 세로 성분은 ±recoil_vmax로 자름 (발밑 사격 + 포탄 점프가 겹쳐 과하게 솟지 않게). 공중에서도 같음
+	#   cam_kick: 쏘면 화면이 위로 cam_kick rad 튀었다가 cam_kick_t초 안에 원래대로 (조준 방향은 그대로). cam_kick_peak = 꼭대기까지 비율
+	"cannon": {"name": "대포", "dmg": 100, "speed": 32, "grav": 14, "fuse": 5.0, "reload": 4.0, "radius": 0.2,
+		"recoil": 8.0, "recoil_up": 2.0, "recoil_vmax": 4.0, "recoil_t": 0.3, "recoil_fric": 2.0,
+		"cam_kick": 0.06, "cam_kick_t": 0.2, "cam_kick_peak": 0.2,
+		"blast": 2.5, "blast_max": 80, "blast_min": 25, "kb": 6, "up": 4,
+		"self_mul": 1.0 / 3.0, "jump_r": 2.5, "jump_up": 22.0, "jump_side": 5.0, "air_ctrl": 0.3, "air_grav": 0.75, "aim_slow": 0.7,
+		"ball": 0.17, "color": 0x2a2a2e, "shake": {"max": 1.1, "near": 4.0, "far": 26.0},
+		"aim_every": 2, "aim_dots": 28},
 	"stone": {"name": "돌멩이", "dmg": 10, "cd": 0.4, "speed": 32, "grav": 16, "range": 15, "kb": 4, "up": 2.6, "radius": 0.12,
 		"color": 0x8b8f96, "size": 0.11},  # size: 돌 모양 반지름 (손에 든 것·날아가는 것)
 	# 사용자 요청 궁수 버프 (계속 압박하는 무기): 짧게 끊어 연사, 꽉 당기면 세고 곧게. 차지 비율 = bow_t(당긴 시간)
@@ -293,13 +330,14 @@ const BOT := {
 	"strafe_t": [0.6, 1.8],      # 좌우 무빙 방향을 바꾸는 간격
 	"strafe_stop": 0.2,          # 무빙 안 할 확률
 	"strafe_k": 0.9,
-	"pref": {"barbarian": 4.0, "archer": 22.0, "crossbow": 30.0, "cleric": 15.0, "bard": 8.0},  # 병과별 선호 거리
+	"pref": {"barbarian": 4.0, "archer": 22.0, "crossbow": 30.0, "cleric": 15.0, "bard": 8.0, "cannoneer": 16.0},  # 병과별 선호 거리
 	"pref_sniper": 28.0, "pref_ak": 16.0,
 	"item_seek": 45.0, "horse_seek": 40.0, "fish_seek": 40.0,  # 황금 붕어빵은 40m
 	"star_avoid": 10.0,          # 무적인 적에게서 이만큼은 도망감 (대상으로도 안 고름)  # 이 거리 안의 저격총·AK / 말은 주우러 감
 	"item_busy": 8.0,            # 단, 보이는 적이 이보다 가까우면 싸움이 먼저
 	"pref_band": 5.0,            # 선호 거리 ±5m면 다가가지도 물러나지도 않음
-	"fire_range": {"stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
+	"cannon_min": 4.5,  # 포병 봇: 대상이 이보다 가까우면 안 쏨 (자기 폭발에 휘말림)
+	"fire_range": {"cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
 	"knight_avoid": 12.0,        # 말 탄 사람 피하기 반경
 	"zone_margin": 0.6,          # 남의 성수 웅덩이 반경 + 이만큼 안이면 밖으로 나감
 	"smooth": 3.5,               # 이동 방향을 부드럽게 (급회전 넘어짐 줄이기)
@@ -357,12 +395,13 @@ const MODES := {
 			"crossbow": {0x4d72b8: "body", 0x263f78: "dark", 0x3a62a8: "accent"},                   # 등 방패 그림
 			"cleric": {0xeee6d2: "pale", 0x7a52b8: "accent", "helm_gold": "accent"},                 # 영대·모자 띠
 			"bard": {0x7a3fa8: "body", 0xf4ecd6: "accent", 0xd94a3a: "accent"},                     # 조끼·모자 깃털
+			"cannoneer": {0x5e7d3c: "body", 0x3f5a28: "dark"},                                      # 군복·모자
 		},
 		# 봇
 		"bot_hold_in": 2,                           # 우리 거점이면 원 안에 이만큼, 나머지는 감시 지점
-		"bot_roles": {"barbarian": "point", "cleric": "point", "bard": "point", "archer": "watch", "crossbow": "watch"},
+		"bot_roles": {"barbarian": "point", "cleric": "point", "bard": "point", "cannoneer": "point", "archer": "watch", "crossbow": "watch"},
 		"lane_weight": {                            # 3갈래(왼쪽 시장 골목 / 가운데 큰길 / 오른쪽 성벽 길) 고르는 가중치
-			"barbarian": [5, 2, 1], "archer": [1, 2, 4], "crossbow": [1, 2, 4], "cleric": [2, 3, 2], "bard": [3, 3, 1]},
+			"barbarian": [5, 2, 1], "archer": [1, 2, 4], "crossbow": [1, 2, 4], "cleric": [2, 3, 2], "bard": [3, 3, 1], "cannoneer": [1, 4, 2]},
 		"lane_reach": 3.5,                          # 갈래 길 지점에 이만큼 다가가면 다음 지점으로
 		"path_every": 0.6,                          # 경로 다시 찾기 간격
 		"path_reach": 1.2,                          # 경로 점에 이만큼 다가가면 다음 점
@@ -560,7 +599,7 @@ const MAIN_MENU := {
 const CLASS_PAGE := {
 	"lines": {  # 개구 한마디
 		"barbarian": "생각 없음. 돌 있음.", "archer": "당기다 손 미끄러짐 주의.", "crossbow": "한 발이면 끝. 휠로 감아라.",
-		"cleric": "성수 맛 좀 봐라.", "bard": "내 연주에 춤춰라.",
+		"cleric": "성수 맛 좀 봐라.", "bard": "내 연주에 춤춰라.", "cannoneer": "발밑에 쏘면 난다.",
 	},
 	# 아래 한 줄 설명. {..}는 WEAPONS 값으로 채움 (game_data를 고치면 문구도 따라감)
 	"blurbs": {
@@ -569,6 +608,7 @@ const CLASS_PAGE := {
 		"crossbow": "피해 {dmg}, 머리에 맞히면 한 방. 쏜 뒤엔 마우스 휠을 {notches}칸 굴려 감는다.",
 		"cleric": "성수병 {max_charges}개를 모아 던진다. 웅덩이가 적을 지지고 느리게 만든다.",
 		"bard": "트럼펫을 불면 적이 춤춘다. 춤추는 적은 느리고 공격을 못 한다.",
+		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 한 발 쏘면 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
 	},
 	"eye_h": 1.62,   # 사거리 계산: 눈높이(player.eye_pos)에서 정면으로 쏴서 땅에 닿는 거리 (무기 range가 있으면 거기까지)
 	"bar_cols": {"hp": 0xe5484d, "speed": 0x3fa7e0, "range": 0x6cc35a, "track": 0xe2c992},
@@ -582,7 +622,7 @@ const CLASS_PAGE := {
 		"key": 27.0, "key_font": 17, "tilts": [-2.0, 1.5, -1.0, 2.0, -1.5], "lift": Vector2(0, -5)},
 	"back": {"pos": Vector2(887, 527), "size": Vector2(93, 60), "font": 25},
 	"go": {"pos": Vector2(887, 601), "size": Vector2(293, 91), "font": 44, "tilt": -1.0},
-	"hint": {"pos": Vector2(996, 539), "font": 20, "tilt": -3.0, "text": "1~5 키로도 골라요"},
+	"hint": {"pos": Vector2(996, 539), "font": 20, "tilt": -3.0, "text": "숫자 키로도 골라요"},
 	# 3D 무대: big = 큰 액자 (천천히 좌우로), card = 카드 그림 (정면, 한 번만 찍음)
 	"big": {"px": Vector2i(340, 340), "fov": 30.0, "cam": Vector3(0, 1.1, 5.6), "look": Vector3(0, 0.98, 0), "yaw": 22.0, "sway": 14.0, "sway_hz": 0.12},
 	"card": {"px": Vector2i(236, 230), "fov": 30.0, "cam": Vector3(0, 1.0, 4.4), "look": Vector3(0, 0.95, 0), "yaw": 8.0, "sway": 0.0, "sway_hz": 0.0},
@@ -812,7 +852,7 @@ const DMG_DIR := {"life": 1.0, "hold": 0.6, "r": 185.0, "w": 120.0, "h": 30.0, "
 const RAGDOLL := {"life": 7.0, "shrink": 0.6, "flash": 0.2, "iters": 6, "damp": 0.995, "fric": 0.86, "r": 0.13,
 	"vel_keep": 0.8, "max_steps": 4}
 # 무기별로 날려보내는 힘 [맞은 방향, 위로, 머리만 더 위로]. 나머지(돌멩이·닭·짓밟기)는 빙글 돌며 쓰러짐
-const RAGDOLL_KICK := {"sniper": [26.0, 7.0, 3.0], "lance": [22.0, 10.0, 3.0], "ak": [7.0, 2.5, 0.0],
+const RAGDOLL_KICK := {"cannon": [16.0, 10.0, 3.0], "sniper": [26.0, 7.0, 3.0], "lance": [22.0, 10.0, 3.0], "ak": [7.0, 2.5, 0.0],
 	"crossbow": [14.0, 4.5, 0.0], "bow": [8.0, 3.0, 0.0], "holy": [1.5, 4.5, 2.5]}
 const DEATH_CAM := {"back": 5.5, "up": 3.2, "follow": 3.0}  # 죽으면 래그돌 골반을 뒤쪽 위에서 봄
 # 친구대전 (온라인, 9단계: HTML MP) — 방장 컴퓨터(브라우저)가 WebRTC 서버. 방 코드로 서로를 찾는 신호만 Supabase Realtime으로 (NetSignal)
@@ -985,7 +1025,7 @@ func class_stats(k: String) -> Dictionary:
 	for c: String in CLASS_ORDER:
 		var C: Dictionary = CLASSES[c]
 		var walk: float = BASE_SPEED * float(C.speed)
-		all[c] = {"hp": int(C.get("hp", 100)), "walk": walk, "run": walk * SPRINT, "range": weapon_reach(C.weapon)}
+		all[c] = {"hp": int(C.get("hp", 100)), "walk": walk, "run": walk * (1.0 if C.get("no_sprint", false) else SPRINT), "range": weapon_reach(C.weapon)}
 	var out: Dictionary = all[k].duplicate()
 	for key: String in ["hp", "walk", "range"]:
 		var mx := 0.0
@@ -1132,7 +1172,7 @@ func _setup_input() -> void:
 		"cancel_draw": [KEY_R],  # 활 당기기 취소 (사용자 요청)
 		"debug_hits": [HIT_DEBUG.key],  # 명중 판정 디버그 표시 켜고 끄기
 		"perf_hud": [PERF_HUD.key],     # 성능 표시 (FPS·프레임 시간·그리기 호출) 켜고 끄기
-		"class_1": [KEY_1], "class_2": [KEY_2], "class_3": [KEY_3], "class_4": [KEY_4], "class_5": [KEY_5],  # 병과 고르는 화면에서만
+		"class_1": [KEY_1], "class_2": [KEY_2], "class_3": [KEY_3], "class_4": [KEY_4], "class_5": [KEY_5], "class_6": [KEY_6], "class_7": [KEY_7],  # 병과 고르는 화면에서만
 	}
 	for action: String in keys:
 		if not InputMap.has_action(action):

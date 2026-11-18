@@ -69,7 +69,10 @@ func _run() -> void:
 		var w = maps[k]
 		check("[%s] 충돌 상자 그대로 (지문)" % k, sig(w) == SIG[k], sig(w))
 		check("[%s] 스폰 지점 그대로" % k, str(w.spawn_points).md5_text() == SPAWN[k])
-		var cols := colliders(w).filter(func(c: Node) -> bool: return c.name != "TeamBarriers" and c.get_parent().name != "TeamBarriers")
+		# 팀 문 막·맵 경계(보이지 않는 벽·천장)·지붕 경사면(캐릭터만 막는 BOUND_LAYER)은 빼고 셈
+		var cols := colliders(w).filter(func(c: Node) -> bool: return c.name != "TeamBarriers" and c.get_parent().name != "TeamBarriers" and c != w.bounds and c != w.roofs)
+		check("[%s] 맵 경계는 경계 층에만 (월드 1층 아님)" % k, w.bounds != null and w.bounds.collision_layer == w.BOUND_LAYER and w.bounds.collision_mask == 0, "")
+		check("[%s] 지붕 경사면도 경계 층에만" % k, w.roofs != null and w.roofs.collision_layer == w.BOUND_LAYER and w.roofs.collision_mask == 0, "")
 		check("[%s] 충돌 물체는 원래 것뿐 (장식 충돌 없음)" % k, cols.size() == 1 and cols[0] == w.body, "n=%d" % cols.size())
 		# 잔디
 		var grass := instances(w, "Grass")
