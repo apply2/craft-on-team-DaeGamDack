@@ -307,25 +307,32 @@ func eye_pos() -> Vector3:
 	return global_position + Vector3(0, mount_h + (1.0 if crouch else 1.55), 0)
 
 
+## 히트박스가 흔들리는 몸을 따라가는 만큼 (0 머리, 1 엉덩이, 2 어깨 — DerpModel._measure_hitbox). 선 자세에만 씀
+func _hb(i: int) -> Vector3:
+	if model == null or not GameData.hitbox_follow:
+		return Vector3.ZERO
+	return model.hb_head if i == 0 else (model.hb_a if i == 1 else model.hb_b)
+
+
 func head_c() -> Vector3:
 	var p := global_position
 	if fall_amt() > 0.5:
 		return p + Vector3(0, 0.32, 0) + lie_dir() * 1.4
-	return p + Vector3(0, mount_h + (1.1 if crouch else 1.62), 0)
+	return p + Vector3(0, mount_h + (1.1 if crouch else 1.62), 0) + _hb(0)
 
 
 func body_a() -> Vector3:
 	var p := global_position
 	if fall_amt() > 0.5:
 		return p + Vector3(0, 0.35, 0) + lie_dir() * 0.35
-	return p + Vector3(0, mount_h + 0.4, 0)
+	return p + Vector3(0, mount_h + 0.4, 0) + _hb(1)
 
 
 func body_b() -> Vector3:
 	var p := global_position
 	if fall_amt() > 0.5:
 		return p + Vector3(0, 0.35, 0) + lie_dir() * 1.0
-	return p + Vector3(0, mount_h + (0.8 if crouch else 1.15), 0)
+	return p + Vector3(0, mount_h + (0.8 if crouch else 1.15), 0) + _hb(2)
 
 
 # ── 입력 ─────────────────────────────────────────────────────

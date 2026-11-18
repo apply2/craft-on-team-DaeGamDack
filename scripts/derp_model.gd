@@ -22,6 +22,10 @@ var weapons := {}   # 무기 키 → 손에 든 무기 노드 (든 것만 보임
 var pupils: Array = []  # [{m: MeshInstance3D, r: float}]
 var mk := {}            # 래그돌 점: head·shL·shR·pelvis·handL·handR·footL·footR
 var part_count := 0     # 합치기 전 메시 수 (테스트용 — 의상이 다 만들어졌는지)
+# 히트박스 따라가기 (GameData.HITBOX_FOLLOW): 선 자세 대비 머리·엉덩이·어깨가 월드에서 얼마나 옮겨 갔나. animate 끝에서 잼
+var hb_head := Vector3.ZERO
+var hb_a := Vector3.ZERO
+var hb_b := Vector3.ZERO
 # 음유시인 (4.5단계)
 var cheeks: Array[Node3D] = []  # 볼 (연주하면 빵빵해짐 — 합치지 않음)
 var _cheek_k := 1.0
@@ -688,6 +692,7 @@ func animate(p, dt: float) -> void:
 	p.hit_squash = maxf(0.0, p.hit_squash - dt * 5)
 	var s: float = p.hit_squash
 	upper.scale = Vector3(1 + 0.2 * s, 1 - 0.2 * s, 1 + 0.2 * s)
+	_measure_hitbox()
 	if voice:
 		voice.call("update", p.playing and p.alive, global_position)
 	if p.flash > 0 or _fl:
@@ -698,6 +703,21 @@ func animate(p, dt: float) -> void:
 		if helm:
 			_set_emission(_helm_mats, c)
 		_fl = p.flash > 0
+
+
+## 흔들린 자세가 선 자세에서 얼마나 벗어났나 → hb_*. 행렬 몇 번뿐이라 가볍다 (캐릭터마다 화면 프레임에 한 번)
+## 모델 뿌리 기준으로 재서 월드 방향으로 돌린다 → 캐릭터 실제 위치(물리)에 더하면 된다 (보간 지연과 상관없음)
+func _measure_hitbox() -> void:
+	var H: Dictionary = GameData.HITBOX_FOLLOW
+	var mx: float = H.max
+	var ut := upper.transform
+	var rest_head := neck.position + head.position
+	var rb := global_basis
+	hb_head = (rb * (ut * (neck.transform * head.position) - rest_head)).limit_length(mx)
+	var pa := Vector3(0, H.a_y, 0)
+	var pb := Vector3(0, H.b_y, 0)
+	hb_a = (rb * (ut * pa - pa)).limit_length(mx)
+	hb_b = (rb * (ut * pb - pb)).limit_length(mx)
 
 
 # ── 음유시인·춤 (4.5단계) ────────────────────────────────────

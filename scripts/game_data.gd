@@ -26,6 +26,11 @@ const STEP_PROBE := 0.12     # 턱 오르기 검사 때 벽 안쪽으로 더 밀
 # ── 피해·처치·부활 (HTML damage / hitTest / spawn / simulate) ──
 const HEAD_R := 0.3          # 머리 판정 반지름 (+투사체 반지름)
 const BODY_R := 0.46         # 몸통 캡슐 반지름 (+투사체 반지름)
+# 히트박스가 흐물 몸을 따라감 (사용자 요청 — 몸은 흔들리는데 판정은 그대로라 맞히기 어려웠음).
+# DerpModel.animate가 선 자세 대비 머리·엉덩이·어깨가 움직인 만큼(hb_*)을 재 두면 head_c·body_a·body_b가 그만큼 옮겨 간다.
+# 넘어져 누운 자세(fall_amt > 0.5)는 원래 계산 그대로. max = 한 점이 옮겨 갈 수 있는 최대 거리(m, 안전장치 —
+# 달리기 시작·급정지 때 젤리 출렁임으로 머리가 0.9m쯤까지 기울어서 그보다 넉넉히)
+const HITBOX_FOLLOW := {"a_y": 0.4, "b_y": 1.15, "max": 1.5}
 const REGEN_DELAY := 5.0     # 이 시간 동안 안 맞으면 재생 시작
 const REGEN := 10            # 기본 초당 회복량 (병과 regen으로 덮어씀)
 const INVULN := 1.2          # 스폰 직후 무적
@@ -76,6 +81,13 @@ const ARROWS := {
 	"crossbow": {"len": 0.5, "r": 0.018, "shaft": 0x6b4a2e, "tip": 0.035, "fletch": 0x2c2f35},
 }
 const ARROW_TIP := 0x8d939b
+# 날아가는 화살·볼트를 눈에 띄게 (사용자 요청 — 잘 안 보였음). 보기만 바뀌고 판정·속도는 그대로. 꽂히면 원래 모양으로 돌아감
+#   scale = 날아가는 동안 화살 크기 배율 (처음 grow m 동안 1 → scale로 자람 — 1인칭에서 눈앞을 가리지 않게), 화살은 그늘·조명을 안 타서 늘 밝게(unshaded)
+#   꼬리 = 화살 뒤로 늘어지는 반투명 빛 꼬리 (색 trail, 진하기 alpha, 굵기 r m). 길이 = min(len m, 속도 × time초, 지금까지 날아간 거리)
+const ARROW_FLIGHT := {
+	"bow": {"scale": 1.7, "grow": 2.0, "trail": 0xffc83a, "alpha": 0.9, "r": 0.075, "len": 3.2, "time": 0.06},       # 금빛
+	"crossbow": {"scale": 1.6, "grow": 2.0, "trail": 0xff5a32, "alpha": 0.9, "r": 0.085, "len": 4.0, "time": 0.04},  # 주황 불꽃
+}
 const WORLD_ARROW_LIFE := 10.0   # 벽·땅에 꽂힌 화살이 남는 시간
 const WORLD_ARROW_MAX := 70      # 넘으면 오래된 것부터 지움
 const BOW_WOOD := 0x8a5a2b
@@ -827,6 +839,7 @@ const ROOM_MAPS := {
 var end_wait_override := -1.0  # 테스트: 0 이상이면 결과 화면 → 대기실 시간을 이걸로
 var signal_url_override := ""  # 테스트: 신호 서버를 이 주소로 (tests/mock_signal.gd, 예 "ws://127.0.0.1:24690"). "off"면 설정이 없는 것처럼
 var ice_override: Variant = null  # 테스트: STUN 없이 (빈 배열이면 같은 컴퓨터 안에서만 연결)
+var hitbox_follow := true   # false면 예전처럼 고정 판정 (HITBOX_FOLLOW, 테스트·비교용)
 var debug_hits := false     # 명중 판정 디버그 표시 (F9로 켜고 끔, HIT_DEBUG). 저장 안 함
 var hitstop_enabled := true   # false면 히트스톱 안 함 (자동 테스트용 — 프레임 수로 시간을 재니까)
 var land_trip_override := -1.0  # 테스트: 0 이상이면 착지 넘어짐 확률을 이걸로

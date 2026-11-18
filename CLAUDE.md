@@ -55,6 +55,8 @@ tests/test_movement.gd 이동 자동 테스트 (HTML과 같은 값이 나오는�
 tests/test_combat.gd   피격·피해·투구·재생·부활·스폰 자동 테스트
 tests/test_stone.gd    돌멩이·투사체·맞은 효과 자동 테스트
 tests/test_bow.gd      활 당기기·세기·후들거림·손 미끄러짐·꽂힘·반동 자동 테스트
+tests/test_hitbox.gd   히트박스 따라가기(선 자세 = 원래 자리, 달리기 5병과·춤·머리 가장자리 명중·끄기) + 눈에 띄는 화살(꼬리·크기·꽂히면 원래대로) 자동 테스트
+tests/screenshot_arrows.gd 날아가는 화살·볼트 예전/지금 사진 → tests/screenshots/arrows_*.png (화면 있어야 함: godot --path . --fixed-fps 60 --resolution 1280x720 -s tests/screenshot_arrows.gd)
 tests/test_close_range.gd 근거리 명중: 1·3·10m × 활 최소/풀·석궁 × 1·3인칭 × 조준점 5곳 표, 0.6m, 첫 프레임 눈→손 판정, 터널링, F9 디버그 표시 자동 테스트
 tests/test_crossbow.gd 석궁 발사·장전 4초·75 피해·헤드샷 한 방·경직·장전 자세 자동 테스트
 tests/test_holy.gd     성수 충전·재충전·포물선·웅덩이 피해·둔화·착지 표시·테두리 색 자동 테스트
@@ -176,6 +178,17 @@ AI대전 → 난이도 → 병과(클릭 또는 1~4) → 바로 경기. 4분이 
   - 투사체 첫 프레임은 `from` → 나가는 자리 구간을 먼저 판정 (눈과 손 사이에 있는 적). 그 뒤는 예전처럼 매 프레임 이전 위치 → 다음 위치 선분 판정 (터널링 없음).
   - 친구대전 "f" 사건은 pos·vel만 보낸다 (초근접이면 pos = from이라 친구 쪽도 같은 판정).
   - 10m에서 가장 약한 화살(28m/s)은 0.9m 떨어져서 몸 가장자리를 겨누면 아래로 지나간다 — 의도한 포물선.
+- **히트박스가 흐물 몸을 따라감** (사용자 요청 "몸은 흔들리는데 히트박스는 그대로라 맞히기 어려움", 수치 `GameData.HITBOX_FOLLOW`):
+  - `DerpModel.animate` 끝의 `_measure_hitbox()`가 선 자세 대비 머리(`hb_head`)·엉덩이(`hb_a`)·어깨(`hb_b`)가 옮겨 간 만큼을 잰다 (upper·neck 회전·위치 = 걸음 출렁·젤리·기울기·춤·말 위 자세).
+    `player.head_c`·`body_a`·`body_b`가 원래 자리 + 그만큼 (`_hb`). 모델 뿌리 기준이라 물리 위치에 더해도 보간 지연과 상관없음.
+  - 가만히 서 있으면 0 (예전과 똑같음). 누운 자세(fall_amt > 0.5)는 예전 계산. 눈 위치(쏘는 자리·카메라)는 안 움직임.
+  - 비용: 캐릭터마다 화면 프레임에 행렬 몇 번 (재 보니 1.3µs/명). `GameData.hitbox_follow = false`면 예전 고정 판정.
+  - 달리기 시작·멈춤 때 젤리 출렁임으로 머리가 0.6~0.95m까지 벗어난다 — 예전엔 그만큼 빗나갔음 (`test_hitbox`).
+  - 친구대전: 투사체는 맞는 쪽이 자기 모델 자세로 판정한다. 보이는 자세는 받은 속도로 같은 계산이라 거의 같고, 무작위 출렁임만 조금 다를 수 있다.
+- **날아가는 화살·볼트 눈에 띄게** (사용자 요청, 수치 `GameData.ARROW_FLIGHT`, 보기만 — 판정·속도 그대로):
+  - `WeaponModels.add_flight_fx`: 화살이 그늘을 안 타고(unshaded) 날아가며 `scale`배로 커짐(처음 `grow` m 동안 자라서 1인칭 눈앞을 안 가림),
+    뒤에 반투명 빛 꼬리(8각 원뿔 메시 하나, 활 금빛·석궁 주황, 길이 = min(len, 속도×time, 날아간 거리)). 매 프레임 `flight_tick`.
+  - 꽂히면(사람·벽·땅) `end_flight_fx`로 꼬리 떼고 원래 크기·재질. 친구 화살(`remote_fire`)도 같음. 그리기 호출은 날아가는 화살마다 +1.
 - **명중 판정 디버그 표시** (`scripts/fx/hit_debug.gd`, Combat 아래 HitDebug): **F9**로 켜고 끔 (`GameData.debug_hits`, 기본 꺼짐, 저장 안 함, 색·시간 `HIT_DEBUG`).
   모든 캐릭터 히트박스(머리 구·몸 캡슐), 쏜 자리(판정 시작점 하늘색 → 나가는 자리 초록, 조준점 분홍), 프레임마다 판정한 선분(노랑), 맞은 곳(사람 빨강·벽 회색). 벽 뒤도 보임.
 - 3인칭 손에 든 무기는 HTML보다 크다 (`GameData.HELD_SCALE`, 사용자 요청 — 잘 안 보여서. 보기만, 판정 그대로).
@@ -742,6 +755,7 @@ godot --headless --fixed-fps 60 --path . -s tests/test_stone.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_bow.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_crossbow.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_close_range.gd
+godot --headless --fixed-fps 60 --path . -s tests/test_hitbox.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_holy.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_bot.gd
 godot --headless --fixed-fps 60 --path . -s tests/test_match.gd

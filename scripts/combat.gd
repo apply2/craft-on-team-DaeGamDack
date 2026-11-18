@@ -821,6 +821,7 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			dmg = roundf(lerpf(W.dmg_min, W.dmg_max, t))
 			e.cd = W.nock
 			mesh = WeaponModels.make_arrow_fast("bow")
+			WeaponModels.add_flight_fx(mesh, "bow")
 			Sfx.play("bow", e.global_position)
 		"crossbow":
 			speed = W.speed
@@ -828,6 +829,7 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			e.cd = W.cd
 			xbow_spent(e)
 			mesh = WeaponModels.make_arrow_fast("crossbow")
+			WeaponModels.add_flight_fx(mesh, "crossbow")
 			Sfx.play("xbow", e.global_position)
 		"holy":  # 위로 살짝 띄워 던지는 포물선. 맞으면 피해 대신 웅덩이
 			speed = W.speed
@@ -1056,6 +1058,7 @@ func update_projectiles(dt: float) -> void:
 			if kind == "stone":
 				mesh.queue_free()
 			else:  # 화살은 몸에 꽂힌다
+				WeaponModels.end_flight_fx(mesh)
 				stick_arrow(mesh, hit_e, head, pt, dir)
 			if not hit_e.is_local or tp_on():
 				fx.puff(pt, GameData.CLASSES[hit_e.cls].color, 0.14, 7 if head else 4)
@@ -1072,6 +1075,7 @@ func update_projectiles(dt: float) -> void:
 				mesh.queue_free()
 				fx.puff(pt, 0xcdbb98, 0.1, 3)
 			else:  # 화살은 벽·땅에 10초 꽂혀 있다
+				WeaponModels.end_flight_fx(mesh)
 				var dir := vel.normalized()
 				mesh.global_basis = WeaponModels.face(dir)
 				mesh.global_position = pt + dir * 0.14
@@ -1087,6 +1091,10 @@ func update_projectiles(dt: float) -> void:
 		p.pos = pos
 		mesh.global_position = pos
 		p.life -= dt
+		if GameData.ARROW_FLIGHT.has(kind):  # 눈에 띄는 화살: 크기·빛 꼬리 (보기만)
+			var trav: float = float(p.get("travel", 0.0)) + d.length()
+			p.travel = trav
+			WeaponModels.flight_tick(mesh, kind, trav, vel.length())
 		if SPINS.has(kind):
 			var spin: Vector3 = p.spin
 			mesh.rotation.x += spin.x * dt
@@ -1216,11 +1224,13 @@ func remote_fire(e: PlayerController, kind: String, pos: Vector3, vel: Vector3, 
 			Sfx.play("throw", pos)
 		"bow":
 			mesh = WeaponModels.make_arrow_fast("bow")
+			WeaponModels.add_flight_fx(mesh, "bow")
 			dmg = roundf(lerpf(W.dmg_min, W.dmg_max, t))
 			Sfx.play("bow", pos)
 			e.rec_v += 5 + 4 * t
 		"crossbow":
 			mesh = WeaponModels.make_arrow_fast("crossbow")
+			WeaponModels.add_flight_fx(mesh, "crossbow")
 			dmg = W.dmg
 			Sfx.play("xbow", pos)
 			e.rec_v += 10
