@@ -1,6 +1,6 @@
 extends SceneTree
 ## 음유시인 자동 테스트 (4.5단계, HTML에 없는 새 병과 — CLAUDE.md "음유시인 명세" 기준)
-## 원뿔 안/밖, 벽 뒤 차단, 피해 주기, 누적 0.75초 춤, 1.5초 창, 3초 면역, 넘어짐 우선, 숨 소진·헐떡임,
+## 원뿔 안/밖, 벽 뒤 차단, 피해 주기, 누적 0.95초 춤, 1.5초 창, 3.5초 면역, 넘어짐 우선, 숨 소진·헐떡임,
 ## 삑사리, 팡파레, 춤 중 공격 불가(모든 무기), 봇 조준 오차 ×2.5, 베레모·볼·HUD 숨 막대를 확인한다.
 ## 실행: godot --headless --fixed-fps 60 --path . -s tests/test_bard.gd
 ## 통과하면 "ALL PASS"와 종료 코드 0, 실패하면 FAIL 줄과 종료 코드 1.
@@ -137,21 +137,21 @@ func _run() -> void:
 	check("0.5초에 2번 맞음 (dmg×2 = 초당 12의 절반)", near(dm.hp, 100.0 - 2.0 * float(W.dmg), 0.01) and near(float(W.dmg) / float(W.tick), 12.0, 0.001), "hp=%.2f" % dm.hp)
 	check("넉백 없음", Vector2(dm.velocity.x, dm.velocity.z).length() < 0.05 and dm.kb_t <= 0 and dm.stagger <= 0, "v=%s" % dm.velocity)
 
-	# ── 춤: 누적 0.75초 ──
-	await wait(secs(0.15))  # 이제 0.65초쯤
-	check("0.65초: 아직 안 춤", dm.dance_t <= 0, "들은 시간 %.2f" % T.heard_sum(dm))
+	# ── 춤: 누적 0.95초 (사용자 요청 0.75 → 0.95) ──
+	await wait(secs(float(D.need) - 0.6))  # 이제 need - 0.1초쯤
+	check("%.2f초: 아직 안 춤" % (float(D.need) - 0.1), dm.dance_t <= 0, "들은 시간 %.2f" % T.heard_sum(dm))
 	await wait(secs(0.15))
-	check("0.75초 넘게 들으면 2초 춤", dm.dance_t > 1.8, "dance_t=%.2f" % dm.dance_t)
+	check("%.2f초 넘게 들으면 2초 춤" % float(D.need), dm.dance_t > 1.8, "dance_t=%.2f" % dm.dance_t)
 	check("춤추면 이동 ×0.6", near(dm.max_speed(), G.BASE_SPEED * G.CLASSES.archer.speed * D.speed, 0.01), "max=%.2f" % dm.max_speed())
 	bard.scripted_input = IDLE
 	await wait(secs(2.05))
-	check("2초 뒤 춤 끝, 3초 면역", dm.dance_t <= 0 and dm.dance_immune > 2.8, "immune=%.2f" % dm.dance_immune)
+	check("2초 뒤 춤 끝, %.1f초 면역 (사용자 요청 3 → 3.5)" % float(D.immune), dm.dance_t <= 0 and dm.dance_immune > float(D.immune) - 0.2, "immune=%.2f" % dm.dance_immune)
 	bard.scripted_input = PLAY
 	await wait(secs(2.0))
 	check("면역 중엔 계속 들어도 안 춤", dm.dance_t <= 0, "immune=%.2f" % dm.dance_immune)
 	bard.breath = W.breath_max  # 숨이 먼저 떨어지지 않게
-	await wait(secs(1.0) + secs(0.8))
-	check("면역 끝나고 다시 0.75초 들으면 또 춤", dm.dance_t > 0, "dance_t=%.2f" % dm.dance_t)
+	await wait(secs(float(D.immune) - 2.0) + secs(float(D.need) + 0.05))
+	check("면역 끝나고 다시 %.2f초 들으면 또 춤" % float(D.need), dm.dance_t > 0, "dance_t=%.2f" % dm.dance_t)
 	bard.scripted_input = IDLE
 	await wait(secs(2.2))
 
@@ -159,29 +159,29 @@ func _run() -> void:
 	await setup(6.0)
 	bard.breath = W.breath_max
 	bard.scripted_input = PLAY
-	await wait(secs(0.4))
+	await wait(secs(0.5))
 	bard.scripted_input = IDLE
 	await wait(secs(0.3))
 	bard.scripted_input = PLAY
-	await wait(secs(0.4))
+	await wait(secs(0.5))
 	bard.scripted_input = IDLE
-	check("0.4초 + 쉼 0.3초 + 0.4초 = 1.5초 안 누적 0.8초 → 춤", dm.dance_t > 0, "들은 시간 %.2f" % T.heard_sum(dm))
-	await wait(secs(2.2) + secs(3.1))
+	check("0.5초 + 쉼 0.3초 + 0.5초 = 1.5초 안 누적 1.0초 → 춤", dm.dance_t > 0, "들은 시간 %.2f" % T.heard_sum(dm))
+	await wait(secs(2.2) + secs(float(D.immune) + 0.1))
 	await setup(6.0)
 	bard.scripted_input = PLAY
-	await wait(secs(0.4))
+	await wait(secs(0.5))
 	bard.scripted_input = IDLE
 	await wait(secs(1.4))
 	bard.scripted_input = PLAY
-	await wait(secs(0.4))
+	await wait(secs(0.5))
 	bard.scripted_input = IDLE
-	check("0.4초 + 쉼 1.4초 + 0.4초 → 창 밖으로 빠져서 안 춤", dm.dance_t <= 0, "들은 시간 %.2f" % T.heard_sum(dm))
+	check("0.5초 + 쉼 1.4초 + 0.5초 → 창 밖으로 빠져서 안 춤", dm.dance_t <= 0, "들은 시간 %.2f" % T.heard_sum(dm))
 
 	# ── 넘어짐 우선 ──
 	await setup(6.0)
 	bard.breath = W.breath_max
 	bard.scripted_input = PLAY
-	await wait(secs(0.8))
+	await wait(secs(float(D.need) + 0.1))
 	bard.scripted_input = IDLE
 	check("(넘어짐 시험 준비) 춤추는 중", dm.dance_t > 0, "")
 	dm.trip()

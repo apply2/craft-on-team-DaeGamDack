@@ -349,7 +349,7 @@ const VAMP_FX := {"flame_every": 0.05, "flame_life": 0.45, "flame_size": 0.16, "
 # 넘어짐(fall_t)이 우선 — 넘어지면 춤은 멈추고 남은 시간은 사라짐
 # 아래 연출 값은 명세에 없어서 정함: sway 플레이어 조준 출렁(라디안)·sway_hz 출렁 빠르기,
 # spin_every 몇 초마다 한 바퀴·spin_t 한 바퀴 도는 시간 (춤 음표는 WEAPONS.trumpet.fx)
-const DANCE := {"window": 1.5, "need": 0.75, "dur": 2.0, "immune": 3.0, "speed": 0.6, "bot_err": 2.5,
+const DANCE := {"window": 1.5, "need": 0.95, "dur": 2.0, "immune": 3.5, "speed": 0.6, "bot_err": 2.5,
 	"sway": 0.06, "sway_hz": 1.6, "spin_every": 1.1, "spin_t": 0.45}
 
 # 트럼펫·음유시인 모양 색 (명세: 금색 트럼펫, 깃털 달린 납작한 베레모)
