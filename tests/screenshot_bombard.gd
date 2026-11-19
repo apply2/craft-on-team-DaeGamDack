@@ -1,8 +1,9 @@
 extends SceneTree
 ## 포병 봄바드 외형 사진 8칸: 멀리서 본 대포 · 쏘는 순간(점화 불꽃·포구 연기) · 1인칭 평소·쏘는 순간·우클릭 조준 ·
-## 3인칭 어깨 너머 쏘기 · 폭발 순간(돌 파편) · 폭발 조금 뒤(흙먼지)
+## 3인칭 어깨 너머 쏘기 · 폭발 순간(돌 파편) · 폭발 조금 뒤(흙먼지) ·
+## 1인칭 R 장전 (포탄 넣기 · 꽂을대 밀기 · 빼기 · 장전하며 우클릭)
 ## 화면 필요: godot --path . --resolution 1280x720 -s tests/screenshot_bombard.gd -- tag=now
-## 결과: tests/screenshots/bombard_<tag>.png (2열 × 4줄)
+## 결과: tests/screenshots/bombard_<tag>.png (2열 × 6줄)
 
 var M: Node
 var G: Node
@@ -10,6 +11,8 @@ var tag := "now"
 const IDLE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false}
 const FIRE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "fire": true}
 const AIM := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "aim": true}
+const RELOAD := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "reload": true}
+const RELOAD_AIM := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "reload": true, "aim": true}
 const AT := Vector3(0, 0, 16)
 
 
@@ -59,7 +62,7 @@ func put(e, pos: Vector3, cls: String, yaw: float, pitch := -0.05) -> void:
 
 
 func shoot(e) -> void:
-	e.cn_t = 0.0
+	e.cn_load = 1.0
 	e.cd = 0.0
 	e.scripted_input = FIRE
 	await phys(2)
@@ -117,7 +120,18 @@ func _run() -> void:
 	shots.append(grab())
 	await frames(18)
 	shots.append(grab())
-	var sheet := Image.create(1280, 1440, false, shots[0].get_format())
+	# 9~12: 1인칭 R 장전 — 게이지를 정해 두고 R을 20프레임 눌러 자세를 잡은 뒤 찍음 (그동안 약 0.08 더 참)
+	put(p, AT, "cannoneer", 0.0)
+	await frames(30)
+	for st in [[0.04, RELOAD], [0.295, RELOAD], [0.42, RELOAD], [0.6, RELOAD_AIM]]:
+		p.cn_load = st[0]
+		p.scripted_input = st[1]
+		await phys(20)
+		await frames(2)
+		shots.append(grab())
+		p.scripted_input = IDLE
+		await frames(20)
+	var sheet := Image.create(1280, 2160, false, shots[0].get_format())
 	for i in shots.size():
 		sheet.blit_rect(shots[i], Rect2i(0, 0, 640, 360), Vector2i((i % 2) * 640, (i / 2) * 360))
 	sheet.save_png("res://tests/screenshots/bombard_%s.png" % tag)

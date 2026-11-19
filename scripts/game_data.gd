@@ -207,7 +207,9 @@ const WEAPONS := {
 	# 포병 대포 (사용자 요청): 곡사 포탄. 무엇에든 닿거나 fuse초가 지나면 터짐
 	#   dmg: 직격 피해(총) / blast: 폭발 반경 m, 피해는 가운데 blast_max → 가장자리 blast_min (몸까지 거리로 선형)
 	#   폭발과 대상 사이가 벽에 막히면 범위 피해 없음. 넉백 kb(수평)·up(위)도 거리에 따라 줄어듦
-	#   reload: 한 발 쏘면 자동 재장전 시간 / grav: 포탄 중력 (사람 GRAV 22보다 작게 — 아치가 길게)
+	#   reload: R키를 꾹 누르고 있어야 차는 장전 시간 (사용자 요청 — 예전엔 쏘면 자동 재장전). 떼면 멈추고 다시 누르면 이어서, 공중·춤·넘어짐 중에도 됨
+#     reload_slow: R로 장전하는 동안 이동 배율. 우클릭 조준(aim_slow)과 겹쳐도 둘 중 작은 쪽 하나만 (최대 30% 감속)
+#   grav: 포탄 중력 (사람 GRAV 22보다 작게 — 아치가 길게)
 	#   포탄 점프: 자기 폭발은 피해 ×self_mul. jump_r 안이면 위로 jump_up, 폭발 반대쪽으로 jump_side (m/s)
 	#     그 뒤 착지할 때까지 공중 조작 ×air_ctrl. 자기 포탄으로 죽으면 자멸
 	#   우클릭 조준: 예상 궤적·착탄 지점 + 확대(AIM_CAM.cannon), 이동 ×aim_slow
@@ -221,7 +223,7 @@ const WEAPONS := {
 		"recoil": 8.0, "recoil_up": 2.0, "recoil_vmax": 4.0, "recoil_t": 0.3, "recoil_fric": 2.0,
 		"cam_kick": 0.06, "cam_kick_t": 0.2, "cam_kick_peak": 0.2,
 		"blast": 2.5, "blast_max": 80, "blast_min": 25, "kb": 6, "up": 4,
-		"self_mul": 1.0 / 3.0, "jump_r": 2.5, "jump_up": 22.0, "jump_side": 5.0, "air_ctrl": 0.3, "air_grav": 0.75, "aim_slow": 0.7,
+		"self_mul": 1.0 / 3.0, "jump_r": 2.5, "jump_up": 22.0, "jump_side": 5.0, "air_ctrl": 0.3, "air_grav": 0.75, "aim_slow": 0.7, "reload_slow": 0.7,
 		# ball·color = 날아가는 돌 포탄의 겉모습만 (판정은 radius)
 		"ball": 0.21, "color": 0x8d8780, "shake": {"max": 1.1, "near": 4.0, "far": 26.0},
 		"aim_every": 2, "aim_dots": 28},
@@ -237,15 +239,15 @@ const WEAPONS := {
 		"sway_start": 1.0, "sway_k": 0.05, "sway_max": 0.11, "slip_t": 3.0, "slip_yaw": 0.6, "slip_pitch": [-0.35, 0.55]},
 	# 사용자 요청 휠 장전 (예전: 쏜 뒤 4초 자동 장전): 쏜 뒤 마우스 휠을 notches칸 굴려야 다시 쏜다.
 	#   휠 위·아래 다 됨, 중간에 멈춰도 진행도 유지, 장전돼 있으면 휠 무시, 부활하면 장전된 채 (예전에도 부활하면 바로 쏠 수 있었음)
-	#   notches: 사용자 요청으로 10→25칸
+	#   notches: 사용자 요청으로 10→25→35→50칸
 	#   notch_gap: 한 칸으로 치는 최소 간격(실제 시간). 이 안에 들어온 휠은 버림 — 프리스핀 휠·터치패드로 순식간에 감지 못하게.
-	#              사용자 요청으로 0.15→0.04 (가장 빨라도 25칸 ≈ 1초)
+	#              사용자 요청으로 0.15→0.04 (가장 빨라도 50칸 ≈ 2초)
 	#   reload_speed: 휠로 감는 중 이동 속도 배율 (사용자 요청 0.9→0.75 = 25% 느려짐). 곱연산 (달리기 등과 같이 곱함)
 	#   reload_window: 마지막 휠 칸 뒤 이만큼은 '감는 중'으로 봄 (칸 사이에 속도가 튀지 않게). 다 감으면 바로 풀림
 	#   show_rate: 장전 모션이 진행도를 따라가는 속도 (초당) / cd: 쏜 직후 휠도 안 먹는 시간
 	#   wind_dir: 장전으로 치는 휠 방향 "down"(아래로 굴림) / "up". 반대 방향은 완전히 무시 (진행·간격·감속 다 안 건드림). 사용자 요청 = "down"
 	#   grav 6→2 (사용자 요청: 거의 직선, 85m에서 0.7m 떨어짐)
-	"crossbow": {"name": "석궁", "dmg": 75, "reload_speed": 0.75, "reload_window": 0.3, "notches": 25, "notch_gap": 0.04, "show_rate": 3.0, "cd": 0.25,
+	"crossbow": {"name": "석궁", "dmg": 75, "reload_speed": 0.75, "reload_window": 0.3, "notches": 50, "notch_gap": 0.04, "show_rate": 3.0, "cd": 0.25,
 		"wind_dir": "down", "speed": 100, "grav": 2, "kb": 11, "up": 5, "radius": 0.05},
 	"sniper": {"name": "대물 저격총", "ammo": 5, "kb": 0, "speed_mul": 0.9},
 	"ak": {"name": "AK-47", "dmg": 23, "min_dmg": 18, "fall0": 30, "fall1": 80, "range": 120, "rate": 0.12, "mag": 25,
@@ -364,7 +366,7 @@ const TRUMPET_SND := {"base_hz": 523.25, "melody": [0, 4, 7, 4, 0, 7, 12], "note
 # ── 봇 난이도 ────────────────────────────────────────────────
 const DIFF := {
 	"easy": {"name": "쉬움", "react": [1.0, 1.5], "err": 1.5, "sniper_err": 0.09, "head": 0.0, "lead": [0.0, 0.4], "fire": 0.5, "turn": 2.4,
-		"xbow_wind": 10.0,  # 봇 석궁 휠 감기 (초당 칸 수 — 25칸에 2.5초 / 1.9초 / 1.6초. 사람이 가장 빠르면 1초)
+		"xbow_wind": 10.0,  # 봇 석궁 휠 감기 (초당 칸 수 — 50칸에 5초 / 3.8초 / 3.1초. 사람이 가장 빠르면 2초)
 		"color": 0x6cc35a, "skulls": "●○○", "desc": "봇이 늦게 반응하고 자주 빗나가요. 넘어지는 데 적응하기 좋아요."},
 	"normal": {"name": "보통", "react": [0.7, 1.1], "err": 1.0, "sniper_err": 0.06, "head": 0.03, "lead": [0.1, 0.6], "fire": 0.65, "turn": 3.2,
 		"xbow_wind": 13.0,
@@ -675,7 +677,7 @@ const CLASS_PAGE := {
 		"crossbow": "피해 {dmg}, 머리에 맞히면 한 방. 쏜 뒤엔 마우스 휠을 {notches}칸 굴려 감는다.",
 		"cleric": "성수병 {max_charges}개를 모아 던진다. 웅덩이가 적을 지지고 느리게 만든다.",
 		"bard": "트럼펫을 불면 적이 춤춘다. 춤추는 적은 느리고 공격을 못 한다.",
-		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 한 발 쏘면 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
+		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 쏜 뒤엔 R키를 꾹 눌러 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
 		"vampire": "햇빛에 초당 10씩 탄다. 물면 {dmg} 피해 + {heal} 회복, 처치하면 +{kill_heal}. 우클릭 박쥐 돌진.",
 	},
 	"eye_h": 1.62,   # 사거리 계산: 눈높이(player.eye_pos)에서 정면으로 쏴서 땅에 닿는 거리 (무기 range가 있으면 거기까지)
@@ -938,6 +940,9 @@ const NET := {
 	"dead_wait": 0.5, "revive_guard": 1.0,  # 죽음 사건보다 상태가 먼저 와도 잠깐 기다림 / 죽은 직후 옛 상태로 안 살아남
 	"lobby_return": 10.0,     # 경기가 끝나고 결과 화면을 이만큼 보여 준 뒤 모두 대기실로 (방장이 알림)
 	"lobby_grace": 3.0,       # 친구: 방장 알림이 늦으면 lobby_return + 이만큼 뒤에 스스로 대기실로
+	# 포병 장전 검사 (사용자 요청 "발사 가능 여부는 방장이 판정"): 친구가 쏜 포탄은 방장에게만 가고, 방장이 받은 상태의 장전 게이지가
+	# 1 - cannon_tol 이상일 때만 다른 사람에게 돌림 (상태는 30Hz라 조금 늦게 와서 여유를 둠 — 0.15 = 4초 장전에서 0.6초)
+	"cannon_tol": 0.15,
 }
 ## 친구대전 대기실 맵 목록 (모드마다. 지금은 하나씩 — 맵이 늘면 여기에 더함)
 const ROOM_MAPS := {
@@ -1238,6 +1243,7 @@ func _setup_input() -> void:
 		"jump": [KEY_SPACE], "sprint": [KEY_SHIFT], "crouch": [KEY_CTRL, KEY_C],
 		"toggle_view": [KEY_V], "swap": [KEY_Q], "interact": [KEY_E], "scoreboard": [KEY_TAB],
 		"cancel_draw": [KEY_R],  # 활 당기기 취소 (사용자 요청)
+		"reload": [KEY_R],       # 포병: 꾹 눌러 장전 (사용자 요청 — 궁수 취소와 같은 키, 병과마다 따로 동작)
 		"debug_hits": [HIT_DEBUG.key],  # 명중 판정 디버그 표시 켜고 끄기
 		"perf_hud": [PERF_HUD.key],     # 성능 표시 (FPS·프레임 시간·그리기 호출) 켜고 끄기
 		"class_1": [KEY_1], "class_2": [KEY_2], "class_3": [KEY_3], "class_4": [KEY_4], "class_5": [KEY_5], "class_6": [KEY_6], "class_7": [KEY_7],  # 병과 고르는 화면에서만

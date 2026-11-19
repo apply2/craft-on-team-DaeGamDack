@@ -14,6 +14,7 @@ var S: Node   # 가짜 신호 서버
 
 const IDLE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false}
 const FIRE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "fire": true}
+const RELOAD := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "reload": true}
 const HERE := Vector3(-25, 0, 18)
 
 
@@ -195,6 +196,48 @@ func _run() -> void:
 	check("포탄 직격: 친구 쪽에서 100 판정", absf(pb.hp - 30.0) < 0.5, "hp=%.0f" % pb.hp)
 	check("방장 화면의 친구 체력도 같음 (상태 동기화)", absf(rb.hp - pb.hp) < 1.0, "방장 화면 %.0f / 친구 %.0f" % [rb.hp, pb.hp])
 	check("쏜 사람(방장)은 안 다침", pa.hp == 130.0, "hp=%.0f" % pa.hp)
+
+	# ── 포병 R 장전 (사용자 요청): 장전 게이지가 두 화면에서 같고, 친구 포탄은 방장이 장전됐는지 보고 받음 ──
+	put(pa, HERE, "archer", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "cannoneer", -PI / 2)  # 친구는 방장 반대쪽(동쪽)을 봄
+	await wait(40)
+	var cn_seen: Array = []
+	var host_new := func() -> int:  # 방장 화면에 새로 생긴 친구 포탄 수
+		var n := 0
+		for pr in A.combat.projectiles:
+			if pr.owner == rb and pr.kind == "cannon" and not cn_seen.has(pr):
+				n += 1
+		return n
+	var fake := ["f", nb.WEPS.find("cannon"), HERE + Vector3(6, 1.5, 0), Vector3(32, 0, 0), 0.0]  # 장전 안 하고 보내는 가짜 포탄
+	cn_seen = A.combat.projectiles.duplicate()
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(10)
+	check("친구 포탄(장전됨): 방장이 받아 방장 화면에 생김", host_new.call() == 1, "n=%d" % host_new.call())
+	check("  쏜 뒤 두 화면 다 게이지 0", pb.cn_load == 0.0 and rb.cn_load < 0.01, "친구 %.2f / 방장 화면 %.2f" % [pb.cn_load, rb.cn_load])
+	pb.scripted_input = RELOAD
+	await wait(120)
+	pb.scripted_input = IDLE
+	await wait(10)
+	check("친구가 R 2초 → 게이지 절반, 방장 화면도 같음", absf(pb.cn_load - 0.5) < 0.03 and absf(rb.cn_load - pb.cn_load) < 0.01,
+		"친구 %.3f / 방장 화면 %.3f" % [pb.cn_load, rb.cn_load])
+	cn_seen = A.combat.projectiles.duplicate()
+	nb.event_host(fake)
+	await wait(10)
+	check("장전 안 된 친구 포탄(가짜 사건)은 방장이 버림", host_new.call() == 0, "n=%d" % host_new.call())
+	pb.scripted_input = RELOAD
+	await wait(125)
+	pb.scripted_input = IDLE
+	await wait(10)
+	check("이어서 다 차면 두 화면 다 1", pb.cn_load == 1.0 and rb.cn_load == 1.0, "친구 %.3f / 방장 화면 %.3f" % [pb.cn_load, rb.cn_load])
+	cn_seen = A.combat.projectiles.duplicate()
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	nb.event_host(fake)  # 한 번 장전으로 두 발 보내기
+	await wait(10)
+	check("한 번 장전으로 두 발: 방장은 한 발만 받음", host_new.call() == 1, "n=%d" % host_new.call())
 	put(pa, HERE, "barbarian", -PI / 2)
 	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
 	await wait(40)

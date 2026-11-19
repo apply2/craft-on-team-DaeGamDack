@@ -581,11 +581,11 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 					Sfx.play("reload")
 		else:
 			e.charge_t = 0.0
-	# 포병은 한 발 쏘면 자동 재장전 (다른 무기를 들고 있어도). 끝나면 철컥
-	if e.cn_t > 0:
-		e.cn_t -= dt
-		if e.cn_t <= 0:
-			e.cn_t = 0.0
+	# 포병 장전 (사용자 요청): 대포를 들고 R을 꾹 누르는 동안만 참. 떼면 멈추고 다시 누르면 이어서. 끝나면 철컥
+	# 공격이 아니라서 공중·춤·넘어짐·스폰룸에서도 된다
+	if e.cn_reloading():
+		e.cn_load = minf(1.0, e.cn_load + dt / float(GameData.WEAPONS.cannon.reload))
+		if e.cn_load >= 1.0:
 			Sfx.play("clank", e.global_position)
 	if e.cls == "vampire":  # 흡혈귀: 돌진 재사용 대기·돌진 부딪힘 (공격 금지여도 돌진은 이어짐)
 		Vampire.tick(self, e, dt)
@@ -612,9 +612,11 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 		"stone":  # 누르고 있으면 재사용 대기가 끝나는 대로 쏜다 (고기 먹는 동안은 손이 바빠서 안 던짐)
 			if held and e.cd <= 0 and e.eat_t <= 0:
 				fire(e, e.wep)
-		"cannon":  # 장전돼 있으면 쏜다 (누르고 있으면 장전되는 대로)
-			if held and e.cn_t <= 0 and e.cd <= 0:
+		"cannon":  # 장전돼 있으면 쏜다. 안 됐으면 누른 순간 "R키를 꾹 눌러 장전" (내 화면)
+			if held and e.cn_load >= 1.0 and e.cd <= 0:
 				fire(e, "cannon")
+			elif held and not e.trig_prev and e.cn_load < 1.0 and e.is_local:
+				toast.emit("R키를 꾹 눌러 장전")
 		"crossbow":  # 휠로 다 감아 둔 것만 쏜다 (누르고 있으면 다 감는 대로)
 			if held and e.cd <= 0 and e.xb_wind >= int(GameData.WEAPONS.crossbow.notches):
 				fire(e, e.wep)
@@ -890,7 +892,7 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			speed = W.speed
 			dmg = W.dmg
 			e.cd = 0.3
-			e.cn_t = float(W.reload)
+			e.cn_load = 0.0  # 다시 쏘려면 R을 꾹
 			mesh = _cannonball()
 			Sfx.play("cannon", e.global_position)
 			if not e.is_remote:  # 발사 반동 (몸이 밀림) — 친구 캐릭터는 그쪽 컴퓨터가
@@ -933,7 +935,10 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 		"spin": Vector3(randf_range(-15, 15), randf_range(-15, 15), randf_range(-15, 15)),
 	})
 	if mp() and not e.is_remote:  # 친구 화면에도 같은 투사체를 만든다 (맞았는지는 맞은 사람이 판정)
-		net.event(["f", Net.WEPS.find(kind), pos, vel, t], e)
+		if kind == "cannon" and not net.is_host:  # 친구의 포탄은 방장이 장전됐는지 보고 돌림 (Net._ev)
+			net.event_host(["f", Net.WEPS.find(kind), pos, vel, t])
+		else:
+			net.event(["f", Net.WEPS.find(kind), pos, vel, t], e)
 
 
 ## 포탄 모양: 검은 쇠공

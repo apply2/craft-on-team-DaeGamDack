@@ -205,7 +205,7 @@ func _process(_dt: float) -> void:
 	if hit == null:  # 아무 데도 안 닿으면 fuse초에 공중에서 터지는 곳
 		hit = prev
 	aim_hit = hit
-	var ready := e.cn_t <= 0
+	var ready := e.cn_load >= 1.0
 	_dot_mat.albedo_color = Color(GameData.col(0xffd27a if ready else 0xc9c9c9), 0.85 if ready else 0.5)
 	# 점은 궤적 길이를 따라 고르게
 	var mm := _dots.multimesh

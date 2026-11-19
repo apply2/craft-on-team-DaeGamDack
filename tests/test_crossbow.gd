@@ -1,5 +1,5 @@
 extends SceneTree
-## 석궁 자동 테스트 — HTML fire('crossbow') / damage와 같은 결과인지 + 휠 장전(사용자 요청: 휠 25칸을 굴려야 다시 쏨) 확인.
+## 석궁 자동 테스트 — HTML fire('crossbow') / damage와 같은 결과인지 + 휠 장전(사용자 요청: 휠 50칸을 굴려야 다시 쏨) 확인.
 ## 실행: godot --headless --fixed-fps 60 --path . -s tests/test_crossbow.gd
 ## 통과하면 "ALL PASS"와 종료 코드 0, 실패하면 FAIL 줄과 종료 코드 1.
 
@@ -117,7 +117,7 @@ func _run() -> void:
 		var pr: Dictionary = new_shots[0]
 		check("속도 100", near((pr.vel as Vector3).length(), 100.0, 0.5), "v=%.1f" % (pr.vel as Vector3).length())
 		check("중력 2 (거의 직선), 피해 75", pr.grav == 2.0 and pr.dmg == 75.0, "grav=%.0f dmg=%.0f" % [pr.grav, pr.dmg])
-	check("쏘면 0칸부터 (휠 장전 25칸)", p.xb_wind == 0 and X.notches == 25, "wind=%d" % p.xb_wind)
+	check("쏘면 0칸부터 (휠 장전 50칸)", p.xb_wind == 0 and X.notches == 50, "wind=%d" % p.xb_wind)
 	var walk: float = G.BASE_SPEED * float(G.CLASSES.crossbow.speed)
 	check("쏘기만 하고 안 감으면 안 느려짐", near(p.max_speed(), walk, 0.01), "max=%.2f" % p.max_speed())
 	var NX := int(X.notches)
@@ -132,7 +132,7 @@ func _run() -> void:
 	var S: Node = root.get_node("Sfx")
 	S.played.clear()
 	await spin(6)
-	check("휠 6칸 → 6/25", p.xb_wind == 6, "wind=%d" % p.xb_wind)
+	check("휠 6칸 → 6/50", p.xb_wind == 6, "wind=%d" % p.xb_wind)
 	check("칸마다 끼릭 소리", S.played.count("xbow_click") == 6, str(S.played))
 	check("감는 중(마지막 칸 뒤 0.3초 안)엔 이동 속도 ×0.75", near(p.max_speed(), walk * float(X.reload_speed), 0.01) and X.reload_speed == 0.75,
 		"max=%.2f" % p.max_speed())
@@ -245,7 +245,7 @@ func _run() -> void:
 	await wait(5)
 	var arm_ready: float = p.model.arm_r.rotation.x
 	await hold(1)
-	await spin(5)
+	await spin(int(X.notches) / 5)  # 25칸일 때 5칸과 같은 비율
 	await wait(20)
 	var arm_reload: float = p.model.arm_r.rotation.x
 	check("반쯤 감았을 때 3인칭 팔이 내려감", arm_reload > arm_ready + 0.5, "준비 %.2f → 장전 %.2f (show %.2f)" % [arm_ready, arm_reload, p.xb_show])

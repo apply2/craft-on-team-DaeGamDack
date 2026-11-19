@@ -59,9 +59,11 @@ var horse := {}           # 타고 있는 말 모양 (WeaponModels.make_horse) �
 var ln_t := 0.0           # 마상창에 또 맞기까지 남은 시간
 var kb_air := false       # 넉백으로 떠 있음 (착지할 때까지 속도 상한을 이동속도·둔화와 상관없이 풀어 둠 — 사용자 요청)
 var blast_air := false    # 포탄 점프로 떠 있음 (착지할 때까지 공중 조작 ×WEAPONS.cannon.air_ctrl, 속도 상한 풀림)
-var cn_t := 0.0           # 포병: 재장전 남은 시간
+var cn_load := 1.0        # 포병: 장전 게이지 0~1 (1 = 장전됨). R키를 꾹 누르는 동안만 참 (사용자 요청)
+var reload_held := false  # 포병: 이번 프레임 R(장전) 키
+var net_cn_block := false # 방장: 이 친구 포탄을 받아 줬음 → 그 친구 상태에서 게이지가 빈 걸 볼 때까지 다음 포탄 안 받음
 var recoil_t := 0.0       # 포병: 발사 반동으로 밀리는 중 (땅 마찰 WEAPONS.cannon.recoil_fric)
-var cam_kick_t := 0.0     # 포병: 발사 화면 반동 남은 시간 (실제 시간) (0이면 장전됨 — WEAPONS.cannon.reload)
+var cam_kick_t := 0.0     # 포병: 발사 화면 반동 남은 시간 (실제 시간)
 # 흡혈귀 (사용자 요청 새 병과 — scripts/vampire.gd가 관리)
 var dash_t := 0.0         # 박쥐 돌진 남은 시간 (이동은 _dash_move가 덮어씀)
 var dash_dir := Vector3.ZERO
@@ -268,7 +270,9 @@ func spawn_at(p: Vector3) -> void:
 	ln_t = 0.0
 	blast_air = false
 	kb_air = false
-	cn_t = 0.0
+	cn_load = 1.0  # 부활하면 장전된 채
+	reload_held = false
+	net_cn_block = false
 	recoil_t = 0.0
 	cam_kick_t = 0.0
 	dash_t = 0.0
@@ -294,6 +298,11 @@ func spawn_at(p: Vector3) -> void:
 	reset_physics_interpolation()
 
 
+## 포병: R을 누르고 있고 아직 덜 찼음 (게이지가 차는 중 → 이동 ×reload_slow, 1인칭 꽂을대 모션)
+func cn_reloading() -> bool:
+	return wep == "cannon" and reload_held and cn_load < 1.0 and alive
+
+
 ## 죽음 — 몸은 Combat.kill이 래그돌로 바꿔 둔다
 func die(dir: Vector3) -> void:
 	alive = false
@@ -303,6 +312,7 @@ func die(dir: Vector3) -> void:
 	death_dir = dir
 	velocity = Vector3.ZERO
 	fire_held = false
+	reload_held = false
 	charging = false
 	playing = false
 	dance_t = 0.0
@@ -413,6 +423,7 @@ func _read_input(dt: float) -> Dictionary:
 	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	return {
 		"fire": captured and Input.is_action_pressed("fire"),
+		"reload": captured and Input.is_action_pressed("reload"),
 		"aim": captured and Input.is_action_pressed("aim"),
 		"f": Input.get_axis("move_back", "move_forward"),
 		"r": Input.get_axis("move_left", "move_right"),
@@ -434,6 +445,7 @@ func _physics_process(dt: float) -> void:
 	if inp.get("wind", false):  # 봇·테스트의 휠 한 칸 (봇은 bot_ai가 속도를 정함)
 		wind_req += 1
 	aim_held = inp.get("aim", false)
+	reload_held = inp.get("reload", false)
 	var wish: Vector3
 	if inp.has("wish"):  # 봇 (HTML botUpdate: 달리기는 봇이 정함)
 		wish = inp.wish
@@ -459,8 +471,9 @@ func max_speed() -> float:
 		var spr := GameData.SPRINT if sprinting else 1.0
 		var wm: float = GameData.WEAPONS[wep].get("speed_mul", 1.0)  # 저격총 0.9, AK 0.95
 		sp = GameData.BASE_SPEED * GameData.CLASSES[cls].speed * wm * spr
-		if wep == "cannon" and aim_held:  # 포병 탄도 조준 중
-			sp *= float(GameData.WEAPONS.cannon.aim_slow)
+		if wep == "cannon" and (aim_held or cn_reloading()):  # 포병 탄도 조준·R 장전: 겹쳐도 작은 쪽 하나만 (사용자 요청 — 최대 30%)
+			var CW: Dictionary = GameData.WEAPONS.cannon
+			sp *= minf(float(CW.aim_slow) if aim_held else 1.0, float(CW.reload_slow) if cn_reloading() else 1.0)
 		if wep == "crossbow" and wind_t > 0 and xb_wind < int(GameData.WEAPONS.crossbow.notches):  # 석궁 휠로 감는 중 (사용자 요청)
 			sp *= float(GameData.WEAPONS.crossbow.reload_speed)
 	# 남이 거는 둔화 (성수 웅덩이·춤): 곱해서 합친 뒤, 포병은 최종 둔화량의 slow_resist만 받음 (사용자 요청)

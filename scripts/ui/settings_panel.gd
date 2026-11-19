@@ -228,7 +228,7 @@ func _build_keys() -> void:
 	kg.add_theme_constant_override("v_separation", 5)
 	keys.add_child(kg)
 	for kv in [["W A S D", "이동"], ["Space", "점프"], ["Shift", "달리기 · 공격하면 풀림"], ["Ctrl / C", "달리다 누르면 슬라이드, 서 있으면 앉기"],
-			["클릭", "공격 · 활은 누르고 당겼다 놓기"], ["우클릭", "조준 (석궁 · 저격총)"], ["Q", "저격총 ↔ 원래 무기"], ["Tab", "점수판"],
+			["클릭", "공격 · 활은 누르고 당겼다 놓기"], ["우클릭", "조준 (석궁 · 저격총)"], ["Q", "저격총 ↔ 원래 무기"], ["R", "포병 장전 (꾹) · 활 당기기 취소"], ["Tab", "점수판"],
 			["V", "3인칭 ↔ 1인칭 시점"], ["Esc", "마우스 풀기 · 일시정지"]]:
 		var cell := HBoxContainer.new()
 		cell.add_theme_constant_override("separation", 10)

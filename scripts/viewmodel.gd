@@ -33,6 +33,15 @@ const CN_HIT_DIR := Vector3(-0.75, 0.55, -0.2)   # 쏠 때 막대 방향: 손에
 const CN_TIP := 0.55                             # 손에서 불붙은 심지까지
 var _cn_spark: Node3D
 var _cn_stick: Node3D
+# 포병 R 장전 (사용자 요청): 포신을 끌어당겨 포구를 오른쪽 위(나 쪽)로 세우고, 돌 포탄을 넣은 뒤 긴 꽂을대로 밀어 넣는다.
+# 진행도 = 장전 게이지(cn_load)라서 R을 떼면 모션도 거기서 멈춤. 조준점 둘레는 비켜 감 (꽂을대가 가운데보다 아래로 지나감)
+const CN_RL_MUZZLE := Vector3(-0.08, -0.2, -0.75)   # 장전 자세의 포구 자리 (화면 가운데 아래 왼쪽, 가까우면 화면을 다 가림)
+const CN_RL_AXIS := Vector3(0.7, 0.35, 0.15)        # 장전 자세의 포구가 보는 쪽 (오른쪽 위, 살짝 나 쪽)
+const CN_ROD_HOLD := 0.45                           # 꽂을대 끝(밀대)에서 쥔 손까지
+const CN_ROD_BALL := 0.25                           # 게이지 이만큼까지는 포탄을 포구에 넣음, 그 뒤 꽂을대로 세 번 밀어 넣기
+var _cn_rod: Node3D   # 꽂을대 (원점 = 밀대 끝, +Y = 손 쪽)
+var _cn_ball: Node3D  # 넣는 돌 포탄 (포신 그룹 안)
+var _cn_rel := 0.0    # 장전 자세 정도 0~1
 const TE_POS := Vector3(0.24, -0.2, -0.55)  # 흡혈귀 틀니 (화면 오른쪽 아래, 앞을 보고 벌어져 있음)
 var _teeth := {}
 var _meat: Node3D             # 야만인 고기 먹기 (먹는 동안만, 무기와 따로)            # {g, up, lo}
@@ -198,6 +207,21 @@ func _build() -> void:
 	for sx in [1.0, -1.0]:
 		_part(Meshes.box(), L.fork, Vector3(0.01, 0.07, 0.01), Vector3(sx * 0.018, CN_TIP - 0.05, 0), _cn_stick).rotation.z = -sx * 0.35
 	_part(Meshes.sph(), L.rope, Vector3(0.02, 0.03, 0.02), Vector3(0, CN_TIP - 0.03, 0), _cn_stick)
+	_cn_rod = Node3D.new()  # 꽂을대: 긴 나무 막대 + 끝에 굵은 밀대 + 쥔 손
+	_root.add_child(_cn_rod)
+	_vm["cannon_rod"] = _cn_rod
+	_part(Meshes.cyl(), L.staff, Vector3(0.012, CN_ROD_HOLD + 0.12, 0.012), Vector3(0, (CN_ROD_HOLD + 0.12) * 0.5, 0), _cn_rod)
+	_part(Meshes.cyl(), L.wood_d, Vector3(0.07, 0.06, 0.07), Vector3(0, 0.03, 0), _cn_rod)   # 밀대 (포구보다 조금 가늘게)
+	_part(Meshes.cyl(), L.ring, Vector3(0.074, 0.012, 0.074), Vector3(0, 0.062, 0), _cn_rod)  # 밀대 쇠테
+	_part(Meshes.sph(), SKIN, Vector3(0.05, 0.045, 0.06), Vector3(0, CN_ROD_HOLD, 0), _cn_rod)  # 꽂을대를 쥔 손
+	_cn_ball = Node3D.new()
+	cw.add_child(_cn_ball)
+	var bm := MeshInstance3D.new()
+	bm.mesh = Meshes.stone()
+	bm.material_override = GameData.mat(int(GameData.WEAPONS.cannon.color))
+	bm.scale = Vector3.ONE * float(GameData.WEAPONS.cannon.ball) * 0.42
+	_cn_ball.add_child(bm)
+	_cn_ball.visible = false
 	var mm := StandardMaterial3D.new()
 	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mm.albedo_color = GameData.col(int(L.match))
@@ -390,14 +414,20 @@ func _process(dt: float) -> void:
 			var fan := sin(e.fire_anim * PI)
 			g.position = TR_POS + Vector3(randf_range(-1, 1) * shake, randf_range(-1, 1) * shake - (0.08 if e.gasp_t > 0 else 0.0), -fan * 0.08)
 			_tr.rotation.z = sin(Time.get_ticks_msec() / 1000.0 * 40.0) * 0.02 if e.playing else 0.0
-		"cannon":  # 쏘면 반동으로 뒤로 밀렸다 돌아옴, 장전 중엔 살짝 내려감
+		"cannon":  # 쏘면 반동으로 뒤로 밀렸다 돌아옴. R 장전 중엔 포구를 세워 꽂을대로 포탄을 밀어 넣음
 			var g: Node3D = _vm.cannon
 			var kick := e.fire_anim * e.fire_anim
-			var rl := float(GameData.WEAPONS.cannon.reload)
-			var dip := sin(clampf(e.cn_t / rl, 0, 1) * PI) * 0.06 if e.cn_t > 0 else 0.0
 			_cn_ads += ((1.0 if e.aim_held else 0.0) - _cn_ads) * minf(1.0, dt * 10.0)
-			g.position = CN_POS + Vector3(0, -dip - kick * 0.03 - _cn_ads * 0.03, kick * 0.15)  # 쏘면 뒤·아래로 (위로 들리면 조준을 가림)
-			g.rotation.x = CN_TILT - kick * 0.05
+			_cn_rel += ((1.0 if e.cn_reloading() else 0.0) - _cn_rel) * minf(1.0, dt * 9.0)
+			var dip := 0.0
+			var normal := Transform3D(Basis.from_euler(Vector3(CN_TILT - kick * 0.05, CN_YAW, 0), EULER_ORDER_XYZ),
+				CN_POS + Vector3(0, -kick * 0.03 - _cn_ads * 0.03, kick * 0.15))  # 쏘면 뒤·아래로 (위로 들리면 조준을 가림)
+			g.transform = normal
+			if _cn_rel > 0.002:
+				_reload_pose(e, g, normal)
+			else:
+				_cn_rod.visible = false
+				_cn_ball.visible = false
 			# 린스톡으로 점화 구멍을 콕: 막대 끝(CN_TIP)이 점화 구멍에 닿게 손 자리를 거꾸로 계산
 			var strike := sin(clampf(e.fire_anim, 0.0, 1.0) * PI)
 			var hole := g.transform * _cn_spark.position
@@ -409,7 +439,8 @@ func _process(dt: float) -> void:
 			var flat := lerpf(Vector2(d0.x, d0.y).length(), Vector2(d1.x, d1.y).length(), strike)
 			var dir := Vector3(cos(ang) * flat, sin(ang) * flat, lerpf(d0.z, d1.z, strike)).normalized()
 			var hand := CN_HAND.lerp(hole - d1 * CN_TIP, strike)
-			_cn_stick.visible = true
+			_cn_stick.visible = _cn_rel < 0.4  # 장전 자세에선 린스톡 대신 꽂을대
+			dip = _cn_rel * 0.25  # 린스톡 손은 아래로 빠짐
 			_cn_stick.transform = Transform3D(Basis(Quaternion(Vector3.UP, dir)), hand + Vector3(0, -dip, 0))
 			_cn_spark.visible = e.fire_anim > 0.2 and e.fire_anim < 0.75
 			if _cn_spark.visible:
@@ -435,6 +466,28 @@ func _process(dt: float) -> void:
 			g.position.y = -0.27 + sin(t * PI) * 0.1 - refill * 0.16
 			_holy_fl.visible = t > 0.55 or (not empty and (e.cd <= 0 or e.cd < 0.3))
 			_holy_fl.rotation.y += dt * 1.2  # HTML은 화면 프레임마다 0.02
+
+
+## 포병 R 장전 모션: 포신을 장전 자세로 옮기고(_cn_rel만큼), 게이지(cn_load)에 따라 포탄 넣기 → 꽂을대 세 번 밀기
+func _reload_pose(e: PlayerController, g: Node3D, normal: Transform3D) -> void:
+	var cl := 0.68
+	var muzzle_l := Vector3(0, 0, -cl - 0.025)  # 포신 그룹 안 포구 자리
+	var ax := CN_RL_AXIS.normalized()
+	var rb := Basis.looking_at(ax, Vector3.UP)  # 포신 앞(-Z) = 포구가 보는 쪽
+	var rl := Transform3D(rb, CN_RL_MUZZLE - rb * muzzle_l)
+	g.transform = normal.interpolate_with(rl, _cn_rel)
+	var p := e.cn_load
+	var out := (g.basis * Vector3(0, 0, -1)).normalized()  # 포구 밖으로
+	var mz := g.transform * muzzle_l
+	# 포탄: 처음 CN_ROD_BALL 동안 포구 앞에서 포구 안으로
+	var k := clampf(p / CN_ROD_BALL, 0.0, 1.0)
+	_cn_ball.visible = k < 1.0 and _cn_rel > 0.5
+	_cn_ball.position = muzzle_l + Vector3(0, 0.06 * (1.0 - k), -0.16 * (1.0 - k) + 0.03 * k)  # 포구 앞 위에서 쏙
+	# 꽂을대: 포탄을 넣는 동안은 포구 밖에서 대기, 그 뒤 세 번 쑥 밀었다 빼기
+	var u := clampf((p - CN_ROD_BALL) / (1.0 - CN_ROD_BALL), 0.0, 1.0)
+	var depth := -0.3 if p < CN_ROD_BALL else (1.0 - cos(u * TAU * 3.0)) * 0.5 * 0.24 - 0.02
+	_cn_rod.visible = _cn_rel > 0.4
+	_cn_rod.transform = Transform3D(Basis(Quaternion(Vector3.UP, out)), mz - out * depth + Vector3(0, -(1.0 - _cn_rel) * 0.3, 0))
 
 
 func _update_bow(e: PlayerController, vr: float) -> void:

@@ -44,6 +44,7 @@ var _cross: Crosshair
 var _vm: ViewModel
 var _ring: ChargeRing
 var _bow_full := false  # 지난 프레임에 활을 끝까지 당겨 있었나 (번쩍 한 번만)
+var _cn_full := true    # 지난 프레임에 포병 장전이 다 차 있었나 (R로 채운 순간만 번쩍)
 var _w_icon: TextureRect
 var _w_icon_kind := ""
 var _w_name: Label
@@ -829,12 +830,17 @@ func _update_weapon() -> void:
 				st = "성수 %s · 클릭: 던지기" % pips
 				if e.charges < mx:
 					st += " · 다음 %.1f초" % (rc - e.charge_t)
-		"cannon":  # 한 발 쏘면 자동 재장전: 조준점 고리 = 장전 진행도
+		"cannon":  # R 꾹 장전 (사용자 요청): 조준점 고리 = 장전 게이지 (떼면 멈춘 채로), 다 차면 철컥 + 번쩍
 			var CW: Dictionary = GameData.WEAPONS.cannon
-			if e.cn_t > 0:
-				ring = 1.0 - e.cn_t / float(CW.reload)
-				ring_col = STEEL
-				st = "장전 중 %.1f초" % e.cn_t
+			var full := e.cn_load >= 1.0
+			if full and not _cn_full and e.reload_held:  # R로 다 채운 순간 (부활해서 찬 건 아님)
+				_ring.flash()
+			_cn_full = full
+			if not full:
+				ring = e.cn_load
+				ring_col = GOLD if e.cn_reloading() else STEEL
+				var left := (1.0 - e.cn_load) * float(CW.reload)
+				st = ("장전 중 · %.1f초" if e.cn_reloading() else "R키를 꾹 눌러 장전 · %.1f초") % left
 			else:
 				st = "장전 완료 · 우클릭 탄도 조준 · 발밑에 쏘면 점프"
 		"ak":
