@@ -177,6 +177,32 @@ func _run() -> void:
 	check("HUD: 가운데 40% 비움 · 판 높이 80 이하", bad.is_empty(), str(bad))
 	check("HUD: 무기 칸 = 아이콘 + 이름 + 상태", H._w_name.text == "돌멩이" and H._w_icon.texture != null and H._w_state.text != "", H._w_state.text)
 
+	# ── 개인전: 조준한 적 머리 위에 닉네임 (사용자 요청) ──
+	var AN = main.hud._aim_name
+	var tgt = bots()[0]
+	p.global_position = Vector3(-25, 0, 18)
+	p.velocity = Vector3.ZERO
+	p.yaw = PI / 2  # 서쪽(-X)을 봄
+	p.pitch = 0.0
+	tgt.global_position = Vector3(-33, 0, 18)
+	tgt.velocity = Vector3.ZERO
+	await wait(3)
+	await process_frame
+	await process_frame
+	var cam3: Camera3D = main.get_viewport().get_camera_3d()  # 3인칭은 카메라가 어깨 옆이라 조준선 위에 세움
+	var fwd := -cam3.global_basis.z
+	fwd.y = 0
+	tgt.global_position = cam3.global_position + fwd.normalized() * 10.0 - Vector3(0, cam3.global_position.y, 0)
+	await wait(2)
+	await process_frame
+	await process_frame
+	check("개인전: 조준한 적 위에 닉네임", AN.visible and AN.target == tgt, "target=%s" % (AN.target.ent_name if AN.target else "없음"))
+	p.yaw = -PI / 2  # 반대쪽을 봄
+	await wait(2)
+	await process_frame
+	await process_frame
+	check("  조준을 떼면 닉네임 없음", AN.target == null, "target=%s" % (AN.target.ent_name if AN.target else "없음"))
+
 	# ── 점수판 순서: 처치 많은 순, 같으면 죽음 적은 순 ──
 	var b := bots()
 	b[0].kills = 3; b[0].deaths = 2

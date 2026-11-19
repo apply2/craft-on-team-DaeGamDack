@@ -141,7 +141,7 @@ func _run() -> void:
 		kills.size() == 1 and kills[0][1] == p and kills[0][2] == "burn" and p.kills == k0, str(kills))
 	await wait(200)  # 부활
 
-	# ── 화상 사망 처치 인정: 5초 안에 때린 사람이 있으면 그 사람 ──
+	# ── 화상 사망은 언제나 자멸 (사용자 요청 — 예전엔 5초 안에 때린 사람이 처치를 가져갔음) ──
 	kills.clear()
 	put(dm, HOME + Vector3(0, 0, 6), "archer", PI)
 	put(p, HOME, "vampire", 0.0)
@@ -150,7 +150,7 @@ func _run() -> void:
 	C.damage(p, dm, 10, "bow", false, Vector3(0, 0, -1))
 	p.hp = 5.0  # 0.5초 안에 타 죽음
 	await wait(40)
-	check("때린 지 5초 안에 타 죽으면 마지막 공격자 처치", not p.alive and kills.size() == 1 and kills[0][1] == dm and kills[0][2] == "burn" and dm.kills == dk0 + 1,
+	check("방금 맞고 타 죽어도 자멸 (때린 사람에게 처치 없음)", not p.alive and kills.size() == 1 and kills[0][1] == p and kills[0][2] == "burn" and dm.kills == dk0,
 		"%s kills %d→%d" % [str(kills), dk0, dm.kills])
 	await wait(200)
 	kills.clear()

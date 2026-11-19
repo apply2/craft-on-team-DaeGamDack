@@ -322,10 +322,10 @@ const WEAPONS := {
 	"burn": {"name": "햇빛"},
 }
 # 흡혈귀 햇빛 화상 (사용자 요청): tick초마다 dmg (초당 10). 스폰 뒤 grace초는 면제
-# 화상으로 죽으면 credit초 안에 그 흡혈귀를 때린 사람이 있으면 마지막으로 때린 사람이 처치, 없으면 자멸
+# 화상으로 죽으면 언제나 자멸 (처치 +0, 킬피드 공격자 = 자기). 사용자 요청 — 예전엔 5초 안에 때린 사람이 처치를 가져갔음
 # 황금 붕어빵 무적·쟁탈전 라운드 사이엔 안 탐. low_hp 이하면 내 화면 가장자리에 타는 비네트 (hud BurnEdge)
 # snd_every: 지글 소리 간격 (임시 합성 "burn" — audio/sfx/burn.ogg를 넣고 Sfx.FILES에 더하면 바뀜)
-const BURN := {"tick": 0.25, "dmg": 2.5, "grace": 1.5, "credit": 5.0, "low_hp": 40.0, "snd_every": 0.5,
+const BURN := {"tick": 0.25, "dmg": 2.5, "grace": 1.5, "low_hp": 40.0, "snd_every": 0.5,
 	"vig_col": 0xff4a1a, "vig_alpha": 0.75, "flicker_hz": 9.0}
 # 흡혈귀 연출 (보기만 함 — scripts/fx/burn_fx.gd). 불꽃·연기는 MultiMesh 풀 둘 (그리기 2번)
 #   flame_every / smoke_every: 한 명당 몇 초마다 하나 / pool: 전체 상한 / blood: 물었을 때 피 조각 수
@@ -721,6 +721,7 @@ const HUD_UI := {
 		"pct_font": 25, "pct_x": 4.0, "note_top": 132.0, "note_font": 20, "note_tilt": -1.0, "note_pad": Vector4(12, 2, 12, 4)},  # 상태 쪽지는 % 막대(113~128) 바로 아래 — 막대를 안 가리게 (사용자 요청)
 	"sign": {"font": 20, "sub": 15, "lift": 3.4, "pad": Vector2(11, 4), "tri": Vector2(16, 9), "fade_r": 140.0, "fade_min": 0.35},
 	"ally": {"font": 16, "tri": Vector2(14, 9)},
+	"aim_name": {"font": 16, "lift": 2.55},  # 개인전: 조준한 적 머리(발 + lift m) 위에 닉네임 (사용자 요청 — 쟁탈전과 같은 판정)
 	"feed": {"font": 19, "icon": 20.0, "gap": 7, "sep": 8, "pad": Vector4(11, 3, 11, 5), "r": 4.0,
 		"head_font": 13, "head_col": 0xc4302b, "head_tilt": -4.0, "me": "나", "trim": 0.28},
 	"vitals": {"medal": 80.0, "medal_in": 62.0, "plank": Vector2(267, 69), "overlap": 17.0, "pad": Vector4(29, 6, 15, 9), "r": 9.0,

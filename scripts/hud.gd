@@ -17,9 +17,12 @@ var mode: ControlMode = null:  # 쟁탈전이면 규칙 (위쪽 시간 대신 �
 		if _ctrl:
 			_ctrl.mode = v
 			_ctrl.visible = v != null
+		if _aim_name:
+			_aim_name.visible = v == null
 		if _topbar:
 			_topbar.visible = v == null
 var _ctrl: ControlHud
+var _aim_name: AimName  # 개인전: 조준한 적 닉네임 (사용자 요청)
 var _topbar: Control
 
 var _speed: RichTextLabel
@@ -202,6 +205,10 @@ func _ready() -> void:
 	_ctrl.hud = self
 	_ctrl.visible = false
 	root.add_child(_ctrl)
+	_aim_name = AimName.new()  # 쟁탈전은 ControlHud가 팀 색으로 그림
+	_aim_name.hud = self
+	_aim_name.visible = mode == null
+	root.add_child(_aim_name)
 	_build_notes(root)
 
 	# 큰 문구 (HTML #banner: 위에서 24%)
@@ -945,6 +952,58 @@ void fragment() {
 
 
 ## 피격 방향 — 조준점에서 185px 위에 붉은 호 (위가 두꺼운 반달). 1초 동안 60%까지 진하다가 사라짐. 최대 4개
+## 개인전: 조준점이 적을 가리키면 그 적 머리 위에 닉네임 (자막 규칙: 배경 없이 잉크 외곽선).
+## 판정은 쟁탈전 적 이름과 같음 (ControlHud.aimed_at — 몸·머리 근처 + 벽 뒤면 안 보임). 여럿이면 가장 가까운 한 명
+class AimName extends Control:
+	var hud: Hud
+	var target: PlayerController  # 지금 이름을 띄운 적 (테스트용)
+
+	func _init() -> void:
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(_dt: float) -> void:
+		if not is_visible_in_tree():
+			target = null
+			return
+		var t := _pick()
+		if t != target or t != null:
+			target = t
+			queue_redraw()
+
+	func _pick() -> PlayerController:
+		var me := hud.player
+		var cam := get_viewport().get_camera_3d()
+		if me == null or hud.combat == null or cam == null or not me.alive or me.spectating:
+			return null
+		var A: Dictionary = GameData.HUD_UI.aim_name
+		var best: PlayerController = null
+		var bd := INF
+		for e in hud.combat.ents:
+			if e == me or not e.alive or hud.combat.ally(me, e):
+				continue
+			var d := cam.global_position.distance_to(e.global_position)
+			if d < bd and ControlHud.aimed_at(cam, hud.combat, e, size / 2, float(A.lift)):
+				bd = d
+				best = e
+		return best
+
+	func _draw() -> void:
+		var cam := get_viewport().get_camera_3d()
+		if target == null or not is_instance_valid(target) or cam == null:
+			return
+		var A: Dictionary = GameData.HUD_UI.aim_name
+		var head := target.global_position + Vector3(0, float(A.lift), 0)
+		if cam.is_position_behind(head):
+			return
+		var f := get_theme_default_font()
+		var fs := int(A.font)
+		var w := f.get_string_size(target.ent_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var at := cam.unproject_position(head) + Vector2(-w / 2, -6)
+		draw_string_outline(f, at, target.ent_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiKit.outline_for(fs), Hud.INK)
+		draw_string(f, at, target.ent_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Hud.PARCH)
+
+
 class DmgDir extends Control:
 	var items: Array = []  # [{ang, t}]
 	var warm := false      # true면 투명한 호를 하나 그린다 (셰이더 미리 컴파일용 — Hud._process)

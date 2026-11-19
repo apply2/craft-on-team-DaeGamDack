@@ -428,7 +428,7 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 	var dmg := base * (GameData.HEADSHOT if v.helmet else GameData.BARE_HEAD) if head else base
 	dealt.emit(v, a, minf(dmg, maxf(v.hp, 0.0)), kind)
 	v.hp -= dmg
-	v.last_hit = {"by": a, "kind": kind, "head": head, "t": clock}  # t: 흡혈귀 화상 사망 처치 인정 (BURN.credit)
+	v.last_hit = {"by": a, "kind": kind, "head": head, "t": clock}  # t: 마지막으로 맞은 때
 	v.hit_squash = 1.0
 	v.flash = 0.14
 	v.no_hit_t = 0.0

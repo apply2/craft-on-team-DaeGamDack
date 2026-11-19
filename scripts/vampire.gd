@@ -201,15 +201,6 @@ static func burn(combat: Combat, e: PlayerController, dt: float) -> void:
 		combat.dealt.emit(e, null, minf(float(T.dmg), maxf(e.hp, 0.0)), "burn")
 		e.hp -= float(T.dmg)
 		if e.hp <= 0:
-			combat.kill(e, burn_killer(combat, e), "burn", false, Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized())
+			# 화상으로 죽으면 언제나 자멸 (사용자 요청 — 마지막으로 때린 적에게 처치가 가던 것 고침)
+			combat.kill(e, e, "burn", false, Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized())
 			return
-
-
-## 화상으로 죽으면 누가 처치했나: credit초 안에 때린 사람이 있으면 마지막으로 때린 사람, 아니면 자멸(자기)
-static func burn_killer(combat: Combat, e: PlayerController) -> PlayerController:
-	var lh := e.last_hit
-	var a: Variant = lh.get("by")
-	if a is PlayerController and is_instance_valid(a) and a != e and combat.ents.has(a) \
-			and combat.clock - float(lh.get("t", -1e9)) <= float(GameData.BURN.credit):
-		return a
-	return e
