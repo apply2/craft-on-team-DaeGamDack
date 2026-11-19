@@ -210,6 +210,7 @@ func mp_start(rem: float) -> void:
 ## 친구대전 쟁탈전 시작. 방장은 자기 ControlMode로 라운드를 돌리고(나 + 봇 스폰), 친구는 follower로 따라가며 나만 스폰
 func _mp_start_control() -> void:
 	get_tree().paused = false
+	GameData.apply_mode_stats("control")
 	combat.clear_match_objects()
 	hud.clear()
 	if mode:
@@ -352,6 +353,7 @@ func _use_world(w: WorldBuilder) -> void:
 
 ## 개인전으로 되돌림: 개인전 맵, 팀 없음, 봇 BOT_COUNT명, 규칙 없음
 func _use_ffa() -> void:
+	GameData.apply_mode_stats("ffa")  # 개인전 스탯 (쟁탈전은 MODE_STATS.control)
 	if mode:
 		mode.queue_free()
 		mode = null
@@ -395,6 +397,7 @@ func set_team(e: PlayerController, team: String) -> void:
 ## 쟁탈전 시작 (AI대전)
 func _start_control() -> void:
 	get_tree().paused = false
+	GameData.apply_mode_stats("control")  # 쟁탈전 스탯 (사용자 요청 — 개인전과 따로)
 	var w := control_world()
 	_use_world(w)
 	var n := int(GameData.MODES.control.team_size)

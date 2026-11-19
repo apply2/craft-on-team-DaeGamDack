@@ -161,14 +161,14 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 	var go_horse: bool = not near_h.is_empty() and e.mounted <= 0 and epos.distance_to(near_h.pos) < float(B.horse_seek) and not busy
 	if e.mounted > 0:
 		move = (Vector3(t.global_position.x - epos.x, 0, t.global_position.z - epos.z)) if t else wp - epos
-	elif go_horse:
-		move = (near_h.pos as Vector3) - epos
+	elif go_horse:  # 말·아이템: 쟁탈전 맵은 내비 경로로 (직선으로 가면 스폰룸 벽 구석에 박힘)
+		move = seek_move(e, combat, near_h.pos, dt)
 	elif go_item:
-		move = (it.sniper.pos as Vector3) - epos
+		move = seek_move(e, combat, it.sniper.pos, dt)
 	elif go_fish:  # 황금 붕어빵 (저격총과 같은 우선순위)
-		move = (it.fish.pos as Vector3) - epos
+		move = seek_move(e, combat, it.fish.pos, dt)
 	elif go_ak:
-		move = (it.ak.pos as Vector3) - epos
+		move = seek_move(e, combat, it.ak.pos, dt)
 	elif ctl != null:
 		move = ctl
 	elif t and e.star_t > 0:  # 무적: 엄폐·거리 유지 없이 가장 가까운 적에게 돌진 (몸박치기)
@@ -392,7 +392,16 @@ func control_move(e: PlayerController, combat: Combat, t: PlayerController, dt: 
 			lane_i += 1
 		else:
 			tgt = lpt
-	# 내비 경로 따라가기
+	var mv := nav_step(e, w, tgt, dt)
+	if mv.length() < 0.6 and epos.distance_to(tgt) < 1.5:
+		return Vector3.ZERO if not t else null  # 도착: 서서 지킴 (적이 있으면 싸움)
+	return mv
+
+
+## 내비 경로를 따라 tgt로 가는 다음 걸음 (path_every마다, 또는 목적지가 바뀌면 경로를 다시 구함)
+func nav_step(e: PlayerController, w: MapControl, tgt: Vector3, dt: float) -> Vector3:
+	var CM: Dictionary = GameData.MODES.control
+	var epos := e.global_position
 	path_t -= dt
 	if path_t <= 0 or goal.distance_to(tgt) > 1.5 or path_i >= path.size():
 		path_t = float(CM.path_every)
@@ -402,10 +411,15 @@ func control_move(e: PlayerController, combat: Combat, t: PlayerController, dt: 
 	while path_i < path.size() and Vector2(path[path_i].x - epos.x, path[path_i].z - epos.z).length() < float(CM.path_reach):
 		path_i += 1
 	var nxt: Vector3 = path[path_i] if path_i < path.size() else tgt
-	var mv := Vector3(nxt.x - epos.x, 0, nxt.z - epos.z)
-	if mv.length() < 0.6 and epos.distance_to(tgt) < 1.5:
-		return Vector3.ZERO if not t else null  # 도착: 서서 지킴 (적이 있으면 싸움)
-	return mv
+	return Vector3(nxt.x - epos.x, 0, nxt.z - epos.z)
+
+
+## 말·아이템 주우러 가기: 내비 메시가 있는 맵(쟁탈전)이면 경로로, 아니면 직선 (개인전 HTML 그대로)
+func seek_move(e: PlayerController, combat: Combat, tgt: Vector3, dt: float) -> Vector3:
+	var w := combat.world as MapControl
+	if w == null:
+		return tgt - e.global_position
+	return nav_step(e, w, tgt, dt)
 
 
 ## 우리 팀 거점 역할 봇 중 몇 번째인가 (거점을 가지면 앞에서 bot_hold_in명만 원 안에)

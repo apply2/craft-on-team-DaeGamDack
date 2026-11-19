@@ -85,6 +85,23 @@ func _run() -> void:
 	W = C.world
 	var CM: Dictionary = G.MODES.control
 	check("쟁탈전 규칙이 걸림", mode != null and W != null and W.map_id == "control")
+	# 모드별 스탯 (사용자 요청 — 쟁탈전은 MODE_STATS.control을 개인전 스탯 위에 덮어씀)
+	check("쟁탈전이면 쟁탈전 스탯", G.stats_mode == "control", G.stats_mode)
+	var mg: Dictionary = G._merged({"a": {"hp": 100, "speed": 1.0}, "b": 3}, {"a": {"hp": 150}})
+	check("  덮어쓰기는 바꾼 값만 (안쪽까지 합침, 원본은 그대로)", mg.a.hp == 150 and mg.a.speed == 1.0 and mg.b == 3, str(mg))
+	var ok_all := true
+	for tb in ["CLASSES", "WEAPONS", "BURN", "DANCE"]:
+		var want: Dictionary = G._merged(G.get(tb + "_BASE"), G.MODE_STATS.control.get(tb, {}))
+		if str(G.get(tb)) != str(want):
+			ok_all = false
+	check("  CLASSES·WEAPONS·BURN·DANCE = 개인전 + MODE_STATS.control", ok_all)
+	check("  쟁탈전: 석궁 휠 30칸·성수 둔화 0.42·물기 17 (개인전 50·0.35·20)", int(G.WEAPONS.crossbow.notches) == 30 and is_equal_approx(float(G.WEAPONS.holy.slow), 0.42)
+		and int(G.WEAPONS.teeth.dmg) == 17 and int(G.WEAPONS_BASE.teeth.dmg) == 20
+		and int(G.WEAPONS_BASE.crossbow.notches) == 50 and is_equal_approx(float(G.WEAPONS_BASE.holy.slow), 0.35))
+	var xb_cls_blurb: String = G.class_stats("crossbow").blurb
+	check("  병과 화면 설명도 쟁탈전 값", not xb_cls_blurb.contains("50"), xb_cls_blurb)
+	var vp_blurb: String = G.class_stats("vampire").blurb
+	check("  흡혈귀 설명: 초당 6씩 · 물면 17", vp_blurb.contains("초당 6씩") and vp_blurb.contains("물면 17"), vp_blurb)
 	var ch: float = CM.cap_half
 	put(p, Vector3(ch - 0.5, 0.5, ch - 0.5))
 	await wait(2)
@@ -406,6 +423,40 @@ func _run() -> void:
 	check("봇이 25초 안에 거점에 들어가 점령을 시작", mode.holder != "" or mode.cap_prog > 0.2, "가장 가까이 %.1fm, holder %s prog %.2f" % [best, mode.holder, mode.cap_prog])
 	G.ai_enabled = false
 
+	# ── 버그: 부활한 봇이 말이 나와 있으면 스폰룸 구석에 박혀 못 나옴 (말까지 직선으로 가서) → 내비 경로로 ──
+	# 블루 봇 4명을 스폰 자리 0~3에서 동시에 (왼쪽 자리는 직선이면 스폰룸 왼쪽 벽 구석에 박힘). 말은 멀리서 못 타게 잠깐 판정만 봄
+	fresh()
+	mode.phase = "locked"
+	mode.unlock_left = 999.0
+	var riders: Array = []
+	for e in C.ents:
+		if e != p:
+			e.scripted_input = IDLE
+			if e.team == p.team:
+				riders.append(e)
+	var spots: Array = C.world.spawn_spots(p.team)
+	for k in riders.size():
+		riders[k].scripted_input = {}
+		riders[k].next_cls = "barbarian"
+		riders[k].spawn_at(spots[k])
+	C.items.spawn_horse()
+	G.ai_enabled = true
+	var out_t := {}
+	for i in 60 * 8:
+		await physics_frame
+		for r in riders:
+			if not out_t.has(r) and (not mode.in_own_spawn(r) or r.mounted > 0):
+				out_t[r] = i / 60.0
+		if out_t.size() == riders.size():
+			break
+	G.ai_enabled = false
+	var stuck_at: Array = riders.filter(func(r) -> bool: return not out_t.has(r)).map(func(r) -> String: return "%.1f,%.1f" % [r.global_position.x, r.global_position.z])
+	check("말이 나와 있어도 부활한 봇 4명 모두 8초 안에 스폰룸을 나감", stuck_at.is_empty(), "갇힘: %s · 나간 시간 %s" % [str(stuck_at), str(out_t.values())])
+	for r in riders:
+		if r.mounted > 0:
+			C.items.dismount(r)
+		r.scripted_input = IDLE
+
 	# ── 실제 흐름: 라운드 승리 → 6초 → 2라운드(모두 스폰룸, 거점 잠김) → 2승 → 6초 → 결과 화면 ──
 	fresh()
 	for e in C.ents:
@@ -447,6 +498,7 @@ func _run() -> void:
 
 	main.go_menu("main")
 	await wait(3)
+	check("메뉴로 오면 개인전 스탯으로 되돌림", G.stats_mode == "ffa" and str(G.CLASSES) == str(G.CLASSES_BASE) and str(G.WEAPONS) == str(G.WEAPONS_BASE), G.stats_mode)
 	check("메뉴: 개인전 맵·팀 없음·봇 7명", C.mode == null and C.world.map_id == "ffa" and C.ents.all(func(e) -> bool: return e.team == "") and C.ents.size() == 8, "ents %d" % C.ents.size())
 	check("개인전으로 돌아와도 캐릭터 mask에 경계 층", C.ents.all(func(e) -> bool: return (e.collision_mask & BL) != 0) and C.world.bounds.is_inside_tree(), "")
 

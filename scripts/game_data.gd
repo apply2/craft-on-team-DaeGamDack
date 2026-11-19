@@ -146,7 +146,7 @@ const HOLY := {
 
 # ── 병과 ─────────────────────────────────────────────────────
 # speed: BASE_SPEED 배율 / hp: 없으면 100 / regen: 초당 회복량(기본 10, 5초간 안 맞으면 시작)
-const CLASSES := {
+const CLASSES_BASE := {  # 개인전 기준. 실제로는 아래 var CLASSES를 읽음 (쟁탈전이면 MODE_STATS.control을 덮어쓴 것)
 	# 이동 속도: 사용자 요청 밸런스로 포병 말고 모두 ×0.9 (사람도 조준이 어렵다고 해서). 괄호 안이 예전 값
 	"barbarian": {"name": "야만인", "weapon": "stone", "speed": 1.2348, "hp": 90,  # (1.372) 걷기 6.67 · 달리기 9.0 m/s
 		"color": 0xf28a1e, "leg": 0xf2c7a0, "arm": 0xf2c7a0, "foot": 0xe9b48e, "pips": [5, 1, 1, 5],
@@ -203,7 +203,7 @@ const CLASS_CHIP := {"barbarian": 0xf2a04e, "archer": 0xe8857a, "crossbow": 0x9f
 
 # ── 무기 ─────────────────────────────────────────────────────
 # 단위: dmg 피해, cd 재사용(초), speed 투사체 속도(m/s), grav 중력, kb 넉백, up 띄우기, radius 판정 반경
-const WEAPONS := {
+const WEAPONS_BASE := {  # 개인전 기준. 실제로는 var WEAPONS를 읽음
 	# 포병 대포 (사용자 요청): 곡사 포탄. 무엇에든 닿거나 fuse초가 지나면 터짐
 	#   dmg: 직격 피해(총) / blast: 폭발 반경 m, 피해는 가운데 blast_max → 가장자리 blast_min (몸까지 거리로 선형)
 	#   폭발과 대상 사이가 벽에 막히면 범위 피해 없음. 넉백 kb(수평)·up(위)도 거리에 따라 줄어듦
@@ -325,7 +325,7 @@ const WEAPONS := {
 # 화상으로 죽으면 언제나 자멸 (처치 +0, 킬피드 공격자 = 자기). 사용자 요청 — 예전엔 5초 안에 때린 사람이 처치를 가져갔음
 # 황금 붕어빵 무적·쟁탈전 라운드 사이엔 안 탐. low_hp 이하면 내 화면 가장자리에 타는 비네트 (hud BurnEdge)
 # snd_every: 지글 소리 간격 (임시 합성 "burn" — audio/sfx/burn.ogg를 넣고 Sfx.FILES에 더하면 바뀜)
-const BURN := {"tick": 0.25, "dmg": 2.5, "grace": 1.5, "low_hp": 40.0, "snd_every": 0.5,
+const BURN_BASE := {"tick": 0.25, "dmg": 2.5, "grace": 1.5, "low_hp": 40.0, "snd_every": 0.5,
 	"vig_col": 0xff4a1a, "vig_alpha": 0.75, "flicker_hz": 9.0}
 # 흡혈귀 연출 (보기만 함 — scripts/fx/burn_fx.gd). 불꽃·연기는 MultiMesh 풀 둘 (그리기 2번)
 #   flame_every / smoke_every: 한 명당 몇 초마다 하나 / pool: 전체 상한 / blood: 물었을 때 피 조각 수
@@ -349,8 +349,35 @@ const VAMP_FX := {"flame_every": 0.05, "flame_life": 0.45, "flame_size": 0.16, "
 # 넘어짐(fall_t)이 우선 — 넘어지면 춤은 멈추고 남은 시간은 사라짐
 # 아래 연출 값은 명세에 없어서 정함: sway 플레이어 조준 출렁(라디안)·sway_hz 출렁 빠르기,
 # spin_every 몇 초마다 한 바퀴·spin_t 한 바퀴 도는 시간 (춤 음표는 WEAPONS.trumpet.fx)
-const DANCE := {"window": 1.5, "need": 0.95, "dur": 2.0, "immune": 3.5, "speed": 0.6, "bot_err": 2.5,
+const DANCE_BASE := {"window": 1.5, "need": 0.95, "dur": 2.0, "immune": 3.5, "speed": 0.6, "bot_err": 2.5,
 	"sway": 0.06, "sway_hz": 1.6, "spin_every": 1.1, "spin_t": 0.45}
+
+# ── 모드별 스탯 (사용자 요청 — 쟁탈전은 개인전과 캐릭터 스탯을 다르게) ──────────────
+# 위의 *_BASE = 개인전 수치. 게임은 언제나 아래 var CLASSES·WEAPONS·BURN·DANCE를 읽는다.
+# 쟁탈전이 시작되면 Main이 apply_mode_stats("control")로 MODE_STATS.control을 *_BASE 위에 덮어쓰고, 개인전·메뉴로 오면 "ffa"로 되돌린다.
+# 바꾸고 싶은 값만 적는다 (같은 모양의 Dictionary, 안쪽까지 합쳐짐). 예: "CLASSES": {"cannoneer": {"hp": 150}}, "WEAPONS": {"cannon": {"blast": 3.0}}
+const MODE_STATS := {
+	"control": {  # 쟁탈전 밸런스 (사용자 요청, tests/balance_control.gd 시뮬 결과 c0 → 흡혈귀 판 승률 38%로 가장 약함)
+		"CLASSES": {
+			"vampire": {"hp": 150},   # 130 → 150
+			"bard": {"hp": 90},       # 95 → 90
+			"cleric": {"hp": 95},     # 100 → 95
+		},
+		"WEAPONS": {
+			"cannon": {"reload": 3.5},  # R 꾹 장전 4 → 3.5초
+			"crossbow": {"notches": 30},  # 휠 장전 50 → 30칸
+			"holy": {"slow": 0.42},       # 웅덩이 둔화 65% → 58% (이동 배율 0.35 → 0.42)
+			"teeth": {"dmg": 17},         # 흡혈귀 물기 20 → 17 (회복 15·박쥐 돌진 20은 그대로)
+		},
+		"BURN": {"dmg": 1.5},  # 화상 0.25초마다 2.5 → 1.5 (초당 10 → 6)
+		"DANCE": {},
+	},
+}
+var CLASSES: Dictionary = CLASSES_BASE.duplicate(true)
+var WEAPONS: Dictionary = WEAPONS_BASE.duplicate(true)
+var BURN: Dictionary = BURN_BASE.duplicate(true)
+var DANCE: Dictionary = DANCE_BASE.duplicate(true)
+var stats_mode := "ffa"  # 지금 쓰는 스탯 ("ffa" / "control")
 
 # 트럼펫·음유시인 모양 색 (명세: 금색 트럼펫, 깃털 달린 납작한 베레모)
 const TRUMPET_LOOK := {"brass": 0xf3b33d, "brass_dark": 0xb97a14, "beret": 0x4b2370, "feather": 0xf4ecd6, "feather_tip": 0xd94a3a,
@@ -678,7 +705,7 @@ const CLASS_PAGE := {
 		"cleric": "성수병 {max_charges}개를 모아 던진다. 웅덩이가 적을 지지고 느리게 만든다.",
 		"bard": "트럼펫을 불면 적이 춤춘다. 춤추는 적은 느리고 공격을 못 한다.",
 		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 쏜 뒤엔 R키를 꾹 눌러 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
-		"vampire": "햇빛에 초당 10씩 탄다. 물면 {dmg} 피해 + {heal} 회복, 처치하면 +{kill_heal}. 우클릭 박쥐 돌진.",
+		"vampire": "햇빛에 초당 {burn_ps}씩 탄다. 물면 {dmg} 피해 + {heal} 회복, 처치하면 +{kill_heal}. 우클릭 박쥐 돌진.",
 	},
 	"eye_h": 1.62,   # 사거리 계산: 눈높이(player.eye_pos)에서 정면으로 쏴서 땅에 닿는 거리 (무기 range가 있으면 거기까지)
 	"bar_cols": {"hp": 0xe5484d, "speed": 0x3fa7e0, "range": 0x6cc35a, "track": 0xe2c992},
@@ -1093,8 +1120,39 @@ static func col(hex: int) -> Color:
 
 
 ## 그래픽 품질 바꾸기 (설정 화면) — 저장하고 gfx_changed로 알림
-## 병과 선택 화면 막대: 체력·걷기/달리기 속도·사거리(m)와 각 막대 비율 (모든 병과 중 가장 큰 값 = 1)
+## 모드 스탯 적용: *_BASE를 새로 복사하고 MODE_STATS[m]을 안쪽까지 덮어씀 ("ffa"면 개인전 그대로)
+func apply_mode_stats(m: String) -> void:
+	stats_mode = m
+	var over: Dictionary = MODE_STATS.get(m, {})
+	CLASSES = _merged(CLASSES_BASE, over.get("CLASSES", {}))
+	WEAPONS = _merged(WEAPONS_BASE, over.get("WEAPONS", {}))
+	BURN = _merged(BURN_BASE, over.get("BURN", {}))
+	DANCE = _merged(DANCE_BASE, over.get("DANCE", {}))
+
+
+static func _merged(base: Dictionary, over: Dictionary) -> Dictionary:
+	var out := base.duplicate(true)
+	for k: Variant in over:
+		if out.get(k) is Dictionary and over[k] is Dictionary:
+			out[k] = _merged(out[k], over[k])
+		else:
+			out[k] = over[k]
+	return out
+
+
+## 병과 선택 화면 막대: 체력·걷기/달리기 속도·사거리(m)와 각 막대 비율 (모든 병과 중 가장 큰 값 = 1).
+## 고르는 모드(GameData.mode)의 스탯으로 셈 — 메뉴 뒤 구경(개인전)은 그대로 두고 잠깐 바꿨다 되돌림
 func class_stats(k: String) -> Dictionary:
+	var prev := stats_mode
+	if mode != prev:
+		apply_mode_stats(mode)
+	var out := _class_stats(k)
+	if stats_mode != prev:
+		apply_mode_stats(prev)
+	return out
+
+
+func _class_stats(k: String) -> Dictionary:
 	var all := {}
 	for c: String in CLASS_ORDER:
 		var C: Dictionary = CLASSES[c]
@@ -1110,6 +1168,7 @@ func class_stats(k: String) -> Dictionary:
 	for key: String in WEAPONS[CLASSES[k].weapon]:
 		var v: Variant = WEAPONS[CLASSES[k].weapon][key]
 		vals[key] = str(int(v)) if v is float and is_equal_approx(v, roundf(v)) else str(v)  # 4.0 → "4"
+	vals.burn_ps = str(roundi(float(BURN.dmg) / float(BURN.tick)))  # 흡혈귀 화상 초당 (쟁탈전 6)
 	out.blurb = str(CLASS_PAGE.blurbs.get(k, "")).format(vals)
 	return out
 
