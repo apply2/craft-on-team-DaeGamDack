@@ -53,6 +53,6 @@ static func eat_fx(combat: Combat, e: PlayerController) -> void:
 	if not (e.is_local and not combat.tp_on()):  # 내 1인칭 화면에선 부스러기가 눈앞을 가려서 안 뿌림
 		var mouth := e.eye_pos() + Vector3(-sin(e.yaw), 0, -cos(e.yaw)) * 0.35 - Vector3(0, 0.15, 0)
 		combat.fx.chunks(mouth, int(W.color), Vector3(-sin(e.yaw), 0.6, -cos(e.yaw)), 4, 1.6)
-	var me := combat.me
-	if e.is_local or (me and me.global_position.distance_to(e.global_position) < 20.0):
+	var me := combat.me  # +30은 나·가까운 아군만 (상대가 먹는 건 안 보여 줌 — 사용자 요청)
+	if e.is_local or (me and Combat.ally(me, e) and me.global_position.distance_to(e.global_position) < 20.0):
 		combat.num.emit(e.global_position + Vector3(0, e.mount_h + 2.2, 0), "+%d" % int(W.heal), "heal")

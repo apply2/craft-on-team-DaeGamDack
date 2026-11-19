@@ -115,10 +115,10 @@ static func on_kill(combat: Combat, a: PlayerController) -> void:
 	heal(combat, a, float(GameData.WEAPONS.teeth.kill_heal))
 
 
-## 머리 위 초록 "+15" — 내 흡혈귀거나 내 카메라 근처일 때만 (봇끼리 싸우는 먼 곳까지 숫자가 뜨지 않게)
+## 머리 위 초록 "+15" — 내 흡혈귀거나 가까운 아군일 때만 (상대 흡혈귀의 회복은 안 보여 줌 — 사용자 요청)
 static func heal_num(combat: Combat, e: PlayerController, amt := -1.0) -> void:
 	var me := combat.me
-	if e.is_local or (me and me.global_position.distance_to(e.global_position) < 20.0):
+	if e.is_local or (me and Combat.ally(me, e) and me.global_position.distance_to(e.global_position) < 20.0):
 		combat.num.emit(e.global_position + Vector3(0, e.mount_h + 2.2, 0), "+%d" % int(amt if amt > 0 else float(GameData.WEAPONS.teeth.heal)), "heal")
 
 

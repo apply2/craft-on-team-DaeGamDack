@@ -393,6 +393,7 @@ func _run() -> void:
 	var dashed := false
 	var bit := false
 	var hp0: float = p.hp
+	nums.clear()
 	for i in 360:
 		await physics_frame
 		p.invuln = 0.0
@@ -404,6 +405,7 @@ func _run() -> void:
 	dm.scripted_input = IDLE
 	check("봇 흡혈귀가 돌진함", dashed, "")
 	check("봇 흡혈귀가 물어서 피해를 줌", bit, "hp %.0f" % p.hp)
+	check("  상대 흡혈귀가 피를 빨아도 +15 자막이 안 뜸 (사용자 요청)", not bit or not nums.any(func(n): return n[1] == "heal"), str(nums))
 
 	print("ALL PASS" if fails == 0 else "FAILS: %d" % fails)
 	quit(1 if fails > 0 else 0)

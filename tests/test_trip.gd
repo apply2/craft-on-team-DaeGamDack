@@ -80,7 +80,7 @@ func _run() -> void:
 	check("기준 각도: %.1fm/s → %.0f°, %.1fm/s 이상 → %.0f°" % [min_v, T.angle_slow, T.fast_speed, T.angle_fast],
 		absf(rad_to_deg(acos(p.trip_dot(min_v))) - float(T.angle_slow)) < 0.1 and absf(rad_to_deg(acos(p.trip_dot(20.0))) - float(T.angle_fast)) < 0.1, "")
 	# 병과별 걷기·달리기 → 반대로 (180°)
-	var expect_walk := {"barbarian": true, "vampire": true, "archer": false, "bard": false, "cleric": false, "crossbow": false, "cannoneer": false}
+	var expect_walk := {"barbarian": true, "vampire": true, "archer": true, "bard": true, "cleric": false, "crossbow": false, "cannoneer": false}
 	var expect_run := {"barbarian": true, "vampire": true, "archer": true, "bard": true, "cleric": true, "crossbow": true, "cannoneer": false}
 	for cls in expect_walk:
 		for run in [false, true]:

@@ -170,6 +170,7 @@ func _run() -> void:
 	bot.scripted_input = {}
 	await wait(2)
 	bot.hp = 30.0
+	nums.clear()
 	var ate := false
 	for i in 120:
 		await physics_frame
@@ -179,6 +180,8 @@ func _run() -> void:
 	G.ai_enabled = false
 	bot.scripted_input = IDLE
 	check("봇 야만인은 체력이 절반 아래면 고기를 먹음", ate and bot.hp >= 60.0 - 0.01, "hp=%.1f" % bot.hp)
+	await wait(5)
+	check("  상대가 먹을 땐 +30 자막이 안 뜸 (사용자 요청)", not nums.any(func(n): return n[1] == "heal"), str(nums))
 
 	print("ALL PASS" if fails == 0 else "FAILS: %d" % fails)
 	quit(1 if fails > 0 else 0)

@@ -8,8 +8,8 @@ const FALL_TIME := 0.6       # 넘어져 있는 시간(초)
 ## 급회전 넘어짐 (사용자 요청 — 예전 HTML은 "자기 최고 속도의 75%"라 느린 병과도 똑같이 넘어졌음):
 ## 실제 속도(m/s)가 min_speed 이상일 때 window초 안에 반대쪽을 누르면 넘어짐. 빠를수록 덜 꺾어도 넘어짐 —
 ## 꺾은 각도가 min_speed에서 angle_slow° 이상, fast_speed 이상에서 angle_fast° 이상 (사이는 속도에 비례).
-## 지금 병과 속도로: 포병(3.8)은 안 넘어짐, 궁수·음유시인·성직자·석궁병(달리기 5.6)은 달릴 때만, 야만인·흡혈귀는 걸어도 넘어짐
-## (min_speed 사용자 요청 5.8 → 5.3: 석궁병도 달리면 넘어지게. 가장 빠른 걷기 중 안 넘어지는 건 궁수 5.13)
+## 지금 병과 속도로: 포병(3.8)은 안 넘어짐, 성직자(걷기 5.25)·석궁병(달리기 6.0)은 달릴 때만, 야만인·흡혈귀·궁수·음유시인은 걸어도 넘어짐
+## (min_speed 사용자 요청 5.8 → 5.3: 석궁병도 달리면 넘어지게)
 const TRIP := {"min_speed": 5.3, "fast_speed": 9.0, "angle_slow": 120.0, "angle_fast": 95.0, "window": 0.25}
 const LAND_TRIP := 0.2       # 점프하고 착지할 때 넘어질 확률 (사용자 요청으로 다시 넣음)
 const HEADSHOT := 1.5        # 투구 쓴 머리 배율
@@ -151,18 +151,18 @@ const CLASSES := {
 	"barbarian": {"name": "야만인", "weapon": "stone", "speed": 1.2348, "hp": 90,  # (1.372) 걷기 6.67 · 달리기 9.0 m/s
 		"color": 0xf28a1e, "leg": 0xf2c7a0, "arm": 0xf2c7a0, "foot": 0xe9b48e, "pips": [5, 1, 1, 5],
 		"desc": "가장 빠르다. 바짝 붙어서 돌멩이를 퍼붓는 돌격형."},
-	"archer": {"name": "궁수", "weapon": "bow", "speed": 0.95, "hp": 100,  # (1.0556) 걷기 5.13 m/s
+	"archer": {"name": "궁수", "weapon": "bow", "speed": 1.026, "hp": 100,  # (1.0556 → 0.95 → +8% 사용자 요청) 걷기 5.54 m/s
 		"color": 0xb8322a, "leg": 0x8b939c, "arm": 0x7d858f, "foot": 0x5b6068, "pips": [3, 3, 3, 3],
 		"desc": "당길수록 세지는 활로 중거리를 견제한다."},
-	"crossbow": {"name": "석궁병", "weapon": "crossbow", "speed": 0.765, "hp": 110,  # (0.85)
+	"crossbow": {"name": "석궁병", "weapon": "crossbow", "speed": 0.8262, "hp": 110,  # (0.85 → 0.765 → +8% 사용자 요청)
 		"color": 0x4d72b8, "leg": 0x8b939c, "arm": 0x7d858f, "foot": 0x5b6068, "pips": [2, 4, 4, 1],
 		"desc": "느리지만 한 발이 묵직하다. 머리에 맞히면 한 방."},
-	"cleric": {"name": "성직자", "weapon": "holy", "speed": 0.9, "hp": 100, "regen": 20,  # (1.0)
+	"cleric": {"name": "성직자", "weapon": "holy", "speed": 0.972, "hp": 100, "regen": 20,  # (1.0 → 0.9 → +8% 사용자 요청)
 		"color": 0xeee6d2, "leg": 0xeee6d2, "arm": 0xeee6d2, "foot": 0x8a5a32, "pips": [3, 2, 3, 2],
 		"desc": "성수병을 3개까지 모아 연달아 던진다. 3초간 남는 웅덩이가 밟은 적을 지지고 느리게 만든다. 체력 회복이 두 배 빠르다."},
 	# 4.5단계 (HTML에 없는 새 병과). 투구 자리엔 긴 깃털 달린 납작한 베레모 — 헤드샷이면 투구처럼 날아감
 	# pips는 명세에 없어서 임시로 정함 (이동 조금 빠름 · 피해 약함 · 사거리 짧음 · 계속 연주)
-	"bard": {"name": "음유시인", "weapon": "trumpet", "speed": 0.945, "hp": 95,  # (1.05)
+	"bard": {"name": "음유시인", "weapon": "trumpet", "speed": 1.0206, "hp": 95,  # (1.05 → 0.945 → +8% 사용자 요청)
 		"color": 0x7a3fa8, "leg": 0xf3b33d, "arm": 0x7a3fa8, "foot": 0x5b3a22, "pips": [3, 1, 2, 5],
 		"desc": "트럼펫을 불어 적을 춤추게 만든다. 춤추는 적은 느리고 조준이 흔들린다."},
 	# 사용자 요청 새 병과 (HTML에 없음): 바퀴 달린 나무 대포에 올라탄 느린 탱커. 포탄 점프로 움직이는 게 핵심
@@ -170,7 +170,7 @@ const CLASSES := {
 	#   hit_r: 몸통 판정 반지름 배율 (대포 크기 — 머리는 그대로)
 	#   slow_resist: 남이 거는 둔화(성수 웅덩이·춤 이동 감소)를 이 비율만 받음. 겹치면 합친 최종 둔화량에 곱함 (춤 자체·자기 조준 감속은 그대로) — 사용자 요청 (면역 → 50%)
 	#   speed: 사용자 요청 0.65 → 0.7
-	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.7, "hp": 130,  # 사용자 요청 200 → 150 → 130 (밸런스)
+	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.756, "hp": 130,  # 사용자 요청 200 → 150 → 130 (밸런스). 속도 0.7 → +8% (사용자 요청)
 		"no_sprint": true, "accel": 6.0, "jump": 0.4, "hit_r": 1.4, "slow_resist": 0.5,
 		"color": 0x5f7a3a, "leg": 0x5a4632, "arm": 0x5f7a3a, "foot": 0x2e241c, "pips": [1, 4, 4, 1],  # 누빈 천 갑옷(갬비슨) 색 — 겉모습은 CANNON_LOOK
 		"desc": "느리고 크지만 한 방이 세다. 포탄은 터지며 주변을 날리고, 발밑에 쏘면 높이 뛴다."},

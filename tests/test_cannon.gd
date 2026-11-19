@@ -119,7 +119,7 @@ func _run() -> void:
 	check("포병: 체력 130 · 무기 대포 · 모델에 포가", p.hp == 130.0 and p.wep == "cannon" and p.model.carriage != null and p.model.wheels.size() == 2,
 		"hp=%.0f wep=%s" % [p.hp, p.wep])
 	check("몸 판정 1.4배", near(p.body_r(), G.BODY_R * 1.4, 0.001), "r=%.3f" % p.body_r())
-	check("걷기 속도 = 5.4 × 0.7 (사용자 요청 0.65 → 0.7)", near(p.max_speed(), G.BASE_SPEED * 0.7, 0.001), "%.3f" % p.max_speed())
+	check("걷기 속도 = 5.4 × 0.756 (사용자 요청 0.65 → 0.7 → +8%)", near(p.max_speed(), G.BASE_SPEED * 0.756, 0.001), "%.3f" % p.max_speed())
 	p.scripted_input = {"f": 1.0, "r": 0.0, "jump": false, "crouch": false, "sprint": true}
 	await wait(30)
 	check("달리기 안 됨 (Shift를 눌러도)", not p.sprinting and Vector2(p.velocity.x, p.velocity.z).length() <= G.BASE_SPEED * 0.7 + 0.01,
@@ -284,7 +284,7 @@ func _run() -> void:
 	check("우클릭: 예상 궤적 점 + 착탄 고리(반경 2.5)", C.cannon._dots.multimesh.visible_instance_count > 5 and C.cannon._ring.visible and near(C.cannon._ring.scale.x, 2.5),
 		"점=%d" % C.cannon._dots.multimesh.visible_instance_count)
 	check("우클릭: 1.3배 확대 (시야 85 → 65.4)", near(p.cam.fov, 85.0 / 1.3, 1.5), "fov=%.1f" % p.cam.fov)
-	check("우클릭: 이동 속도 ×0.7", near(p.max_speed(), G.BASE_SPEED * 0.7 * 0.7, 0.001), "%.3f" % p.max_speed())
+	check("우클릭: 이동 속도 ×0.7", near(p.max_speed(), G.BASE_SPEED * 0.756 * 0.7, 0.001), "%.3f" % p.max_speed())
 	p.scripted_input = IDLE
 	await wait(2)
 	await process_frame
