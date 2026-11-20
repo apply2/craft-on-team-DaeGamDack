@@ -82,6 +82,7 @@ tests/test_meat.gd     고기 먹기: 30 회복·8.3초 재사용·최대 체력
 tests/screenshot_meat.gd 고기 먹기 사진 6칸 → tests/screenshots/meat_<tag>.png (화면 있어야 함)
 tests/test_vampire.gd  흡혈귀: 스탯·화상 1.5초 뒤 시작·14.5초에 죽음·화상 사망은 언제나 자멸·물기 20+15·최대 체력 상한·원뿔·한 명·벽·아군·무적·돌진 9m·±20°·적중 멈춤·재사용·벽·비네트·불꽃·봇 자동 테스트
 tests/screenshot_bombard.gd 포병 봄바드 사진 12칸 (1인칭 R 장전 4장 포함) → tests/screenshots/bombard_<tag>.png (화면 있어야 함)
+tests/screenshot_readme.gd README용 경기 사진: 봇 경기(나도 봇 AI)를 돌리며 from~to초 every초마다 jpg (화면 있어야 함: godot --path . --resolution 1600x900 --fixed-fps 60 -s tests/screenshot_readme.gd -- mode=control cls=archer from=20 to=110 every=3 out=<폴더>) → 골라서 tests/screenshots/readme_*.jpg
 tests/screenshot_class.gd 병과 하나 자세히 (3방향·걷는 중·1인칭 우클릭·3인칭): godot --path . --resolution 1280x720 -s tests/screenshot_class.gd -- cls=cannoneer tag=now
 scripts/trumpet_voice.gd  연주 멜로디 (AudioStreamGenerator, 톱니파+비브라토+로우패스). 음유시인 모델마다 하나
 tests/test_bard.gd     원뿔 안/밖·벽 차단·피해 주기·누적 0.95초 춤·1.5초 창·3.5초 면역·넘어짐 우선·숨 소진·삑사리·팡파레·봇 오차·베레모·볼·숨 막대 자동 테스트

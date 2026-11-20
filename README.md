@@ -14,7 +14,17 @@ Three.js로 만든 HTML 프로토타입을 **Godot 4.7**로 옮긴 프로젝트�
 
 ![메인 화면](tests/screenshots/ui_readme_main.png)
 
-![경기 화면](tests/screenshots/hud_after_control_1280.png)
+**개인전**: 음유시인 트럼펫에 걸려 춤추는 야만인. 춤추는 동안은 공격을 못 합니다.
+
+![개인전: 춤추는 야만인](tests/screenshots/readme_ffa.jpg)
+
+**쟁탈전 5:5**: 우물 거점을 두고 경합 중. 흡혈귀는 물고, 포병은 대포를 겨눕니다.
+
+![쟁탈전: 우물 거점 경합](tests/screenshots/readme_control_1.jpg)
+
+**쟁탈전 5:5**: 거점 앞으로 박쥐 돌진하는 흡혈귀.
+
+![쟁탈전: 박쥐 돌진하는 흡혈귀](tests/screenshots/readme_control_2.jpg)
 
 ---
 
