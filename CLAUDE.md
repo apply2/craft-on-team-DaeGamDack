@@ -120,6 +120,7 @@ tests/balance_control.gd 쟁탈전 밸런스 분석: 봇 10명(나도 봇 AI) 5:
 tests/perf_profile.gd  봇 경기 FPS·1% 최저·그리기 호출·삼각형 (메뉴·개인전·쟁탈전, 화면 필요: godot --path . --resolution 1280x720 -s tests/perf_profile.gd -- tag=now secs=20)
 tests/perf_break.gd    그리기 호출이 어디서 나오나 (같은 장면을 멈춰 두고 그림자·잔디·소품·캐릭터·HUD·맵을 하나씩 끔, 화면 필요)
 tests/perf_hud.gd      HUD 그리기 호출을 노드별로 (화면 필요) / tests/perf_model.gd 병과별 캐릭터 조각·삼각형 수 (화면 필요)
+tests/perf_scripts.gd  스크립트별·함수별 CPU 시간 (콜백을 한 번 더 불러 잼 — 비율 보기용, 헤드리스 가능: godot --headless --path . -s tests/perf_scripts.gd -- mode=control secs=6)
 tests/perf_cpu.gd      스크립트 CPU 시간 (물리 프레임 한 번, 봇 AI 켬/끔, 헤드리스: godot --headless --path . -s tests/perf_cpu.gd)
 tests/perf_maps.gd     두 맵 같은 카메라 5곳 사진(deco_<tag>_*.png) + 봇 경기 FPS·드로우콜 (화면 있어야 함: godot --path . --resolution 1280x720 -s tests/perf_maps.gd -- tag=after quality=normal secs=30)
 tests/screenshot_held.gd 손에 든 무기 크기 비교 사진 (병과 5 + 저격총·AK·닭·말, 4m·8m·20m + 내 어깨 너머) + 조준점 가림 %
@@ -496,7 +497,7 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
   포탄 = 울퉁불퉁한 회색 돌(`Meshes.stone`, 보이는 크기 `ball` 0.21 — 판정 `radius` 0.2 그대로). 쏠 때(`Cannon.fire_fx`) 점화 구멍 불티 + 포구 짙은 회백색 연기(`Fx.smoke`, 내 1인칭이면 앞쪽에 옅게).
   폭발 = 작은 섬광·불덩이 + 돌 파편(`Fx.rocks`)·흙 조각·흙먼지 연기·고리 + `boom` + 화면 흔들림(4m 안 최대 → 26m에서 0).
   사진: `godot --path . --resolution 1280x720 -s tests/screenshot_bombard.gd -- tag=now` → tests/screenshots/bombard_<tag>.png (멀리·쏘는 순간·1인칭 평소/쏘기/조준·3인칭 쏘기·폭발 2장)
-- **소리**(임시 합성, `Sfx.RECIPES`): `cannon`(발사) · `boom`(폭발) · `clank`(재장전). 파일로 바꾸려면 `audio/sfx/`에 넣고 `Sfx.FILES`에 같은 이름을 더한 뒤 RECIPES에서 지움.
+- **소리**: 발사 `cannon` = 파일 `artillery_fire_bmat.ogg` (`Sfx.play_shot`, 위 "효과음"), `boom`(폭발) · `clank`(재장전)은 임시 합성 `Sfx.RECIPES`. 파일로 바꾸려면 `audio/sfx/`에 넣고 `Sfx.FILES`에 같은 이름을 더한 뒤 RECIPES에서 지움.
 - **봇**: 성수처럼 대상 발밑에 떨어질 각도를 훑어서 찾음, `BOT.cannon_min` 4.5m 안이면 안 쏨, 선호 거리 16m, 쟁탈전 역할 = 거점.
 - **친구대전**: 포탄은 "f" 사건 (`Net.WEPS` 끝에 "cannon" — 번호는 뒤에만 더함). 장전 게이지는 상태 배열 18번 `cn_load` (남의 화면 게이지·철컥).
   **방장 검사** (사용자 요청 "발사 가능 여부는 방장이 판정" — 사용자가 '쏜 쪽 판정 + 방장 검사'를 고름): 친구 포탄은 `Net.event_host`로 방장에게만 → 방장 `_ev`가 `cannon_ok`
@@ -616,8 +617,14 @@ HTML에서 볼 함수는 줄 번호와 함께 적었다. 줄 번호는 원본 �
 | `squeak` · `fanfare` · `gasp` | 같은 이름 .ogg | 트럼펫 삑사리 · 팡파레 · 헐떡임 |
 | `cluck` · `horn` · `nyam` · `neigh` | 같은 이름 .ogg | 닭 · 쟁탈전 뿔나팔 · 황금 붕어빵 · 말 울음 |
 | `gallop` | `gallop_loop.ogg` | 말 달리는 동안 계속 (반복 소리) |
+| `cannon` | `artillery_fire_bmat.ogg` | 포병 발사 — `Sfx.play_shot` (아래 "큰 발사음") |
 
-- 합성 그대로: `bite`·`bat`·`burn`(흡혈귀)·`trip`·`hit`·`head`·`kill`·`hurt`·`pickup`·`chime`·`bell`·`slide`·`slip`·`jump`·`sizzle`·`reload`(성수 한 병 참)·`seat`(볼트 끼우기)·`stamp`. 결과 화면 `play_stinger`는 따로.
+- **큰 발사음** (사용자 요청 "포병 발사음이 너무 작음", `GameData.SFX_SHOT`, `Sfx.play_shot(이름, 위치, mine)`): 예전 합성음(`RECIPES.cannon`, 저음뿐)은 지움.
+  내가 쏘면 위치 없는 플레이어로 `self_db` 0dB (거리 감쇠 없음). 봇·친구가 쏘면 그 자리에서 **AudioStreamPlayer3D**(풀 8개, SFX 버스) `db` +6 · `unit` 10 · `max` 80m · inverse distance · `max_db` = db (가까우면 +6 그대로).
+  음높이 0.92~1.08 무작위. 다른 효과음의 `vol_at`(남의 소리 ×0.7, 50m에서 3%)은 안 거침. 친구대전은 "f" 사건을 받은 `remote_fire`가 각자 컴퓨터에서 냄.
+  기록 `Sfx.shots`(헤드리스에서도 — test_cannon·test_net). 진짜 오디오로 확인: `godot --path . --resolution 1280x720 -s tests/check_shot_audio.gd`.
+
+- 합성 그대로: `boom`·`clank`(포병), `bite`·`bat`·`burn`(흡혈귀)·`trip`·`hit`·`head`·`kill`·`hurt`·`pickup`·`chime`·`bell`·`slide`·`slip`·`jump`·`sizzle`·`reload`(성수 한 병 참)·`seat`(볼트 끼우기)·`stamp`. 결과 화면 `play_stinger`는 따로.
 - **크기·음높이 조절**은 `game_data.gd`만: `SFX_GAIN`(소리별 크기 배율, 기본 1) · `SFX_PITCH`(소리별 음높이 배율). 크기 = `vol_at(위치)` × `SFX_GAIN` × `SFX_VOL`.
   파일 소리는 칠 때마다 음높이 ±`PITCH_JITTER`(0.04), 음악인 `SFX_NO_JITTER`(fanfare·horn)는 안 흔듦.
 - **거리·남의 소리** (사용자 요청, `GameData.SFX_DIST`, `Sfx.vol_at`): 1/(1+(거리/8)^1.5) — 8m 절반, 50~80m에서 0까지 (HTML 1/(1+거리/9)보다 거리감이 큼).
@@ -846,6 +853,12 @@ cd export/web && python -m http.server 8060   # 브라우저로 http://localhost
     - 소리 속성은 **바뀔 때만** 넣는다 (`Music.set_db`·`set_paused`, Sfx 반복 소리). 웹은 음악을 브라우저 소리(Sample)로 틀어서 넣을 때마다 브라우저에 명령이 가는데, 예전엔 매 프레임 `stream_paused = false`·`volume_db`를 넣었다.
     - 트럼펫 멜로디(`TrumpetVoice`)는 조용하면 플레이어를 멈춤 (예전엔 메뉴 무리·봇 음유시인마다 늘 돌며 0을 채움 — 웹은 소리 섞기가 화면 프레임 안이라 부담). 동시에 소리를 만드는 건 가장 큰 `MAX_VOICES`(2)개, 음높이는 32샘플마다 계산.
     - 병과 고르기·대기실처럼 화면을 다 덮는 페이지(`Menu.COVER_PAGES`)에선 뒤의 3D를 안 그림 (`viewport.disable_3d`, `menu._sync_3d`).
+
+- **최적화 3차** (사용자 요청 "마지막으로 최적화", 측정 `tests/perf_scripts.gd`·`perf_profile.gd`, 1280×720 PC):
+  - 화면 밖 캐릭터는 몸 애니메이션(`DerpModel.animate`, 히트박스 따라가기 포함)을 `ANIM_LOD.off_dt`(0.05초)마다 한 번, 모인 시간으로 (`player._on_screen` — 화면 + 가장자리 30% 여유, 4m 안이면 언제나).
+    내 캐릭터는 늘 매 프레임. `GameData.anim_lod = false`면 예전처럼 전부 매 프레임.
+  - 쟁탈전 봇의 거점 지킴이 순위(`_holder_rank`, 정렬)는 0.25초마다 (`bot_ai.rank`).
+  - 결과: 개인전 305 → 354 FPS, 쟁탈전 239 → 269 FPS, 메뉴 그대로 (봇 자리가 무작위라 ±10% 흔들림). 물리 프레임 스크립트는 PC에서 2~3ms (봇 AI·이동이 절반, 닭 한 마리 = 캐릭터 하나만큼).
 
 ## PC 내보내기 (exe)
 

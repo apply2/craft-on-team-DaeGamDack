@@ -187,11 +187,16 @@ func _run() -> void:
 	put(pb, HERE + Vector3(6, 0, 0), "cannoneer", PI / 2)
 	await wait(40)
 	check("방장 화면에 친구가 포병으로", rb.cls == "cannoneer" and absf(rb.hp - 130.0) < 1.0, "%s hp=%.0f" % [rb.cls, rb.hp])
+	var SX = root.get_node("Sfx")
+	var ns: int = SX.shots.size()
 	pa.scripted_input = FIRE
 	await wait(2)
 	pa.scripted_input = IDLE
 	await wait(3)
 	check("친구 화면에도 포탄이 생김", B.combat.projectiles.any(func(p): return p.owner == ra and p.kind == "cannon"), "n=%d" % B.combat.projectiles.size())
+	var cs: Array = SX.shots.slice(ns).filter(func(x): return x.sound == "cannon")
+	check("발사음: 쏜 쪽은 내 소리(위치 없음), 받은 쪽은 쏜 자리 3D (소리는 각자, 사건만 받음)",
+		cs.size() == 2 and cs.filter(func(x): return x.mine).size() == 1 and cs.filter(func(x): return not x.mine and (x.pos as Vector3).distance_to(pa.global_position) < 2.0).size() == 1, str(cs))
 	await wait(30)
 	check("포탄 직격: 친구 쪽에서 100 판정", absf(pb.hp - 30.0) < 0.5, "hp=%.0f" % pb.hp)
 	check("방장 화면의 친구 체력도 같음 (상태 동기화)", absf(rb.hp - pb.hp) < 1.0, "방장 화면 %.0f / 친구 %.0f" % [rb.hp, pb.hp])

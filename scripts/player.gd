@@ -163,6 +163,7 @@ var on_roof := false  # 지난 물리 프레임에 지붕 경사면에 닿았나
 @onready var col: CollisionShape3D = $CollisionShape3D
 @onready var cam: Camera3D = $Camera3D
 var model: DerpModel
+var _anim_acc := 0.0  # 화면 밖이라 미룬 애니메이션 시간 (ANIM_LOD)
 
 
 func _ready() -> void:
@@ -817,10 +818,34 @@ func _process(dt: float) -> void:
 	if not model:
 		return
 	if alive:
-		model.animate(self, dt)
+		if is_local or not GameData.anim_lod or _on_screen():
+			model.animate(self, dt + _anim_acc)
+			_anim_acc = 0.0
+		else:  # 화면 밖: 초당 1/off_dt번만 (안 보이니 티 안 남. 히트박스도 그만큼마다 갱신)
+			_anim_acc += dt
+			if _anim_acc >= float(GameData.ANIM_LOD.off_dt):
+				model.animate(self, _anim_acc)
+				_anim_acc = 0.0
 	# 스폰 무적 중엔 깜빡임
 	var blink := invuln <= 0 or int(floor(invuln * 12)) % 2 == 0
 	model.visible = alive and blink and (not is_local or (tp_view() and tp_dist > 0.9))
+
+
+## 화면에 보이나 (가장자리 여유 margin, 카메라 가까이면 언제나) — 몸 애니메이션 줄이기용
+func _on_screen() -> bool:
+	var vp := get_viewport()
+	var cam := vp.get_camera_3d() if vp else null
+	if cam == null:
+		return true
+	var L: Dictionary = GameData.ANIM_LOD
+	var c := global_position + Vector3(0, 1.0 + mount_h, 0)
+	if c.distance_squared_to(cam.global_position) < float(L.near) * float(L.near):
+		return true
+	if cam.is_position_behind(c):
+		return false
+	var vs := vp.get_visible_rect().size
+	var m := vs * float(L.margin)
+	return Rect2(-m, vs + m * 2.0).has_point(cam.unproject_position(c))
 
 
 ## 저격총 스코프로 보는 중 (우클릭) — HTML scoped

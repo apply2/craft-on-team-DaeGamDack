@@ -36,6 +36,8 @@ var path := PackedVector3Array()
 var path_i := 0
 var path_t := 0.0
 var goal := Vector3.INF      # 지금 가려는 곳
+var rank := 0               # 쟁탈전 거점 지킴이 순위 (_holder_rank, rank_t마다)
+var rank_t := 0.0
 var slot := Vector3.ZERO     # 거점 원 안에서 설 자리 (봇마다 다르게)
 
 
@@ -362,7 +364,11 @@ func control_move(e: PlayerController, combat: Combat, t: PlayerController, dt: 
 	if mode.phase == "locked" or mode.phase == "gap":
 		to_point = false
 	elif ours and not urgent:
-		to_point = role == "point" and _holder_rank(e, combat) < int(CM.bot_hold_in)
+		rank_t -= dt
+		if rank_t <= 0:  # 순위는 가끔만 (봇마다 매 프레임 정렬하면 비쌈)
+			rank_t = 0.25
+			rank = _holder_rank(e, combat)
+		to_point = role == "point" and rank < int(CM.bot_hold_in)
 	elif not urgent and role == "watch" and mode.holder == "":
 		to_point = false  # 중립이면 궁수·석궁병은 감시 지점에서 거점을 겨눔
 	if to_point:

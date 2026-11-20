@@ -44,6 +44,9 @@ const BODY_R := 0.46         # 몸통 캡슐 반지름 (+투사체 반지름)
 # 넘어져 누운 자세(fall_amt > 0.5)는 원래 계산 그대로. max = 한 점이 옮겨 갈 수 있는 최대 거리(m, 안전장치 —
 # 달리기 시작·급정지 때 젤리 출렁임으로 머리가 0.9m쯤까지 기울어서 그보다 넉넉히)
 const HITBOX_FOLLOW := {"a_y": 0.4, "b_y": 1.15, "max": 1.5}
+# 최적화: 화면 밖 캐릭터는 몸 애니메이션(히트박스 따라가기 포함)을 off_dt초마다 한 번만 (모인 시간으로).
+# margin = 화면 가장자리 여유(화면 크기 비율), near = 이 거리(m) 안이면 언제나 매 프레임
+const ANIM_LOD := {"off_dt": 0.05, "margin": 0.3, "near": 4.0}
 const REGEN_DELAY := 5.0     # 이 시간 동안 안 맞으면 재생 시작
 const REGEN := 10            # 기본 초당 회복량 (병과 regen으로 덮어씀)
 const INVULN := 1.2          # 스폰 직후 무적
@@ -861,6 +864,11 @@ const SFX_PITCH := {"thud": 1.15}               # 소리별 음높이 배율
 # 거리·남의 소리 (사용자 요청 — HTML은 1/(1+거리/9)라 멀어도 잘 안 줄었음). Sfx.vol_at
 #   크기 = 1 / (1 + (거리/ref)^rolloff), fade_from~max 사이에서 0까지 더 줄임.
 #   내 캐릭터 자리(self_r 안)에서 난 소리 = 내 소리, 나머지(적·아군·봇)는 × others
+# 큰 발사음 (사용자 요청 — 포병 발사음이 너무 작았음). 내가 쏘면 위치 없이 self_db로, 남(봇·친구)이 쏘면 그 자리에서 AudioStreamPlayer3D로
+# (db·unit = unit_size·max = max_distance m·감쇠 inverse distance, 가까우면 최대 db까지). 음높이는 pitch 사이 무작위. SFX 버스
+const SFX_SHOT := {
+	"cannon": {"file": "res://audio/sfx/artillery_fire_bmat.ogg", "self_db": 0.0, "db": 6.0, "unit": 10.0, "max": 80.0, "pitch": [0.92, 1.08]},
+}
 const SFX_DIST := {"ref": 8.0, "rolloff": 1.5, "fade_from": 50.0, "max": 80.0, "others": 0.7, "self_r": 0.5}
 const XBOW_RELOAD_SND := {"latch": 0.63, "seat": 0.86}  # 석궁 장전 모션 진행도에서 걸쇠·볼트 소리 나는 순간 (휠 한 칸마다는 xbow_click)
 const GALLOP := {"min_speed": 2.0, "pitch_min": 0.85, "pitch_max": 1.2, "speed_ref": HORSE_SPEED}  # 말 속도 → 다그닥 음높이
@@ -980,6 +988,7 @@ const ROOM_MAPS := {
 var end_wait_override := -1.0  # 테스트: 0 이상이면 결과 화면 → 대기실 시간을 이걸로
 var signal_url_override := ""  # 테스트: 신호 서버를 이 주소로 (tests/mock_signal.gd, 예 "ws://127.0.0.1:24690"). "off"면 설정이 없는 것처럼
 var ice_override: Variant = null  # 테스트: STUN 없이 (빈 배열이면 같은 컴퓨터 안에서만 연결)
+var anim_lod := true        # false면 모든 캐릭터를 매 프레임 애니메이션 (ANIM_LOD, 테스트·비교용)
 var hitbox_follow := true   # false면 예전처럼 고정 판정 (HITBOX_FOLLOW, 테스트·비교용)
 var debug_hits := false     # 명중 판정 디버그 표시 (F9로 켜고 끔, HIT_DEBUG). 저장 안 함
 var hitstop_enabled := true   # false면 히트스톱 안 함 (자동 테스트용 — 프레임 수로 시간을 재니까)

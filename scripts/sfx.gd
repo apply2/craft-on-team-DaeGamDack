@@ -56,7 +56,6 @@ const RECIPES := {
 	"reload": [["n", 0.06, 0.14, 2600, "bandpass", 0.0], ["t", 1200, 0.05, "square", 0.05, -500, 0.0]],  # 성수 한 병 참
 	"seat": [["n", 0.07, 0.16, 1300, "bandpass", 0.0]],  # 석궁 볼트 끼우기
 	# 포병 (사용자 요청 — 임시 합성 소리. 파일로 바꾸려면 audio/sfx/에 넣고 FILES에 같은 이름을 더한 뒤 여기서 지울 것)
-	"cannon": [["n", 0.35, 0.45, 700, "lowpass", 0.0], ["t", 110, 0.3, "sine", 0.35, -70, 0.0], ["n", 0.06, 0.25, 3000, "bandpass", 0.0]],  # 대포 쾅 (발사)
 	"boom": [["n", 0.7, 0.5, 380, "lowpass", 0.0], ["t", 70, 0.55, "sine", 0.45, -40, 0.0], ["n", 0.18, 0.28, 1800, "bandpass", 0.02]],  # 포탄 폭발
 	"clank": [["t", 1500, 0.04, "square", 0.07, -500, 0.0], ["n", 0.05, 0.16, 3200, "bandpass", 0.0],
 		["t", 950, 0.06, "square", 0.07, -300, 0.1], ["n", 0.06, 0.16, 2200, "bandpass", 0.1]],  # 재장전 철컥
@@ -86,6 +85,8 @@ var _stinger: AudioStreamPlayer = null
 var _cache := {}            # 합성 이름 또는 파일 경로 → AudioStream
 var _pending: Array = []    # 미리 굽거나 불러 둘 것
 var _pool: Array[AudioStreamPlayer] = []
+var _pool3d: Array[AudioStreamPlayer3D] = []  # 남이 쏜 큰 발사음 (play_shot)
+var shots: Array = []       # 자동 테스트용 — play_shot 기록 {sound, mine, pos, db, unit, max, pitch} (헤드리스에서도)
 var _sid := 0               # play()가 돌려주는 번호
 var _last_pick := {}        # 이름 → 지난번에 고른 파일 번호
 var _loops := {}            # owner 인스턴스 id → {p, sound, frame}
@@ -101,7 +102,16 @@ func _ready() -> void:
 		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
+	for i in 8:
+		var p3 := AudioStreamPlayer3D.new()
+		p3.bus = "SFX"
+		p3.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		p3.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+		add_child(p3)
+		_pool3d.append(p3)
 	_pending = RECIPES.keys()
+	for k: String in GameData.SFX_SHOT:
+		_pending.append(GameData.SFX_SHOT[k].file)
 	for paths: Array in FILES.values():
 		for path: String in paths:
 			if not _pending.has(path):
@@ -195,6 +205,60 @@ func play(sound: String, pos: Variant = null) -> int:
 	_sid += 1
 	p.set_meta("sid", _sid)
 	return _sid
+
+
+## 큰 발사음 (GameData.SFX_SHOT — 지금은 포병). mine = 내가 쏨 → 위치 없이 self_db, 아니면 pos에서 3D로 (거리감은 Godot inverse distance).
+## 경기 중에만. 소리는 각 컴퓨터에서 따로 낸다 (친구대전은 "f" 사건을 받은 remote_fire가 부름)
+func play_shot(sound: String, pos: Vector3, mine: bool) -> void:
+	if not playing:
+		return
+	var C: Dictionary = GameData.SFX_SHOT[sound]
+	var pitch := randf_range(float(C.pitch[0]), float(C.pitch[1]))
+	var gain_db := linear_to_db(float(GameData.SFX_GAIN.get(sound, 1.0)) * GameData.SFX_VOL)
+	played.append(sound)
+	if played.size() > 64:
+		played.pop_front()
+	shots.append({"sound": sound, "mine": mine, "pos": pos, "pitch": pitch,
+		"db": float(C.self_db if mine else C.db) + gain_db, "unit": 0.0 if mine else float(C.unit), "max": 0.0 if mine else float(C.max)})
+	if shots.size() > 32:
+		shots.pop_front()
+	if not enabled:
+		return
+	var st: AudioStream = _file(C.file)
+	if mine:
+		var p := _free_player()
+		p.stream = st
+		p.pitch_scale = pitch
+		p.volume_db = float(C.self_db) + gain_db
+		p.play()
+		_sid += 1
+		p.set_meta("sid", _sid)
+		return
+	var p3 := _free_3d()
+	p3.stream = st
+	p3.pitch_scale = pitch
+	p3.volume_db = float(C.db) + gain_db
+	p3.max_db = p3.volume_db  # 가까이(unit_size 안)에선 db 그대로 (기본 max_db 3이면 +6이 잘림)
+	p3.unit_size = float(C.unit)
+	p3.max_distance = float(C.max)
+	p3.global_position = pos
+	p3.play()
+	_sid += 1
+	p3.set_meta("sid", _sid)
+
+
+## 쉬는 3D 플레이어, 다 바쁘면 가장 오래된 것
+func _free_3d() -> AudioStreamPlayer3D:
+	var best: AudioStreamPlayer3D = _pool3d[0]
+	var best_sid := 1 << 62
+	for p in _pool3d:
+		if not p.playing:
+			return p
+		var s := int(p.get_meta("sid", 0))
+		if s < best_sid:
+			best_sid = s
+			best = p
+	return best
 
 
 ## play()가 돌려준 번호의 소리가 아직 나고 있으면 끈다 (그 플레이어가 다른 소리를 내고 있으면 안 건드림)

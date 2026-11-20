@@ -894,7 +894,7 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			e.cd = 0.3
 			e.cn_load = 0.0  # 다시 쏘려면 R을 꾹
 			mesh = _cannonball()
-			Sfx.play("cannon", e.global_position)
+			Sfx.play_shot("cannon", e.global_position + Vector3(0, 1.0, 0), e.is_local)  # 나 = 위치 없이 크게, 봇 = 그 자리 3D
 			if not e.is_remote:  # 발사 반동 (몸이 밀림) — 친구 캐릭터는 그쪽 컴퓨터가
 				Cannon.fire_recoil(e, dir)  # dir = 실제로 쏜 방향
 			if e.is_local:
@@ -1331,7 +1331,7 @@ func remote_fire(e: PlayerController, kind: String, pos: Vector3, vel: Vector3, 
 		"cannon":
 			mesh = _cannonball()
 			dmg = W.dmg
-			Sfx.play("cannon", pos)
+			Sfx.play_shot("cannon", e.global_position + Vector3(0, 1.0, 0), false)  # 친구가 쏨 = 그 자리 3D (소리는 각자 컴퓨터에서)
 			e.rec_v += 12
 			cannon.fire_fx(e, pos, vel.normalized() if vel.length_squared() > 1e-6 else Vector3.FORWARD)
 		_:

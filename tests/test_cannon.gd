@@ -162,6 +162,33 @@ func _run() -> void:
 	check("한 발 나감, 속도 32", new_shots.size() == 1 and near((new_shots[0].vel as Vector3).length(), 32.0, 0.3) if new_shots.size() == 1 else false,
 		"n=%d" % new_shots.size())
 	check("쏘면 게이지 0", p.cn_load == 0.0, "load=%.2f" % p.cn_load)
+	# 발사음 (사용자 요청 — 너무 작았음): 새 파일, 내가 쏘면 위치 없이 0dB, 남이 쏘면 그 자리 3D +6dB·unit 10·80m
+	var SH: Dictionary = G.SFX_SHOT.cannon
+	var my_shot: Dictionary = S.shots[-1] if not S.shots.is_empty() else {}
+	check("내 발사음: 위치 없이 0dB (거리 감쇠 없음)", my_shot.get("sound") == "cannon" and my_shot.get("mine") == true and near(float(my_shot.get("db", -99)), 0.0, 0.001), str(my_shot))
+	var snd: AudioStream = load(SH.file)
+	check("  새 효과음 파일 artillery_fire_bmat.ogg · 반복 없음 · 예전 합성음 없앰",
+		str(SH.file).ends_with("audio/sfx/artillery_fire_bmat.ogg") and snd != null and snd.get("loop") == false and not S.RECIPES.has("cannon") and not S.FILES.has("cannon"),
+		"len %.2f" % (snd.get_length() if snd else -1.0))
+	var n_shots: int = S.shots.size()
+	put(dm, SHOOTER + Vector3(0, 0, -6), "cannoneer", WEST_YAW)
+	await wait(3)
+	dm.cn_load = 1.0
+	dm.scripted_input = FIRE
+	await wait(2)
+	dm.scripted_input = IDLE
+	var bot_shot: Dictionary = S.shots[-1] if S.shots.size() > n_shots else {}
+	check("남(봇)의 발사음: 그 자리 3D · +6dB · unit 10 · 최대 80m", bot_shot.get("mine") == false and near(float(bot_shot.get("db", 0)), 6.0, 0.001)
+		and near(float(bot_shot.get("unit", 0)), 10.0, 0.001) and near(float(bot_shot.get("max", 0)), 80.0, 0.001)
+		and (bot_shot.get("pos", Vector3.INF) as Vector3).distance_to(dm.global_position) < 1.5, str(bot_shot))
+	var pmin := 9.0
+	var pmax := 0.0
+	for i in 60:
+		S.play_shot("cannon", dm.global_position, i % 2 == 0)
+		pmin = minf(pmin, float(S.shots[-1].pitch))
+		pmax = maxf(pmax, float(S.shots[-1].pitch))
+	check("  음높이 0.92~1.08 무작위 (매번 다르게)", pmin >= 0.92 and pmax <= 1.08 and pmax - pmin > 0.08, "%.3f~%.3f" % [pmin, pmax])
+	put(dm, Vector3(-25, 0, 40))
 	await wait(int(5.0 / DT))
 	check("쏜 뒤 아무것도 안 누르면 장전 안 됨 (5초 뒤에도 0)", p.cn_load == 0.0, "load=%.2f" % p.cn_load)
 	rl_toasts.clear()
