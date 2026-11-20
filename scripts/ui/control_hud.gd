@@ -161,12 +161,7 @@ func _draw() -> void:
 			draw_set_transform(Vector2.ZERO)
 			_text(sp + Vector2(0, -tw.y - 5), e.ent_name, int(A.font), Hud.PARCH)
 		else:  # 적: 조준점 근처에 있고 보일 때만 이름
-			if cam.is_position_behind(e.global_position + Vector3(0, 1.0, 0)):
-				continue
-			var bs := cam.unproject_position(e.global_position + Vector3(0, 1.0, 0))
-			var d := maxf(1.0, cam.global_position.distance_to(e.global_position))
-			var r := clampf(900.0 / d, 18.0, 120.0)
-			if _seg_dist(center, sp, bs) < r * 0.5 and hud.combat.los(cam.global_position, e.global_position + Vector3(0, 1.4, 0)):
+			if aimed_at(cam, hud.combat, e, center, mh):
 				_text(sp + Vector2(0, -6), e.ent_name, int(A.font), GameData.col(T[e.team].body).lightened(0.15))
 	_draw_point_sign(cam, me, center)
 
@@ -223,6 +218,20 @@ func _draw_point_sign(cam: Camera3D, me: PlayerController, center: Vector2) -> v
 	draw_colored_polygon(arrow, col)
 	draw_polyline(arrow + PackedVector2Array([arrow[0]]), Hud.INK, 2.5, true)
 	_text(at - dir * 26 + Vector2(0, 5), "거점", 13, Hud.PARCH)
+
+
+## 조준점(center)이 e의 몸(가슴 1m ~ 머리 위 top m)을 화면에서 가리키고, 카메라에서 보이나 (벽 뒤면 아님).
+## 멀수록 화면에서 작아지니 허용 거리도 줄어듦. 쟁탈전 적 이름·개인전 조준한 적 이름(Hud.AimName)이 같이 씀
+static func aimed_at(cam: Camera3D, combat: Combat, e: PlayerController, center: Vector2, top: float) -> bool:
+	var head := e.global_position + Vector3(0, top, 0)
+	var body := e.global_position + Vector3(0, 1.0, 0)
+	if cam.is_position_behind(head) or cam.is_position_behind(body):
+		return false
+	var d := maxf(1.0, cam.global_position.distance_to(e.global_position))
+	var r := clampf(900.0 / d, 18.0, 120.0)
+	if _seg_dist(center, cam.unproject_position(head), cam.unproject_position(body)) >= r * 0.5:
+		return false
+	return combat.los(cam.global_position, e.global_position + Vector3(0, 1.4, 0))
 
 
 static func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:

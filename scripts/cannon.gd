@@ -125,15 +125,17 @@ static func blast_jump(e: PlayerController, away: Vector3) -> void:
 	e.sliding = false
 
 
-## 폭발 효과: 주황 섬광 + 불덩이 + 흙먼지·흙 조각 + 고리, 소리, 내 화면 흔들림 (가까울수록 크게)
+## 폭발 효과: 작은 주황 섬광 + 돌 파편 + 흙먼지·흙 조각 + 고리, 소리, 내 화면 흔들림 (가까울수록 크게)
+## 효과 노드 수는 예전(33)과 비슷하게 (웹 그리기 호출) — 개수는 CANNON_LOOK.fx
 func _fx(pt: Vector3) -> void:
 	var W: Dictionary = GameData.WEAPONS.cannon
+	var F: Dictionary = GameData.CANNON_LOOK.fx
 	var fx := combat.fx
-	fx.puff(pt, 0xfff2b0, 0.55, 3)
-	fx.puff(pt, 0xff9a2e, 0.9, 6)
-	fx.puff(pt + Vector3(0, 0.4, 0), 0x6e6458, 0.8, 5)
-	fx.chunks(pt, 0x7a5a38, Vector3.UP, 14, 9.0)
-	fx.chunks(pt, 0x3a3a3e, Vector3.UP, 4, 7.0)
+	fx.puff(pt, 0xfff2b0, 0.45, int(F.flash_n))
+	fx.puff(pt, 0xff9a2e, 0.6, int(F.fire_n))
+	fx.smoke(pt + Vector3(0, 0.3, 0), int(F.dust), float(F.dust_size), int(F.dust_n), Vector3.UP, 2.5, float(F.dust_life))
+	fx.rocks(pt, int(F.rock), Vector3.UP, int(F.rock_n), 9.0)
+	fx.chunks(pt, int(F.dirt), Vector3.UP, int(F.dirt_n), 8.0)
 	fx.ring(pt, 0xffb347, float(W.blast), 0.35)
 	Sfx.play("boom", pt)
 	var me := combat.me
@@ -143,6 +145,29 @@ func _fx(pt: Vector3) -> void:
 		var k := clampf((float(S.far) - dd) / (float(S.far) - float(S.near)), 0.0, 1.0)
 		if k > 0:
 			me.shake = maxf(me.shake, float(S.max) * k)
+
+
+## 발사 효과 (보기만): 점화 구멍에서 불꽃 + 포구에서 짙은 회백색 연기가 크게 퍼짐. 친구 포탄(remote_fire)도 같음.
+## 3인칭으로 보이는 대포는 모델의 진짜 포구·점화 구멍 자리에서. 내 1인칭은 연기를 앞쪽 멀리·옅게 (조준을 가리지 않게),
+## 불꽃은 1인칭 손 화면(ViewModel)이 따로 그림
+func fire_fx(e: PlayerController, pos: Vector3, dir: Vector3) -> void:
+	var F: Dictionary = GameData.CANNON_LOOK.fx
+	var fx := combat.fx
+	var fp := e.is_local and not combat.tp_on()
+	var muzzle := pos
+	var touch := Vector3.INF
+	var bar: Node3D = e.model.barrel if e.model and e.model.barrel and e.model.barrel.is_visible_in_tree() else null
+	if bar and not fp:
+		var L: Dictionary = GameData.CANNON_LOOK
+		muzzle = bar.global_transform * Vector3(0, 0, float(L.barrel_len) + 0.1)
+		touch = bar.global_transform * Vector3(0, float(L.barrel_r) + 0.04, 0.06)
+	if fp:
+		fx.smoke(pos + dir * float(F.fp_ahead), int(F.smoke), float(F.smoke_size), int(F.smoke_n), dir, float(F.smoke_speed), float(F.smoke_life), float(F.fp_alpha))
+	else:
+		fx.smoke(muzzle + dir * 0.6, int(F.smoke), float(F.smoke_size), int(F.smoke_n), dir, float(F.smoke_speed), float(F.smoke_life))
+		fx.puff(muzzle, 0xffb347, 0.2, 2)
+		if touch != Vector3.INF:
+			fx.puff(touch, int(F.spark), float(F.spark_size), int(F.spark_n))
 
 
 ## 우클릭 탄도 조준 (내 화면만): 실제로 쏠 때와 같은 자리·방향에서 궤적을 따라가 점을 찍고, 닿는 곳에 고리
@@ -180,7 +205,7 @@ func _process(_dt: float) -> void:
 	if hit == null:  # 아무 데도 안 닿으면 fuse초에 공중에서 터지는 곳
 		hit = prev
 	aim_hit = hit
-	var ready := e.cn_t <= 0
+	var ready := e.cn_load >= 1.0
 	_dot_mat.albedo_color = Color(GameData.col(0xffd27a if ready else 0xc9c9c9), 0.85 if ready else 0.5)
 	# 점은 궤적 길이를 따라 고르게
 	var mm := _dots.multimesh

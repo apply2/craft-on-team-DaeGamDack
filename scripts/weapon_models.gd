@@ -278,6 +278,50 @@ static func make_trumpet(parent: Node3D, mat: Callable = _default_mat) -> Node3D
 	return g
 
 
+## 흡혈귀 틀니 (+Z가 앞, 원점 = 경첩/손잡이). 윗니·아랫니가 따로 노드라 벌렸다 다물 수 있다 ("딱!").
+## 돌려주는 값: {g, up(윗턱), lo(아랫턱)}. 벌리기 = up.rotation.x 음수, lo.rotation.x 양수
+static func make_teeth(parent: Node3D, mat: Callable = _default_mat) -> Dictionary:
+	var W: Dictionary = GameData.WEAPONS.teeth
+	var tooth: Material = mat.call(W.color)
+	var gum: Material = mat.call(W.gum)
+	var g := Node3D.new()
+	parent.add_child(g)
+	var jaws := {}
+	for k: String in ["up", "lo"]:
+		var sy := 1.0 if k == "up" else -1.0
+		var j := Node3D.new()
+		g.add_child(j)
+		jaws[k] = j
+		part(Meshes.sph(), gum, Vector3(0, sy * 0.045, 0.1), Vector3(0.13, 0.045, 0.12), j)          # 잇몸 (말굽 대신 납작한 구)
+		part(Meshes.sph(), gum, Vector3(0, sy * 0.06, 0.02), Vector3(0.1, 0.035, 0.06), j)           # 뒤쪽 경첩 쪽
+		for i in 7:  # 앞니 줄 (반원으로)
+			var a := (float(i) / 6.0 - 0.5) * 2.3
+			var pos := Vector3(sin(a) * 0.115, sy * 0.012, 0.1 + cos(a) * 0.1)
+			var t := part(Meshes.box(), tooth, pos, Vector3(0.034, 0.05, 0.026), j)
+			t.rotation.y = a
+		if k == "up":  # 송곳니 두 개 (아래로 뾰족)
+			for sx in [1.0, -1.0]:
+				var f := part(Meshes.cone(), tooth, Vector3(sx * 0.075, -0.03, 0.175), Vector3(0.022, 0.07, 0.022), j)
+				f.rotation.x = PI
+	jaws.g = g
+	return jaws
+
+
+## 야만인 고기 (뼈 달린 큰 다리살). 원점 = 뼈 손잡이 끝, 고기는 +Y 쪽 (손에 쥐고 위로 듦)
+static func make_meat(parent: Node3D, mat: Callable = _default_mat) -> Node3D:
+	var W: Dictionary = GameData.WEAPONS.meat
+	var g := Node3D.new()
+	parent.add_child(g)
+	var bone: Material = mat.call(W.bone)
+	part(Meshes.cyl(), bone, Vector3(0, 0.07, 0), Vector3(0.022, 0.14, 0.022), g)          # 뼈
+	for sx in [1.0, -1.0]:  # 뼈 끝 혹 두 개
+		part(Meshes.sph(), bone, Vector3(sx * 0.02, 0.0, 0), Vector3.ONE * 0.026, g)
+	part(Meshes.sph(), mat.call(W.color), Vector3(0, 0.22, 0), Vector3(0.085, 0.11, 0.08), g)  # 고기
+	part(Meshes.sph(), mat.call(W.fat), Vector3(0.035, 0.27, 0.05), Vector3(0.03, 0.04, 0.025), g)  # 비계 얼룩
+	part(Meshes.sph(), mat.call(W.fat), Vector3(-0.04, 0.18, 0.045), Vector3(0.022, 0.03, 0.02), g)
+	return g
+
+
 ## 닭 (+Z를 봄, 발이 원점) — HTML makeChicken(). {g, hd, wings}
 static func make_chicken(mat: Callable = _default_mat) -> Dictionary:
 	var g := Node3D.new()

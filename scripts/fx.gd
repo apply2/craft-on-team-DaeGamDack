@@ -7,7 +7,7 @@ extends Node3D
 var _fx: Array[Dictionary] = []
 ## 다 쓴 효과 노드는 지우지 않고 종류별로 모아 두었다가 재질째 다시 쓴다 (최적화).
 ## 같은 설정의 재질이 하나도 안 남으면 엔진이 그 셰이더를 지우고, 다음 효과가 나올 때 다시 컴파일하느라 화면이 멈춘다.
-var _pool := {"tracer": [], "puff": [], "ring": [], "chunk": []}
+var _pool := {"tracer": [], "puff": [], "ring": [], "chunk": [], "rock": [], "smoke": []}
 ## 종류마다 재질 하나를 늘 붙들어 둔다 — 시작할 때 이걸로 셰이더를 미리 데운다 (ShaderWarm)
 var keep_mats: Array[Material] = [_glow_mat("tracer"), _glow_mat("puff"), _glow_mat("ring")]
 
@@ -24,7 +24,7 @@ func _take(type: String, mesh: Mesh, pos: Vector3, scl: float) -> MeshInstance3D
 		m = MeshInstance3D.new()
 		m.mesh = mesh
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		if type != "chunk":
+		if type != "chunk" and type != "rock":
 			m.material_override = _glow_mat(type)
 		add_child(m)
 	else:
@@ -86,6 +86,30 @@ func ring(pos: Vector3, hex: int, size: float, life: float) -> void:
 	_fx.append({"m": m, "life": life, "max": life, "ring": size, "type": "ring"})
 
 
+## 오래 남는 큰 연기 n개 (포병 포구 연기·폭발 흙먼지): dir 쪽으로 퍼지며 느려지고 천천히 떠오름
+func smoke(pos: Vector3, hex: int, size: float, n: int, dir: Vector3, speed: float, life: float, opacity := 0.85) -> void:
+	for i in n:
+		var s := size * randf_range(0.7, 1.15)
+		var m := _take("smoke", Meshes.puff(), pos + Vector3(randf_range(-1, 1), randf_range(-0.5, 1), randf_range(-1, 1)) * size * 0.4, s)
+		_tint(m, hex, opacity)
+		var v := dir * speed * randf_range(0.5, 1.2) + Vector3(randf_range(-1, 1), randf_range(0.2, 1.0), randf_range(-1, 1)) * speed * 0.35
+		var lf := life * randf_range(0.8, 1.15)
+		_fx.append({"m": m, "v": v, "life": lf, "max": lf, "s": s, "op": opacity, "type": "smoke"})
+
+
+## 울퉁불퉁한 돌 파편 n개 (포탄이 터질 때) — chunks와 같은 움직임, 모양만 돌멩이
+func rocks(pos: Vector3, hex: int, dir: Vector3, n: int, power: float) -> void:
+	var mt := GameData.mat(hex)
+	for i in n:
+		var s := randf_range(0.05, 0.12)
+		var m := _take("rock", Meshes.stone(), pos, s)
+		m.material_override = mt
+		var v := Vector3(randf_range(-1, 1), randf_range(0.4, 1.4), randf_range(-1, 1)) * (power * 0.6) + dir * (power * randf_range(0.3, 0.9))
+		var life := randf_range(0.7, 1.05)
+		_fx.append({"m": m, "v": v, "life": life, "max": life, "chunk": s, "type": "rock",
+			"spin": Vector3(randf_range(-14, 14), randf_range(-14, 14), randf_range(-14, 14))})
+
+
 ## 네모 조각 n개가 dir 쪽으로 튀고, 빙글빙글 돌다 바닥(y=0)에서 통통 튐
 func chunks(pos: Vector3, hex: int, dir: Vector3, n: int, power: float) -> void:
 	var mt := GameData.mat(hex)
@@ -114,7 +138,7 @@ func _process(dt: float) -> void:
 				var t := 1.0 - k
 				m.scale = Vector3.ONE * (0.05 + f.ring * (1.0 - (1.0 - t) * (1.0 - t)))
 				(m.material_override as StandardMaterial3D).albedo_color.a = k * 0.9
-			"chunk":
+			"chunk", "rock":
 				var v: Vector3 = f.v
 				var c: float = f.chunk
 				v.y -= GameData.GRAV * dt
@@ -128,6 +152,14 @@ func _process(dt: float) -> void:
 				m.rotation.x += f.spin.x * dt
 				m.rotation.y += f.spin.y * dt
 				m.scale = Vector3.ONE * c * minf(1.0, k * 3)
+			"smoke":  # 퍼지며 느려지고 떠오름, 크게 부풀며 흐려짐
+				var v: Vector3 = f.v
+				m.position += v * dt
+				v *= maxf(0.0, 1.0 - 2.2 * dt)
+				v.y += 0.6 * dt
+				f.v = v
+				m.scale = Vector3.ONE * f.s * (1 + (1 - k) * 2.0)
+				(m.material_override as StandardMaterial3D).albedo_color.a = k * k * f.op
 			_:
 				var v: Vector3 = f.v
 				m.position += v * dt

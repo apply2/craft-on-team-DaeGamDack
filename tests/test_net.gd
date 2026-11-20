@@ -14,6 +14,7 @@ var S: Node   # 가짜 신호 서버
 
 const IDLE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false}
 const FIRE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "fire": true}
+const RELOAD := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "reload": true}
 const HERE := Vector3(-25, 0, 18)
 
 
@@ -185,19 +186,130 @@ func _run() -> void:
 	put(pa, HERE, "cannoneer", -PI / 2)
 	put(pb, HERE + Vector3(6, 0, 0), "cannoneer", PI / 2)
 	await wait(40)
-	check("방장 화면에 친구가 포병으로", rb.cls == "cannoneer" and absf(rb.hp - 150.0) < 1.0, "%s hp=%.0f" % [rb.cls, rb.hp])
+	check("방장 화면에 친구가 포병으로", rb.cls == "cannoneer" and absf(rb.hp - 130.0) < 1.0, "%s hp=%.0f" % [rb.cls, rb.hp])
+	var SX = root.get_node("Sfx")
+	var ns: int = SX.shots.size()
 	pa.scripted_input = FIRE
 	await wait(2)
 	pa.scripted_input = IDLE
 	await wait(3)
 	check("친구 화면에도 포탄이 생김", B.combat.projectiles.any(func(p): return p.owner == ra and p.kind == "cannon"), "n=%d" % B.combat.projectiles.size())
+	var cs: Array = SX.shots.slice(ns).filter(func(x): return x.sound == "cannon")
+	check("발사음: 쏜 쪽은 내 소리(위치 없음), 받은 쪽은 쏜 자리 3D (소리는 각자, 사건만 받음)",
+		cs.size() == 2 and cs.filter(func(x): return x.mine).size() == 1 and cs.filter(func(x): return not x.mine and (x.pos as Vector3).distance_to(pa.global_position) < 2.0).size() == 1, str(cs))
 	await wait(30)
-	check("포탄 직격: 친구 쪽에서 100 판정", absf(pb.hp - 50.0) < 0.5, "hp=%.0f" % pb.hp)
+	check("포탄 직격: 친구 쪽에서 100 판정", absf(pb.hp - 30.0) < 0.5, "hp=%.0f" % pb.hp)
 	check("방장 화면의 친구 체력도 같음 (상태 동기화)", absf(rb.hp - pb.hp) < 1.0, "방장 화면 %.0f / 친구 %.0f" % [rb.hp, pb.hp])
-	check("쏜 사람(방장)은 안 다침", pa.hp == 150.0, "hp=%.0f" % pa.hp)
+	check("쏜 사람(방장)은 안 다침", pa.hp == 130.0, "hp=%.0f" % pa.hp)
+
+	# ── 포병 R 장전 (사용자 요청): 장전 게이지가 두 화면에서 같고, 친구 포탄은 방장이 장전됐는지 보고 받음 ──
+	put(pa, HERE, "archer", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "cannoneer", -PI / 2)  # 친구는 방장 반대쪽(동쪽)을 봄
+	await wait(40)
+	var cn_seen: Array = []
+	var host_new := func() -> int:  # 방장 화면에 새로 생긴 친구 포탄 수
+		var n := 0
+		for pr in A.combat.projectiles:
+			if pr.owner == rb and pr.kind == "cannon" and not cn_seen.has(pr):
+				n += 1
+		return n
+	var fake := ["f", nb.WEPS.find("cannon"), HERE + Vector3(6, 1.5, 0), Vector3(32, 0, 0), 0.0]  # 장전 안 하고 보내는 가짜 포탄
+	cn_seen = A.combat.projectiles.duplicate()
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(10)
+	check("친구 포탄(장전됨): 방장이 받아 방장 화면에 생김", host_new.call() == 1, "n=%d" % host_new.call())
+	check("  쏜 뒤 두 화면 다 게이지 0", pb.cn_load == 0.0 and rb.cn_load < 0.01, "친구 %.2f / 방장 화면 %.2f" % [pb.cn_load, rb.cn_load])
+	pb.scripted_input = RELOAD
+	await wait(120)
+	pb.scripted_input = IDLE
+	await wait(10)
+	check("친구가 R 2초 → 게이지 절반, 방장 화면도 같음", absf(pb.cn_load - 0.5) < 0.03 and absf(rb.cn_load - pb.cn_load) < 0.01,
+		"친구 %.3f / 방장 화면 %.3f" % [pb.cn_load, rb.cn_load])
+	cn_seen = A.combat.projectiles.duplicate()
+	nb.event_host(fake)
+	await wait(10)
+	check("장전 안 된 친구 포탄(가짜 사건)은 방장이 버림", host_new.call() == 0, "n=%d" % host_new.call())
+	pb.scripted_input = RELOAD
+	await wait(125)
+	pb.scripted_input = IDLE
+	await wait(10)
+	check("이어서 다 차면 두 화면 다 1", pb.cn_load == 1.0 and rb.cn_load == 1.0, "친구 %.3f / 방장 화면 %.3f" % [pb.cn_load, rb.cn_load])
+	cn_seen = A.combat.projectiles.duplicate()
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	nb.event_host(fake)  # 한 번 장전으로 두 발 보내기
+	await wait(10)
+	check("한 번 장전으로 두 발: 방장은 한 발만 받음", host_new.call() == 1, "n=%d" % host_new.call())
 	put(pa, HERE, "barbarian", -PI / 2)
 	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
 	await wait(40)
+
+	# ── 흡혈귀 (친구): 문 쪽(친구)이 판정해서 알림 → 방장이 피해 적용, 회복은 친구 쪽. 양쪽 화면 체력이 같음 ──
+	put(pa, HERE, "archer", -PI / 2)
+	put(pb, HERE + Vector3(1.5, 0, 0), "vampire", PI / 2)  # 서쪽(-X) = 방장 쪽을 봄
+	pb.burn_wait = 999.0
+	pb.hp = 60.0
+	await wait(30)
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(20)
+	var TW: Dictionary = G.WEAPONS.teeth
+	check("흡혈귀 물기: 방장이 20 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(TW.dmg))) < 0.5, "hp=%.0f" % pa.hp)
+	check("  친구(흡혈귀)는 15 회복", absf(pb.hp - (60.0 + float(TW.heal))) < 0.5, "hp=%.0f" % pb.hp)
+	check("  두 화면 체력이 같음 (방장 화면의 친구 / 친구 화면의 방장)", absf(rb.hp - pb.hp) < 1.0 and absf(ra.hp - pa.hp) < 1.0,
+		"친구 %.0f/%.0f 방장 %.0f/%.0f" % [pb.hp, rb.hp, pa.hp, ra.hp])
+	check("  방장 화면에서도 틀니가 딱 (모습)", rb.cls == "vampire" and rb.fire_anim >= 0.0, "")
+	# 처치 회복: 친구(흡혈귀)가 방장을 물어 죽이면 친구 쪽에서 처치를 세며 +30 (방장 화면에도 상태로)
+	pa.hp = 10.0
+	var hp_b0: float = pb.hp
+	await wait(10)
+	pb.cd = 0.0
+	pb.scripted_input = FIRE
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait_until(func(): return not pa.alive, 60)
+	await wait(20)
+	check("흡혈귀 처치: 친구 쪽에서 +15 + 30 회복, 방장 화면도 같음", not pa.alive and absf(pb.hp - (hp_b0 + float(TW.heal) + float(TW.kill_heal))) < 0.5 and absf(rb.hp - pb.hp) < 1.0,
+		"친구 %.0f→%.0f / 방장 화면 %.0f" % [hp_b0, pb.hp, rb.hp])
+	await wait_until(func(): return pa.alive, 300)
+	put(pa, HERE, "archer", -PI / 2)
+	await wait(20)
+	pb.hp = 75.0
+	# 화상은 친구 컴퓨터가 깎고 방장 화면엔 상태로
+	pb.burn_wait = 0.0
+	await wait(70)
+	check("흡혈귀 화상: 친구 쪽에서 타고 방장 화면도 같음", pb.hp < 75.0 - 9.0 and absf(rb.hp - pb.hp) < 3.0, "친구 %.1f / 방장 화면 %.0f" % [pb.hp, rb.hp])
+	# 박쥐 돌진: 6m 밖에서 돌진해 방장에게 부딪힘
+	put(pa, HERE, "archer", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "vampire", PI / 2)
+	pb.burn_wait = 999.0
+	await wait(30)
+	pb.scripted_input = {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "aim": true}
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(30)
+	check("박쥐 돌진: 방장이 20 피해 (방장 쪽에서 적용)", absf(pa.hp - (100.0 - float(G.WEAPONS.bat.dmg))) < 0.5, "hp=%.0f" % pa.hp)
+	put(pa, HERE, "barbarian", -PI / 2)
+	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
+	await wait(40)
+
+	# ── 야만인 고기 먹기 (친구): 친구 쪽에서 회복, 방장 화면엔 먹는 모습 + 체력은 상태로 ──
+	put(pb, HERE + Vector3(6, 0, 0), "barbarian", PI / 2)
+	await wait(20)
+	pb.hp = 40.0
+	pb.scripted_input = {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "aim": true}
+	await wait(2)
+	pb.scripted_input = IDLE
+	await wait(3)
+	check("친구 야만인이 고기를 먹으면 방장 화면에서도 먹는 모습", rb.eat_t > 0, "eat=%.2f" % rb.eat_t)
+	await wait(15)
+	check("  친구 쪽에서 30 회복, 방장 화면 체력도 같음", absf(pb.hp - 70.0) < 0.5 and absf(rb.hp - pb.hp) < 1.0, "친구 %.0f / 방장 화면 %.0f" % [pb.hp, rb.hp])
+	put(pb, HERE + Vector3(6, 0, 0), "archer", PI / 2)
+	await wait(30)
 
 	# ── 저격총: 쏜 쪽(방장)이 판정해서 알림 → 친구 죽음, 방장 처치 +1 ──
 	A.combat.items.drop_sniper(pa.global_position, 5)

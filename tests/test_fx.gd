@@ -143,7 +143,7 @@ func _run() -> void:
 	OS.delay_msec(int(float(K.punch_t) * 1000.0) + 20)
 	var s1: float = sk.state().s
 	check("처음엔 크게(1.3배) → 0.1초 뒤 원래 크기", near(s0, float(K.punch), 0.05) and s1 == 1.0, "%.2f → %.2f" % [s0, s1])
-	OS.delay_msec(int(float(K.hold) * 1000.0) - 50)
+	OS.delay_msec(int(float(K.hold) * 1000.0) - 150)  # 그대로 있는 구간 안쪽 (Windows 타이머가 늦어도 넘지 않게 여유 150ms)
 	check("0.5초 동안은 그대로 (반투명 0.6)", near(sk.state().a, float(K.alpha), 0.001) and K.alpha == 0.6, "a=%.2f" % sk.state().a)
 	sk._process(0.0)
 	check("해골은 그룹째 흐리게 (겹친 조각이 비치지 않게)", sk._grp.visible and near(sk._grp.self_modulate.a, float(K.alpha), 0.001), "a=%.2f" % sk._grp.self_modulate.a)
@@ -336,6 +336,10 @@ func _run() -> void:
 			var car_n: int = count_meshes(m.carriage) - count_meshes(m.barrel)
 			body_n -= car_n
 			check(k2 + " 포가 조각 3개 이하 (포가 + 바퀴 2)", car_n <= 3, "%d개" % car_n)
+		if m.cape:  # 흡혈귀 망토: 따로 펄럭여서 몸과 따로 셈 (겉·안감 2개)
+			var cape_n: int = count_meshes(m.cape)
+			body_n -= cape_n
+			check(k2 + " 망토 조각 2개 이하", cape_n <= 2, "%d개" % cape_n)
 		check(k2 + " 몸 조각을 관절별로 합침 (손에 드는 무기 빼고 14개 이하)", body_n <= 14, "합치기 전 %d개(무기 포함) → 몸 %d개" % [m.part_count, body_n])
 		var wk: String = G.CLASSES[k2].weapon
 		var wn: int = count_meshes(m.weapons[wk])

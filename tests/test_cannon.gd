@@ -14,6 +14,8 @@ var kills: Array = []
 
 const IDLE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false}
 const FIRE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "fire": true}
+const RELOAD := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "reload": true}
+const RELOAD_FIRE := {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "reload": true, "fire": true}
 const SHOOTER := Vector3(-25, 0, 18)
 const WEST_YAW := PI / 2    # aim_dir = (-1, 0, 0)
 const DT := 1.0 / 60.0
@@ -77,7 +79,7 @@ func shot_dv() -> Vector3:
 	var prev: Vector3 = p.velocity
 	for i in 10:
 		await physics_frame
-		if p.cn_t > 0:
+		if p.cn_load < 1.0:
 			p.scripted_input = IDLE
 			return p.velocity - prev
 		prev = p.velocity
@@ -116,10 +118,10 @@ func _run() -> void:
 	var K: Dictionary = G.CLASSES.cannoneer
 
 	# ── 기본 스탯 ──
-	check("포병: 체력 150 · 무기 대포 · 모델에 포가", p.hp == 150.0 and p.wep == "cannon" and p.model.carriage != null and p.model.wheels.size() == 2,
+	check("포병: 체력 130 · 무기 대포 · 모델에 포가", p.hp == 130.0 and p.wep == "cannon" and p.model.carriage != null and p.model.wheels.size() == 2,
 		"hp=%.0f wep=%s" % [p.hp, p.wep])
 	check("몸 판정 1.4배", near(p.body_r(), G.BODY_R * 1.4, 0.001), "r=%.3f" % p.body_r())
-	check("걷기 속도 = 5.4 × 0.7 (사용자 요청 0.65 → 0.7)", near(p.max_speed(), G.BASE_SPEED * 0.7, 0.001), "%.3f" % p.max_speed())
+	check("걷기 속도 = 5.4 × 0.756 (사용자 요청 0.65 → 0.7 → +8%)", near(p.max_speed(), G.BASE_SPEED * 0.756, 0.001), "%.3f" % p.max_speed())
 	p.scripted_input = {"f": 1.0, "r": 0.0, "jump": false, "crouch": false, "sprint": true}
 	await wait(30)
 	check("달리기 안 됨 (Shift를 눌러도)", not p.sprinting and Vector2(p.velocity.x, p.velocity.z).length() <= G.BASE_SPEED * 0.7 + 0.01,
@@ -148,20 +150,105 @@ func _run() -> void:
 	check("점프 속도 = 8 × √0.4 (높이 0.4배)", near(vy, G.JUMP_V * sqrt(0.4), 0.45), "vy=%.2f 기대 %.2f" % [vy, G.JUMP_V * sqrt(0.4)])
 	await wait(60)
 
-	# ── 쏘기 · 4초 재장전 (사용자 요청 5 → 4) ──
+	# ── 쏘기 · R 꾹 장전 4초 (사용자 요청 — 예전엔 쏘면 자동 재장전) ──
+	var S = root.get_node("Sfx")
+	var rl_toasts: Array = []
+	C.toast.connect(func(t): rl_toasts.append(t))
 	put(p, SHOOTER, "cannoneer", WEST_YAW)
 	put(dm, Vector3(-25, 0, 40))
 	await wait(5)
+	check("부활하면 장전된 채", p.cn_load == 1.0, "load=%.2f" % p.cn_load)
 	await hold(2)
 	check("한 발 나감, 속도 32", new_shots.size() == 1 and near((new_shots[0].vel as Vector3).length(), 32.0, 0.3) if new_shots.size() == 1 else false,
 		"n=%d" % new_shots.size())
-	check("쏘면 재장전 4초", near(p.cn_t, 4.0, 0.05), "cn_t=%.2f" % p.cn_t)
-	await hold(int(3.8 / DT))
-	check("3.8초 동안 누르고 있어도 안 나감", new_shots.is_empty(), "n=%d" % new_shots.size())
-	await hold(int(0.4 / DT))
-	check("4초가 지나면 다시 나감 (누르고 있으면 장전되는 대로)", new_shots.size() == 1, "n=%d cn_t=%.2f" % [new_shots.size(), p.cn_t])
+	check("쏘면 게이지 0", p.cn_load == 0.0, "load=%.2f" % p.cn_load)
+	# 발사음 (사용자 요청 — 너무 작았음): 새 파일, 내가 쏘면 위치 없이 0dB, 남이 쏘면 그 자리 3D +6dB·unit 10·80m
+	var SH: Dictionary = G.SFX_SHOT.cannon
+	var my_shot: Dictionary = S.shots[-1] if not S.shots.is_empty() else {}
+	check("내 발사음: 위치 없이 0dB (거리 감쇠 없음)", my_shot.get("sound") == "cannon" and my_shot.get("mine") == true and near(float(my_shot.get("db", -99)), 0.0, 0.001), str(my_shot))
+	var snd: AudioStream = load(SH.file)
+	check("  새 효과음 파일 artillery_fire_bmat.ogg · 반복 없음 · 예전 합성음 없앰",
+		str(SH.file).ends_with("audio/sfx/artillery_fire_bmat.ogg") and snd != null and snd.get("loop") == false and not S.RECIPES.has("cannon") and not S.FILES.has("cannon"),
+		"len %.2f" % (snd.get_length() if snd else -1.0))
+	var n_shots: int = S.shots.size()
+	put(dm, SHOOTER + Vector3(0, 0, -6), "cannoneer", WEST_YAW)
+	await wait(3)
+	dm.cn_load = 1.0
+	dm.scripted_input = FIRE
+	await wait(2)
+	dm.scripted_input = IDLE
+	var bot_shot: Dictionary = S.shots[-1] if S.shots.size() > n_shots else {}
+	check("남(봇)의 발사음: 그 자리 3D · +6dB · unit 10 · 최대 80m", bot_shot.get("mine") == false and near(float(bot_shot.get("db", 0)), 6.0, 0.001)
+		and near(float(bot_shot.get("unit", 0)), 10.0, 0.001) and near(float(bot_shot.get("max", 0)), 80.0, 0.001)
+		and (bot_shot.get("pos", Vector3.INF) as Vector3).distance_to(dm.global_position) < 1.5, str(bot_shot))
+	var pmin := 9.0
+	var pmax := 0.0
+	for i in 60:
+		S.play_shot("cannon", dm.global_position, i % 2 == 0)
+		pmin = minf(pmin, float(S.shots[-1].pitch))
+		pmax = maxf(pmax, float(S.shots[-1].pitch))
+	check("  음높이 0.92~1.08 무작위 (매번 다르게)", pmin >= 0.92 and pmax <= 1.08 and pmax - pmin > 0.08, "%.3f~%.3f" % [pmin, pmax])
+	put(dm, Vector3(-25, 0, 40))
+	await wait(int(5.0 / DT))
+	check("쏜 뒤 아무것도 안 누르면 장전 안 됨 (5초 뒤에도 0)", p.cn_load == 0.0, "load=%.2f" % p.cn_load)
+	rl_toasts.clear()
+	await hold(int(1.0 / DT))
+	check("장전 안 됐으면 좌클릭을 눌러도 안 나감", new_shots.is_empty(), "n=%d" % new_shots.size())
+	check("  누른 순간 '%s' 안내 한 번" % "R키를 꾹 눌러 장전", rl_toasts.count("R키를 꾹 눌러 장전") == 1, str(rl_toasts))
+	await hold(int(2.0 / DT), RELOAD)
+	check("R 2초 → 게이지 절반", near(p.cn_load, 0.5, 0.02), "load=%.3f" % p.cn_load)
+	await wait(60)
+	check("R을 떼면 진행도 그대로 (1초 뒤에도 절반)", near(p.cn_load, 0.5, 0.02), "load=%.3f" % p.cn_load)
+	await hold(int(1.0 / DT), RELOAD_FIRE)
+	check("장전 중에 좌클릭을 눌러도 안 나감", new_shots.is_empty(), "n=%d" % new_shots.size())
+	check("다시 누르면 이어서 참 (0.5 → 0.75)", near(p.cn_load, 0.75, 0.02), "load=%.3f" % p.cn_load)
+	S.played.clear()
+	await hold(int(1.1 / DT), RELOAD)
+	check("합쳐서 4초 누르면 다 참", p.cn_load == 1.0, "load=%.3f" % p.cn_load)
+	check("  다 차면 철컥 (clank)", S.played.has("clank"), str(S.played))
+	await hold(2)
+	check("장전되면 좌클릭으로 나감", new_shots.size() == 1, "n=%d" % new_shots.size())
 	await wait(int(4.0 / DT))
 	C.projectiles.clear()
+
+	# ── R 장전 감속 30% · 우클릭과 겹쳐도 30%까지만 · 공중에서도 장전 ──
+	put(p, SHOOTER, "cannoneer", WEST_YAW)
+	await wait(3)
+	var rl_walk: float = G.BASE_SPEED * 0.756
+	p.cn_load = 0.0
+	p.scripted_input = RELOAD
+	await wait(2)
+	check("R 장전 중: 이동 ×0.7", near(p.max_speed(), rl_walk * 0.7, 0.001), "%.3f" % p.max_speed())
+	p.scripted_input = {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "reload": true, "aim": true}
+	await wait(2)
+	check("R + 우클릭 같이: 이동 ×0.7 (겹쳐도 30%까지만)", near(p.max_speed(), rl_walk * 0.7, 0.001), "%.3f (×%.2f)" % [p.max_speed(), p.max_speed() / rl_walk])
+	p.scripted_input = IDLE
+	await wait(2)
+	check("R을 떼면 원래 속도", near(p.max_speed(), rl_walk, 0.001), "%.3f" % p.max_speed())
+	p.cn_load = 1.0
+	p.scripted_input = RELOAD
+	await wait(2)
+	check("다 찼으면 R을 눌러도 안 느려짐", near(p.max_speed(), rl_walk, 0.001), "%.3f" % p.max_speed())
+	p.cn_load = 0.0
+	p.scripted_input = {"f": 0.0, "r": 0.0, "jump": true, "crouch": false, "sprint": false, "reload": true}
+	await wait(3)
+	p.scripted_input = RELOAD
+	var l0: float = p.cn_load
+	await wait(10)
+	check("공중에서도 장전됨", not p.grounded and p.cn_load > l0 + 0.03, "grounded=%s load %.3f → %.3f" % [p.grounded, l0, p.cn_load])
+	p.scripted_input = IDLE
+	await wait(60)
+	# 봇: 장전 안 됐으면 R을 누름 (쏘지는 않음)
+	put(dm, Vector3(-25, 0, 40), "cannoneer")
+	await wait(2)
+	dm.cn_load = 0.3
+	var bi: Dictionary = dm.ai.update(dm, C, DT)
+	check("봇 포병: 장전 안 됐으면 R을 누르고 쏘지 않음", bi.get("reload", false) and not bi.get("fire", false), str(bi.get("reload")))
+	dm.cn_load = 1.0
+	bi = dm.ai.update(dm, C, DT)
+	check("봇 포병: 장전됐으면 R 안 누름", not bi.get("reload", false), "")
+	put(dm, Vector3(-25, 0, 40))
+	await wait(2)
 
 	# ── 포탄 점프: 발밑에 쏘면 피해 1/3, 높이 뜸 ──
 	put(p, SHOOTER, "cannoneer", WEST_YAW)
@@ -177,7 +264,7 @@ func _run() -> void:
 		top = maxf(top, p.global_position.y)
 		vmax = maxf(vmax, p.velocity.y)
 		air_seen = air_seen or p.blast_air
-	var lost: float = 150.0 - p.hp
+	var lost: float = 130.0 - p.hp
 	check("발밑 사격: 자기 피해 약 27 (80 × 1/3)", near(lost, 80.0 / 3.0, 3.0), "잃은 체력 %.1f" % lost)
 	check("위로 22m/s 튕김", near(vmax, 22.0, 0.6), "최고 vy %.1f" % vmax)
 	check("높이 뜸 (일반 점프 1.45m의 4배 이상)", top - y0 > 6.0, "높이 %.1fm" % (top - y0))
@@ -192,7 +279,7 @@ func _run() -> void:
 	await wait(5)
 	await hold(2)
 	await wait(40)
-	check("직격하면 100 (150 → 50)", near(dm.hp, 50.0, 0.01), "dm hp=%.1f" % dm.hp)
+	check("직격하면 100 (130 → 30)", near(dm.hp, 30.0, 0.01), "dm hp=%.1f" % dm.hp)
 	check("직격당하면 뒤로 밀림", dm.velocity.x < -1.0 or dm.global_position.x < SHOOTER.x - 7.2, "vx=%.2f x=%.2f" % [dm.velocity.x, dm.global_position.x])
 
 	# ── 범위 피해: 거리에 따라 80 → 25, 반경 밖 0 ──
@@ -246,8 +333,8 @@ func _run() -> void:
 	await wait(3)
 	C.cannon.explode(p, spot + Vector3(0, 0.3, 1.0))
 	await physics_frame
-	check("같은 팀은 범위 피해 없음", dm.hp == 150.0, "dm hp=%.1f" % dm.hp)
-	check("같은 팀이어도 내 포탄 피해는 받음", p.hp < 150.0, "my hp=%.1f" % p.hp)
+	check("같은 팀은 범위 피해 없음", dm.hp == 130.0, "dm hp=%.1f" % dm.hp)
+	check("같은 팀이어도 내 포탄 피해는 받음", p.hp < 130.0, "my hp=%.1f" % p.hp)
 	p.team = ""
 	dm.team = ""
 	await wait(80)
@@ -284,7 +371,7 @@ func _run() -> void:
 	check("우클릭: 예상 궤적 점 + 착탄 고리(반경 2.5)", C.cannon._dots.multimesh.visible_instance_count > 5 and C.cannon._ring.visible and near(C.cannon._ring.scale.x, 2.5),
 		"점=%d" % C.cannon._dots.multimesh.visible_instance_count)
 	check("우클릭: 1.3배 확대 (시야 85 → 65.4)", near(p.cam.fov, 85.0 / 1.3, 1.5), "fov=%.1f" % p.cam.fov)
-	check("우클릭: 이동 속도 ×0.7", near(p.max_speed(), G.BASE_SPEED * 0.7 * 0.7, 0.001), "%.3f" % p.max_speed())
+	check("우클릭: 이동 속도 ×0.7", near(p.max_speed(), G.BASE_SPEED * 0.756 * 0.7, 0.001), "%.3f" % p.max_speed())
 	p.scripted_input = IDLE
 	await wait(2)
 	await process_frame
@@ -296,7 +383,7 @@ func _run() -> void:
 	put(p, Vector3(0, 0, 0), "cannoneer", WEST_YAW)
 	await wait(3)
 	p.pitch = 1.3  # 거의 위로
-	p.cn_t = 0.0
+	p.cn_load = 1.0
 	await hold(2)
 	var shot = new_shots[0] if new_shots.size() == 1 else null
 	check("포탄 수명 = 5초 (fuse)", shot != null and near(float(shot.life), 5.0, 0.05), "life=%s" % (shot.life if shot else "-"))
@@ -320,7 +407,7 @@ func _run() -> void:
 	for cs in [[Vector3(-25, 0, 18), PI / 2, -0.12, "가까운 땅"], [Vector3(-25, 0, 18), PI / 2, 0.25, "먼 곳"], [Vector3(0, 0, 0), 0.0, 0.05, "북쪽"]]:
 		var at: Vector3 = cs[0]
 		put(p, at, "cannoneer", float(cs[1]))
-		p.cn_t = 0.0
+		p.cn_load = 1.0
 		p.pitch = float(cs[2])
 		p.scripted_input = {"f": 0.0, "r": 0.0, "jump": false, "crouch": false, "sprint": false, "aim": true}
 		await wait(20)
@@ -365,7 +452,7 @@ func _run() -> void:
 	var cn_ratio: float = p.max_speed() / cn_full
 	check("  (포병이 웅덩이 안에서 둔화에 걸림)", p.slow_t > 0, "")
 	check("포병: 성수 둔화를 절반만 (65%% → 32.5%%, 속도 ×%.3f)" % cn_keep, near(cn_ratio, cn_keep, 0.001), "×%.3f" % cn_ratio)
-	check("  웅덩이 피해는 그대로 받음", p.hp < 150.0, "hp=%.0f" % p.hp)
+	check("  웅덩이 피해는 그대로 받음", p.hp < 130.0, "hp=%.0f" % p.hp)
 	check("  '면역' 표시는 없음", not toasts.has("둔화 면역"), "%s" % [toasts])
 	# 실제로 걸어 보기: 웅덩이를 계속 발밑에 두고 1.5초 걸은 거리 (평소 대비)
 	var walk := func(cls: String, puddle: bool) -> float:
@@ -561,7 +648,7 @@ func _run() -> void:
 	# 땅에서 수평으로 쏨 (서쪽을 봄 → 동쪽으로 밀림)
 	put(p, SHOOTER, "cannoneer", WEST_YAW)
 	await wait(10)
-	p.cn_t = 0.0
+	p.cn_load = 1.0
 	var x0: float = p.global_position.x
 	var rv: Vector3 = await shot_dv()
 	check("땅에서 쏘면 뒤로 약 %.0fm/s + 위로 2m/s" % float(W.recoil), rv.x > float(W.recoil) - 1.0 and rv.x < float(W.recoil) + 0.5 and near(rv.y, 2.0, 0.6), "반동 %s" % rv)
@@ -590,7 +677,7 @@ func _run() -> void:
 	p.velocity = Vector3.ZERO
 	p.grounded = false
 	await wait(4)  # 옮긴 직후 한 프레임은 바닥 판정이 남아 있음
-	p.cn_t = 0.0
+	p.cn_load = 1.0
 	rv = await shot_dv()
 	var gstep: float = -G.GRAV * DT  # 그 사이 한 프레임 중력
 	check("공중에서 쏴도 뒤로 %.0fm/s (위로 +2 없음, 속도 상한에 안 잘림)" % float(W.recoil), near(rv.x, float(W.recoil), 0.3) and absf(rv.y - gstep) < 0.3, "반동 %s" % rv)
@@ -604,7 +691,7 @@ func _run() -> void:
 		p.grounded = false
 		p.pitch = pc
 		await physics_frame
-		p.cn_t = 0.0
+		p.cn_load = 1.0
 		C.projectiles.clear()
 		var r: Vector3 = C.cannon.fire_recoil(p, p.aim_dir())
 		check("세로 반동은 ±4로 자름 (%s로 쏨)" % ("아래" if pc < 0 else "위"), near(absf(r.y), 4.0, 0.01) and signf(r.y) == -signf(pc), "r=%s" % r)
@@ -614,7 +701,7 @@ func _run() -> void:
 	put(p, SHOOTER, "cannoneer", WEST_YAW)
 	await wait(10)
 	p.pitch = -PI / 2 + 0.05
-	p.cn_t = 0.0
+	p.cn_load = 1.0
 	var y3: float = p.global_position.y
 	var vy_after_fire: float = (await shot_dv()).y
 	var vy_top := 0.0
@@ -631,7 +718,7 @@ func _run() -> void:
 	# ── 화면 반동: 위로 살짝 튀었다가 0.2초 안에 원래대로, 조준 방향은 그대로 ──
 	put(p, SHOOTER, "cannoneer", WEST_YAW)
 	await wait(10)
-	p.cn_t = 0.0
+	p.cn_load = 1.0
 	var aim0: Vector3 = p.aim_dir()
 	await shot_dv()
 	var peak := 0.0
@@ -663,12 +750,79 @@ func _run() -> void:
 	await roof_drop(p, "archer")
 	await wait(10)
 
+	# ── 봄바드 겉모습 (사용자 요청 — 보기만): 판정 크기 그대로, 1인칭은 화면 아래 25% 안 ──
+	await bombard_look()
+
 	# ── 봇 포병: 대포를 쏘고, 너무 가까우면 안 쏨 ──
 	check("친구대전 무기 번호에 대포", main.get_node("Net").WEPS.has("cannon"), "")
 	check("봇이 고를 수 있는 병과에 포병", G.bot_classes().has("cannoneer"), "")
 
 	print("ALL PASS" if fails == 0 else "FAILS: %d" % fails)
 	quit(1 if fails > 0 else 0)
+
+
+## 봄바드 겉모습: 3인칭 부품(8각 포신·쇠고리·통판 바퀴·린스톡), 돌 포탄(판정 반지름 그대로),
+## 1인칭 포신은 화면 아래 25% 안, 린스톡은 쏠 때도 조준점 둘레(가운데 위쪽)를 안 가림
+func bombard_look() -> void:
+	var W: Dictionary = G.WEAPONS.cannon
+	G.third_person = false
+	put(p, SHOOTER, "cannoneer", WEST_YAW)
+	await wait(10)
+	var md = p.model
+	check("봄바드: 포신·린스톡·통판 바퀴 2개 (바퀴살 없음)", md.barrel != null and md.linstock != null and md.wheels.size() == 2 and md.linstock.visible, "")
+	check("  몸 판정은 그대로 1.4배 · 포탄 판정 반지름 그대로", near(p.body_r(), G.BODY_R * 1.4, 0.001) and float(W.radius) == 0.2, "body_r=%.3f" % p.body_r())
+	new_shots.clear()
+	p.cn_load = 1.0
+	p.cd = 0.0
+	root.size = Vector2i(1280, 720)  # 헤드리스 창은 64×64 (정사각형) — 실제 화면 비율로 재야 가로 위치가 맞음
+	await process_frame
+	await process_frame
+	var vm = main.hud._vm
+	var cam: Camera3D = vm._vp.get_camera_3d()
+	var vs: Vector2 = Vector2(vm._vp.size)
+	var worst_barrel := 0.0  # 화면 위에서부터 비율 (0 = 맨 위). 포신은 0.75 이상이어야 함
+	var center_hits := 0     # 린스톡이 조준점 둘레(가로 가운데 50%, 위 75%)에 들어간 꼭짓점 수
+	var spark_seen := false
+	await hold(2)
+	var shot = new_shots[0] if new_shots.size() > 0 else null
+	check("  돌 포탄 (울퉁불퉁한 돌 모양) · 판정 반지름 0.2", shot != null and shot.radius == float(W.radius) and (shot.mesh as MeshInstance3D).mesh == Meshes.stone(), "")
+	worst_barrel = 1.0
+	for f in 40:  # 쏘는 순간 ~ 린스톡이 돌아올 때까지 (화면 프레임마다)
+		await process_frame
+		vs = Vector2(vm._vp.size)  # 창 크기를 바꾼 뒤 한두 프레임 늦게 따라옴
+		spark_seen = spark_seen or vm._cn_spark.visible
+		for mi in _meshes(vm._vm.cannon):
+			for c in _corners(mi):
+				if (cam.global_transform.affine_inverse() * c).z > -cam.near:  # 카메라 뒤·가까운 면 앞 = 잘려서 안 그려짐
+					continue
+				var sp: Vector2 = cam.unproject_position(c) / vs
+				worst_barrel = minf(worst_barrel, sp.y)
+		for mi in _meshes(vm._cn_stick):
+			for c in _corners(mi):
+				var sp: Vector2 = cam.unproject_position(c) / vs
+				if sp.y < 0.75 and absf(sp.x - 0.5) < 0.25:
+					center_hits += 1
+	check("1인칭 포신은 쏠 때도 화면 아래 25% 안", worst_barrel >= 0.75, "가장 높은 곳 %.2f (위에서부터)" % worst_barrel)
+	check("  린스톡은 조준점 둘레를 안 가림", center_hits == 0, "%d" % center_hits)
+	check("  쏘면 점화 구멍 불꽃", spark_seen, "")
+	await wait(int(float(W.reload) * 60.0) + 10)
+
+
+func _meshes(n: Node) -> Array:
+	var out: Array = []
+	if n is MeshInstance3D and (n as MeshInstance3D).is_visible_in_tree():
+		out.append(n)
+	for c in n.get_children():
+		out.append_array(_meshes(c))
+	return out
+
+
+func _corners(mi: MeshInstance3D) -> Array:
+	var b: AABB = mi.get_aabb()
+	var out: Array = []
+	for k in 8:
+		out.append(mi.global_transform * (b.position + b.size * Vector3(k & 1, (k >> 1) & 1, (k >> 2) & 1)))
+	return out
 
 
 ## 지붕 경사면 흘러내림 (사용자 요청): 지붕마다 꼭대기 근처 두 곳(맵 안쪽으로)에 떨어뜨려

@@ -28,6 +28,7 @@ var fall_yaw := 0.0
 var trip_cd := 0.0
 var fast_t := 0.0
 var fast_dir := Vector2.ZERO
+var fast_v := 0.0  # 급회전 판정에 쓰는 마지막 빠른 속도 (m/s)
 var kb_t := 0.0       # 넉백 중 (속도 제한 완화, 넘어짐 판정 정지)
 var stagger := 0.0    # 경직 (입력 무시)
 var slow_t := 0.0     # 성수 둔화
@@ -40,6 +41,8 @@ var breath := 3.0         # 남은 숨 (최대 WEAPONS.trumpet.breath_max)
 var gasp_t := 0.0         # 숨이 차서 헐떡이는 남은 시간 (연주 못 함, 느려짐)
 var squeak_t := 0.0       # 삑사리 뒤 연주 못 하는 남은 시간
 var fan_cd := 0.0         # 팡파레 재사용 대기
+var meat_cd := 0.0        # 야만인 고기 먹기 재사용 대기 (scripts/meat.gd)
+var eat_t := 0.0          # 고기를 먹는 중 남은 시간 (모습·돌 못 던짐)
 # 춤 디버프 (누구나 걸림)
 var dance_t := 0.0        # 춤추는 남은 시간
 var dance_immune := 0.0   # 춤이 끝난 뒤 다시 안 추는 남은 시간
@@ -56,9 +59,20 @@ var horse := {}           # 타고 있는 말 모양 (WeaponModels.make_horse) �
 var ln_t := 0.0           # 마상창에 또 맞기까지 남은 시간
 var kb_air := false       # 넉백으로 떠 있음 (착지할 때까지 속도 상한을 이동속도·둔화와 상관없이 풀어 둠 — 사용자 요청)
 var blast_air := false    # 포탄 점프로 떠 있음 (착지할 때까지 공중 조작 ×WEAPONS.cannon.air_ctrl, 속도 상한 풀림)
-var cn_t := 0.0           # 포병: 재장전 남은 시간
+var cn_load := 1.0        # 포병: 장전 게이지 0~1 (1 = 장전됨). R키를 꾹 누르는 동안만 참 (사용자 요청)
+var reload_held := false  # 포병: 이번 프레임 R(장전) 키
+var net_cn_block := false # 방장: 이 친구 포탄을 받아 줬음 → 그 친구 상태에서 게이지가 빈 걸 볼 때까지 다음 포탄 안 받음
 var recoil_t := 0.0       # 포병: 발사 반동으로 밀리는 중 (땅 마찰 WEAPONS.cannon.recoil_fric)
-var cam_kick_t := 0.0     # 포병: 발사 화면 반동 남은 시간 (실제 시간) (0이면 장전됨 — WEAPONS.cannon.reload)
+var cam_kick_t := 0.0     # 포병: 발사 화면 반동 남은 시간 (실제 시간)
+# 흡혈귀 (사용자 요청 새 병과 — scripts/vampire.gd가 관리)
+var dash_t := 0.0         # 박쥐 돌진 남은 시간 (이동은 _dash_move가 덮어씀)
+var dash_dir := Vector3.ZERO
+var dash_prev := Vector3.ZERO  # 돌진 판정: 지난 물리 프레임 위치 (이 선분으로 적과 부딪혔나 봄)
+var dash_seg := false     # 이번 물리 프레임에 돌진으로 움직였음 (Combat이 판정하고 끔)
+var bat_cd := 0.0         # 박쥐 돌진 재사용 대기
+var burn_wait := 0.0      # 스폰 뒤 화상 면제 남은 시간
+var burn_acc := 0.0       # 다음 화상 틱까지 쌓인 시간
+var burn_snd := 0.0       # 지글 소리 간격
 var swap_req := false     # Q를 눌렀음 (Combat이 처리)
 var ak_flash := 0.0       # 내 1인칭 AK 총구 불꽃
 var hp := 100.0
@@ -149,6 +163,7 @@ var on_roof := false  # 지난 물리 프레임에 지붕 경사면에 닿았나
 @onready var col: CollisionShape3D = $CollisionShape3D
 @onready var cam: Camera3D = $Camera3D
 var model: DerpModel
+var _anim_acc := 0.0  # 화면 밖이라 미룬 애니메이션 시간 (ANIM_LOD)
 
 
 func _ready() -> void:
@@ -242,6 +257,8 @@ func spawn_at(p: Vector3) -> void:
 	gasp_t = 0.0
 	squeak_t = 0.0
 	fan_cd = 0.0
+	meat_cd = 0.0
+	eat_t = 0.0
 	dance_t = 0.0
 	dance_immune = 0.0
 	dance_log.clear()
@@ -254,9 +271,17 @@ func spawn_at(p: Vector3) -> void:
 	ln_t = 0.0
 	blast_air = false
 	kb_air = false
-	cn_t = 0.0
+	cn_load = 1.0  # 부활하면 장전된 채
+	reload_held = false
+	net_cn_block = false
 	recoil_t = 0.0
 	cam_kick_t = 0.0
+	dash_t = 0.0
+	dash_dir = Vector3.ZERO
+	bat_cd = 0.0
+	burn_wait = float(GameData.BURN.grace)
+	burn_acc = 0.0
+	burn_snd = 0.0
 	if not horse.is_empty():
 		(horse.g as Node).queue_free()
 		horse = {}
@@ -274,6 +299,11 @@ func spawn_at(p: Vector3) -> void:
 	reset_physics_interpolation()
 
 
+## 포병: R을 누르고 있고 아직 덜 찼음 (게이지가 차는 중 → 이동 ×reload_slow, 1인칭 꽂을대 모션)
+func cn_reloading() -> bool:
+	return wep == "cannon" and reload_held and cn_load < 1.0 and alive
+
+
 ## 죽음 — 몸은 Combat.kill이 래그돌로 바꿔 둔다
 func die(dir: Vector3) -> void:
 	alive = false
@@ -283,9 +313,11 @@ func die(dir: Vector3) -> void:
 	death_dir = dir
 	velocity = Vector3.ZERO
 	fire_held = false
+	reload_held = false
 	charging = false
 	playing = false
 	dance_t = 0.0
+	dash_t = 0.0
 	if model:
 		model.visible = false
 
@@ -392,6 +424,7 @@ func _read_input(dt: float) -> Dictionary:
 	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	return {
 		"fire": captured and Input.is_action_pressed("fire"),
+		"reload": captured and Input.is_action_pressed("reload"),
 		"aim": captured and Input.is_action_pressed("aim"),
 		"f": Input.get_axis("move_back", "move_forward"),
 		"r": Input.get_axis("move_left", "move_right"),
@@ -413,6 +446,7 @@ func _physics_process(dt: float) -> void:
 	if inp.get("wind", false):  # 봇·테스트의 휠 한 칸 (봇은 bot_ai가 속도를 정함)
 		wind_req += 1
 	aim_held = inp.get("aim", false)
+	reload_held = inp.get("reload", false)
 	var wish: Vector3
 	if inp.has("wish"):  # 봇 (HTML botUpdate: 달리기는 봇이 정함)
 		wish = inp.wish
@@ -438,8 +472,9 @@ func max_speed() -> float:
 		var spr := GameData.SPRINT if sprinting else 1.0
 		var wm: float = GameData.WEAPONS[wep].get("speed_mul", 1.0)  # 저격총 0.9, AK 0.95
 		sp = GameData.BASE_SPEED * GameData.CLASSES[cls].speed * wm * spr
-		if wep == "cannon" and aim_held:  # 포병 탄도 조준 중
-			sp *= float(GameData.WEAPONS.cannon.aim_slow)
+		if wep == "cannon" and (aim_held or cn_reloading()):  # 포병 탄도 조준·R 장전: 겹쳐도 작은 쪽 하나만 (사용자 요청 — 최대 30%)
+			var CW: Dictionary = GameData.WEAPONS.cannon
+			sp *= minf(float(CW.aim_slow) if aim_held else 1.0, float(CW.reload_slow) if cn_reloading() else 1.0)
 		if wep == "crossbow" and wind_t > 0 and xb_wind < int(GameData.WEAPONS.crossbow.notches):  # 석궁 휠로 감는 중 (사용자 요청)
 			sp *= float(GameData.WEAPONS.crossbow.reload_speed)
 	# 남이 거는 둔화 (성수 웅덩이·춤): 곱해서 합친 뒤, 포병은 최종 둔화량의 slow_resist만 받음 (사용자 요청)
@@ -479,8 +514,10 @@ func friction(fr: float, dt: float) -> void:
 
 
 func movement(wish: Vector3, jump: bool, crouch_in: bool, dt: float) -> void:
+	if dash_t > 0:  # 흡혈귀 박쥐 돌진: 입력·중력 없이 정해진 속도로
+		_dash_move(dt)
+		return
 	var mtd := mounted > 0
-	var spr_k := GameData.SPRINT if sprinting and not mtd else 1.0
 	var mx := max_speed()
 	slow_t -= dt
 	var hs := Vector2(velocity.x, velocity.z).length()
@@ -500,12 +537,14 @@ func movement(wish: Vector3, jump: bool, crouch_in: bool, dt: float) -> void:
 		crouch_in = false
 	trip_cd -= dt
 	fast_t -= dt
-	# 관성: 빠르게 달린 뒤 0.25초 안에 반대 방향을 누르면 (키를 바꾸는 틈에 속도가 줄어도) 넘어짐
+	# 관성: 실제 속도가 TRIP.min_speed 이상이었던 뒤 window초 안에 반대쪽을 누르면 넘어짐
+	# (키를 바꾸는 틈에 속도가 줄어도). 빠를수록 덜 꺾어도 넘어짐 — trip_dot()
 	if not mtd and grounded and fall_t <= 0 and not sliding and stagger <= 0 and kb_t <= 0 and trip_cd <= 0 and not crouch_in:
-		if hs >= mx / spr_k * 0.75:
+		if hs >= float(GameData.TRIP.min_speed):
 			fast_dir = Vector2(velocity.x, velocity.z) / hs
-			fast_t = 0.25
-		if wish.length_squared() > 0.01 and fast_t > 0 and fast_dir.dot(Vector2(wish.x, wish.z)) < -0.34:
+			fast_v = hs
+			fast_t = float(GameData.TRIP.window)
+		if wish.length_squared() > 0.01 and fast_t > 0 and fast_dir.dot(Vector2(wish.x, wish.z).normalized()) < trip_dot(fast_v):
 			fast_t = 0
 			trip()
 			toast.emit("급회전하다 넘어짐!")
@@ -615,6 +654,37 @@ func _integrate(dt: float) -> void:
 		velocity.y = 0
 
 
+## 흡혈귀 박쥐 돌진 이동 (Vampire.start_dash가 dash_t·dash_dir을 정함). 벽에 막히면 바로 끝.
+## 적과 부딪혔는지는 Combat(이동 다음)이 dash_prev → 지금 위치 선분으로 본다
+func _dash_move(dt: float) -> void:
+	var B: Dictionary = GameData.WEAPONS.bat
+	dash_prev = global_position
+	dash_seg = true
+	velocity = dash_dir * (float(B.dist) / float(B.time))
+	floor_snap_length = 0.0
+	floor_max_angle = deg_to_rad(46.0)
+	move_and_slide()
+	grounded = is_on_floor()
+	on_roof = false
+	for i in get_slide_collision_count():
+		var n := get_slide_collision(i).get_normal()
+		if absf(n.y) < 0.7:  # 벽 (바닥·천장이 아님)
+			dash_t = 0.0
+	dash_t -= dt
+	if dash_t <= 1e-4:  # 0.3초 = 18프레임 (빼기 오차로 한 프레임 더 가지 않게)
+		end_dash()
+
+
+## 돌진 끝: 날아가던 속도를 걷기 속도로 줄여 둠 (위로는 end_vy까지만)
+func end_dash() -> void:
+	dash_t = 0.0
+	var mx := max_speed()
+	var h := Vector2(velocity.x, velocity.z)
+	if h.length() > mx:
+		h = h.normalized() * mx
+	velocity = Vector3(h.x, minf(velocity.y, float(GameData.WEAPONS.bat.end_vy)), h.y)
+
+
 ## 두 지붕(또는 지붕과 벽) 사이 V자 골에 끼어 안 내려가면 골을 따라 밀어냄. 지붕 하나면 중력만으로 흘러내린다
 func _roof_unstick(rn: Array[Vector3], rc: Vector3) -> void:
 	var hv := Vector2(velocity.x, velocity.z)
@@ -676,6 +746,14 @@ func fall_amt() -> float:
 	if fall_t <= 0:
 		return 0.0
 	return maxf(0.0, minf(1.0, minf((GameData.FALL_TIME - fall_t) / 0.08, fall_t / 0.06)))
+
+
+## 급회전 넘어짐 기준: 이 속도(m/s)로 가다가 누른 방향과의 내적이 이 값보다 작으면 넘어짐
+## (min_speed → angle_slow°, fast_speed 이상 → angle_fast°, 사이는 속도에 비례)
+static func trip_dot(speed: float) -> float:
+	var T: Dictionary = GameData.TRIP
+	var k := clampf(inverse_lerp(float(T.min_speed), float(T.fast_speed), speed), 0.0, 1.0)
+	return cos(deg_to_rad(lerpf(float(T.angle_slow), float(T.angle_fast), k)))
 
 
 func trip() -> void:
@@ -740,10 +818,34 @@ func _process(dt: float) -> void:
 	if not model:
 		return
 	if alive:
-		model.animate(self, dt)
+		if is_local or not GameData.anim_lod or _on_screen():
+			model.animate(self, dt + _anim_acc)
+			_anim_acc = 0.0
+		else:  # 화면 밖: 초당 1/off_dt번만 (안 보이니 티 안 남. 히트박스도 그만큼마다 갱신)
+			_anim_acc += dt
+			if _anim_acc >= float(GameData.ANIM_LOD.off_dt):
+				model.animate(self, _anim_acc)
+				_anim_acc = 0.0
 	# 스폰 무적 중엔 깜빡임
 	var blink := invuln <= 0 or int(floor(invuln * 12)) % 2 == 0
 	model.visible = alive and blink and (not is_local or (tp_view() and tp_dist > 0.9))
+
+
+## 화면에 보이나 (가장자리 여유 margin, 카메라 가까이면 언제나) — 몸 애니메이션 줄이기용
+func _on_screen() -> bool:
+	var vp := get_viewport()
+	var cam := vp.get_camera_3d() if vp else null
+	if cam == null:
+		return true
+	var L: Dictionary = GameData.ANIM_LOD
+	var c := global_position + Vector3(0, 1.0 + mount_h, 0)
+	if c.distance_squared_to(cam.global_position) < float(L.near) * float(L.near):
+		return true
+	if cam.is_position_behind(c):
+		return false
+	var vs := vp.get_visible_rect().size
+	var m := vs * float(L.margin)
+	return Rect2(-m, vs + m * 2.0).has_point(cam.unproject_position(c))
 
 
 ## 저격총 스코프로 보는 중 (우클릭) — HTML scoped

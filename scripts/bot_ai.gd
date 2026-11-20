@@ -36,6 +36,8 @@ var path := PackedVector3Array()
 var path_i := 0
 var path_t := 0.0
 var goal := Vector3.INF      # 지금 가려는 곳
+var rank := 0               # 쟁탈전 거점 지킴이 순위 (_holder_rank, rank_t마다)
+var rank_t := 0.0
 var slot := Vector3.ZERO     # 거점 원 안에서 설 자리 (봇마다 다르게)
 
 
@@ -161,14 +163,14 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 	var go_horse: bool = not near_h.is_empty() and e.mounted <= 0 and epos.distance_to(near_h.pos) < float(B.horse_seek) and not busy
 	if e.mounted > 0:
 		move = (Vector3(t.global_position.x - epos.x, 0, t.global_position.z - epos.z)) if t else wp - epos
-	elif go_horse:
-		move = (near_h.pos as Vector3) - epos
+	elif go_horse:  # 말·아이템: 쟁탈전 맵은 내비 경로로 (직선으로 가면 스폰룸 벽 구석에 박힘)
+		move = seek_move(e, combat, near_h.pos, dt)
 	elif go_item:
-		move = (it.sniper.pos as Vector3) - epos
+		move = seek_move(e, combat, it.sniper.pos, dt)
 	elif go_fish:  # 황금 붕어빵 (저격총과 같은 우선순위)
-		move = (it.fish.pos as Vector3) - epos
+		move = seek_move(e, combat, it.fish.pos, dt)
 	elif go_ak:
-		move = (it.ak.pos as Vector3) - epos
+		move = seek_move(e, combat, it.ak.pos, dt)
 	elif ctl != null:
 		move = ctl
 	elif t and e.star_t > 0:  # 무적: 엄폐·거리 유지 없이 가장 가까운 적에게 돌진 (몸박치기)
@@ -186,6 +188,8 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 			pref = B.pref[e.cls]
 		if not vis:
 			move = to
+		elif e.wep == "teeth":  # 흡혈귀: 거리 유지 없이 달라붙음 (붙으면 살짝만 좌우로)
+			move = to + Vector3(-to.z, 0, to.x) * strafe * (0.3 if d < 2.0 else 0.15)
 		else:
 			var band: float = B.pref_band
 			if d > pref + band:
@@ -211,6 +215,8 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 			want_fire = react <= 0 and (fire_ok or e.wep == "chicken") and (d < float(fr[e.wep]) if fr.has(e.wep) else true)
 			if e.wep == "cannon" and d < float(B.cannon_min):  # 포병: 너무 가까우면 자기도 휘말려서 안 쏨
 				want_fire = false
+			if e.wep == "teeth":  # 흡혈귀: 조금 떨어져 있으면 박쥐 돌진으로 달라붙음 (우클릭)
+				want_fan = react <= 0 and e.bat_cd <= 0 and e.dash_t <= 0 and d > float(B.bat_min) and d < float(B.bat_max)
 	# 음유시인 숨 관리: 0.5초 남으면 멈추고, 다 찰 때까지 대상에게서 물러남
 	if e.wep == "trumpet":
 		if e.playing and e.breath <= float(B.bard_breath_stop):
@@ -326,7 +332,11 @@ func update(e: PlayerController, combat: Combat, dt: float) -> Dictionary:
 		if wind_acc >= 1.0:
 			wind_acc -= 1.0
 			wind = true
-	return {"wish": move, "jump": jump, "crouch": crouch, "sprint": sprint, "fire": held, "aim": want_fan and aligned, "wind": wind}
+	# 야만인: 체력이 낮거나 춤·둔화 중이면 고기 먹기 (조준 상관없음)
+	var want_eat := e.cls == "barbarian" and Meat.can_eat(e) and (e.hp < float(GameData.class_hp(e.cls)) * float(B.meat_hp) or e.dance_t > 0 or e.slow_t > 0)
+	# 포병: 쏘고 나면 R을 꾹 눌러 장전 (사람과 같은 규칙 — 그동안 느려짐)
+	var reload := e.wep == "cannon" and e.cn_load < 1.0
+	return {"wish": move, "jump": jump, "crouch": crouch, "sprint": sprint, "fire": held and not reload, "aim": (want_fan and aligned) or want_eat, "wind": wind, "reload": reload}
 
 
 ## 쟁탈전: 이 적이 자기 팀 스폰룸 문 앞에 있나 (거기선 안 쫓음)
@@ -354,7 +364,11 @@ func control_move(e: PlayerController, combat: Combat, t: PlayerController, dt: 
 	if mode.phase == "locked" or mode.phase == "gap":
 		to_point = false
 	elif ours and not urgent:
-		to_point = role == "point" and _holder_rank(e, combat) < int(CM.bot_hold_in)
+		rank_t -= dt
+		if rank_t <= 0:  # 순위는 가끔만 (봇마다 매 프레임 정렬하면 비쌈)
+			rank_t = 0.25
+			rank = _holder_rank(e, combat)
+		to_point = role == "point" and rank < int(CM.bot_hold_in)
 	elif not urgent and role == "watch" and mode.holder == "":
 		to_point = false  # 중립이면 궁수·석궁병은 감시 지점에서 거점을 겨눔
 	if to_point:
@@ -384,7 +398,16 @@ func control_move(e: PlayerController, combat: Combat, t: PlayerController, dt: 
 			lane_i += 1
 		else:
 			tgt = lpt
-	# 내비 경로 따라가기
+	var mv := nav_step(e, w, tgt, dt)
+	if mv.length() < 0.6 and epos.distance_to(tgt) < 1.5:
+		return Vector3.ZERO if not t else null  # 도착: 서서 지킴 (적이 있으면 싸움)
+	return mv
+
+
+## 내비 경로를 따라 tgt로 가는 다음 걸음 (path_every마다, 또는 목적지가 바뀌면 경로를 다시 구함)
+func nav_step(e: PlayerController, w: MapControl, tgt: Vector3, dt: float) -> Vector3:
+	var CM: Dictionary = GameData.MODES.control
+	var epos := e.global_position
 	path_t -= dt
 	if path_t <= 0 or goal.distance_to(tgt) > 1.5 or path_i >= path.size():
 		path_t = float(CM.path_every)
@@ -394,10 +417,15 @@ func control_move(e: PlayerController, combat: Combat, t: PlayerController, dt: 
 	while path_i < path.size() and Vector2(path[path_i].x - epos.x, path[path_i].z - epos.z).length() < float(CM.path_reach):
 		path_i += 1
 	var nxt: Vector3 = path[path_i] if path_i < path.size() else tgt
-	var mv := Vector3(nxt.x - epos.x, 0, nxt.z - epos.z)
-	if mv.length() < 0.6 and epos.distance_to(tgt) < 1.5:
-		return Vector3.ZERO if not t else null  # 도착: 서서 지킴 (적이 있으면 싸움)
-	return mv
+	return Vector3(nxt.x - epos.x, 0, nxt.z - epos.z)
+
+
+## 말·아이템 주우러 가기: 내비 메시가 있는 맵(쟁탈전)이면 경로로, 아니면 직선 (개인전 HTML 그대로)
+func seek_move(e: PlayerController, combat: Combat, tgt: Vector3, dt: float) -> Vector3:
+	var w := combat.world as MapControl
+	if w == null:
+		return tgt - e.global_position
+	return nav_step(e, w, tgt, dt)
 
 
 ## 우리 팀 거점 역할 봇 중 몇 번째인가 (거점을 가지면 앞에서 bot_hold_in명만 원 안에)
@@ -450,7 +478,7 @@ func _aim_solve(e: PlayerController, t: PlayerController) -> Dictionary:
 	var tpos := t.global_position
 	var tvel := t.velocity
 	var target_pt := tpos + Vector3(0, float(B.aim_head) if aim_head or e.wep == "sniper" else float(B.aim_body), 0)
-	if e.wep == "sniper" or e.wep == "ak" or e.wep == "trumpet":  # 히트스캔·트럼펫 원뿔: 곧장
+	if e.wep == "sniper" or e.wep == "ak" or e.wep == "trumpet" or e.wep == "teeth":  # 히트스캔·트럼펫 원뿔·틀니: 곧장
 		var d := target_pt - eye
 		return {"yaw": atan2(-d.x, -d.z) + ex, "pitch": atan2(d.y, Vector2(d.x, d.z).length()) + ey}
 	if e.wep == "holy" or e.wep == "chicken" or e.wep == "cannon":  # 포물선: 발밑(닭은 0.9 높이)에 떨어질 각도를 훑어서 찾음 (포탄도 발밑 — 범위 피해)

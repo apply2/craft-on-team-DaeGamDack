@@ -198,7 +198,8 @@ func _run() -> void:
 	await wait(2)
 	pb.scripted_input = IDLE
 	await wait_until(func(): return bot.hp < hp0, 60)
-	check("친구 돌멩이에 방장 봇 체력이 줄어듦 (방장 쪽 판정)", bot.hp < hp0 and bot.hp >= hp0 - 15, "hp=%.0f→%.0f" % [hp0, bot.hp])
+	check("친구 돌멩이에 방장 봇 체력이 줄어듦 (방장 쪽 판정)", bot.hp < hp0 and bot.hp >= hp0 - 17,  # 돌멩이 11, 헤드샷이면 16.5
+		 "hp=%.0f→%.0f" % [hp0, bot.hp])
 	await wait(10)
 	check("친구 화면의 봇 체력도 따라감", absf(rbot.hp - bot.hp) < 1.0, "remote=%.0f" % rbot.hp)
 

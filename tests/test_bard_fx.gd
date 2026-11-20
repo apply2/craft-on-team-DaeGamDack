@@ -204,7 +204,7 @@ func _run() -> void:
 	var gauge := []
 	var pops := 0
 	var started := false
-	for f in secs(0.9):
+	for f in secs(float(G.DANCE.need) + 0.15):  # 춤에 걸릴 때까지 (DANCE.need초)
 		await physics_frame
 		if dm.dance_t > 0 and not started:
 			started = true
@@ -231,7 +231,7 @@ func _run() -> void:
 	await wait(secs(0.5))
 	check("조명이 다 사라짐", objs_of("disco") == 0, "")
 	check("면역 중: 회색 음표 1개", dm.dance_immune > 0 and bx._snotes.size() == 1 and absf((bx._snotes[0][1] as Color).r - (bx._snotes[0][1] as Color).b) < 0.01, "n=%d" % bx._snotes.size())
-	await wait(secs(3.0))
+	await wait(secs(float(G.DANCE.immune)))
 	check("면역 끝나면 회색 음표 없음", bx._snotes.size() == 0, "")
 
 	# ── 팡파레 ──

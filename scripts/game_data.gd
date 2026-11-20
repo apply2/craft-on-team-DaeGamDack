@@ -5,6 +5,12 @@ extends Node
 
 # ── 공통 상수 (HTML 386번째 줄) ──────────────────────────────
 const FALL_TIME := 0.6       # 넘어져 있는 시간(초)
+## 급회전 넘어짐 (사용자 요청 — 예전 HTML은 "자기 최고 속도의 75%"라 느린 병과도 똑같이 넘어졌음):
+## 실제 속도(m/s)가 min_speed 이상일 때 window초 안에 반대쪽을 누르면 넘어짐. 빠를수록 덜 꺾어도 넘어짐 —
+## 꺾은 각도가 min_speed에서 angle_slow° 이상, fast_speed 이상에서 angle_fast° 이상 (사이는 속도에 비례).
+## 지금 병과 속도로: 포병(3.8)은 안 넘어짐, 성직자(걷기 5.25)·석궁병(달리기 6.0)은 달릴 때만, 야만인·흡혈귀·궁수·음유시인은 걸어도 넘어짐
+## (min_speed 사용자 요청 5.8 → 5.3: 석궁병도 달리면 넘어지게)
+const TRIP := {"min_speed": 5.3, "fast_speed": 9.0, "angle_slow": 120.0, "angle_fast": 95.0, "window": 0.25}
 const LAND_TRIP := 0.2       # 점프하고 착지할 때 넘어질 확률 (사용자 요청으로 다시 넣음)
 const HEADSHOT := 1.5        # 투구 쓴 머리 배율
 const BARE_HEAD := 2.0       # 투구 벗겨진 머리 배율
@@ -38,6 +44,9 @@ const BODY_R := 0.46         # 몸통 캡슐 반지름 (+투사체 반지름)
 # 넘어져 누운 자세(fall_amt > 0.5)는 원래 계산 그대로. max = 한 점이 옮겨 갈 수 있는 최대 거리(m, 안전장치 —
 # 달리기 시작·급정지 때 젤리 출렁임으로 머리가 0.9m쯤까지 기울어서 그보다 넉넉히)
 const HITBOX_FOLLOW := {"a_y": 0.4, "b_y": 1.15, "max": 1.5}
+# 최적화: 화면 밖 캐릭터는 몸 애니메이션(히트박스 따라가기 포함)을 off_dt초마다 한 번만 (모인 시간으로).
+# margin = 화면 가장자리 여유(화면 크기 비율), near = 이 거리(m) 안이면 언제나 매 프레임
+const ANIM_LOD := {"off_dt": 0.05, "margin": 0.3, "near": 4.0}
 const REGEN_DELAY := 5.0     # 이 시간 동안 안 맞으면 재생 시작
 const REGEN := 10            # 기본 초당 회복량 (병과 regen으로 덮어씀)
 const INVULN := 1.2          # 스폰 직후 무적
@@ -60,7 +69,7 @@ const HIT_WOB_HEAD := 1.3
 ## lance: 탄 사람 말의 마상창 — 굵기만 (길이를 늘리면 판정 창끝 3.5m보다 길어 보임), 창끝 뾰족한 부분은 tip배 (끝점은 그대로)
 const HELD_SCALE := {
 	"stone": 1.7, "bow": 1.45, "crossbow": 1.4, "holy": 1.6, "trumpet": 1.35,
-	"sniper": 1.3, "ak": 1.45, "chicken": 1.35,
+	"sniper": 1.3, "ak": 1.45, "chicken": 1.35, "teeth": 1.7,
 	"lance": {"thick": 1.6, "len": 1.0, "tip": 1.3},
 }
 ## 내 캐릭터만 다르게 할 무기 (어깨 너머 화면에서 조준점을 가리면). 없는 무기는 HELD_SCALE
@@ -119,7 +128,7 @@ const AIM_TP_RIGHT := 0.85       # 3인칭 조준 중 어깨 옆 거리 (평소 
 
 # ── 1인칭 무기 화면 (HTML vmCam / buildVM / updateVM) ──
 const VM_FOV := 60.0
-const VM_KICK := {"cannon": 0.6, "sniper": 1.0, "ak": 0.12, "crossbow": 0.0, "bow": 0.0}  # 쏘면 손이 앞뒤로 튐 (나머지 0.2)
+const VM_KICK := {"cannon": 0.15, "sniper": 1.0, "ak": 0.12, "crossbow": 0.0, "bow": 0.0}  # 쏘면 손이 앞뒤로 튐 (나머지 0.2)
 const VM_KICK_DEFAULT := 0.2
 
 # ── 성수 웅덩이 (HTML shatter / updateZones / updateHolyAim) ──
@@ -140,22 +149,23 @@ const HOLY := {
 
 # ── 병과 ─────────────────────────────────────────────────────
 # speed: BASE_SPEED 배율 / hp: 없으면 100 / regen: 초당 회복량(기본 10, 5초간 안 맞으면 시작)
-const CLASSES := {
-	"barbarian": {"name": "야만인", "weapon": "stone", "speed": 1.372, "hp": 90,
+const CLASSES_BASE := {  # 개인전 기준. 실제로는 아래 var CLASSES를 읽음 (쟁탈전이면 MODE_STATS.control을 덮어쓴 것)
+	# 이동 속도: 사용자 요청 밸런스로 포병 말고 모두 ×0.9 (사람도 조준이 어렵다고 해서). 괄호 안이 예전 값
+	"barbarian": {"name": "야만인", "weapon": "stone", "speed": 1.2348, "hp": 90,  # (1.372) 걷기 6.67 · 달리기 9.0 m/s
 		"color": 0xf28a1e, "leg": 0xf2c7a0, "arm": 0xf2c7a0, "foot": 0xe9b48e, "pips": [5, 1, 1, 5],
 		"desc": "가장 빠르다. 바짝 붙어서 돌멩이를 퍼붓는 돌격형."},
-	"archer": {"name": "궁수", "weapon": "bow", "speed": 1.0556, "hp": 100,  # 걷기 5.7 m/s (사용자 요청으로 5.4→5.7 버프)
+	"archer": {"name": "궁수", "weapon": "bow", "speed": 1.026, "hp": 100,  # (1.0556 → 0.95 → +8% 사용자 요청) 걷기 5.54 m/s
 		"color": 0xb8322a, "leg": 0x8b939c, "arm": 0x7d858f, "foot": 0x5b6068, "pips": [3, 3, 3, 3],
 		"desc": "당길수록 세지는 활로 중거리를 견제한다."},
-	"crossbow": {"name": "석궁병", "weapon": "crossbow", "speed": 0.85, "hp": 110,
+	"crossbow": {"name": "석궁병", "weapon": "crossbow", "speed": 0.8262, "hp": 110,  # (0.85 → 0.765 → +8% 사용자 요청)
 		"color": 0x4d72b8, "leg": 0x8b939c, "arm": 0x7d858f, "foot": 0x5b6068, "pips": [2, 4, 4, 1],
 		"desc": "느리지만 한 발이 묵직하다. 머리에 맞히면 한 방."},
-	"cleric": {"name": "성직자", "weapon": "holy", "speed": 1.0, "hp": 100, "regen": 20,
+	"cleric": {"name": "성직자", "weapon": "holy", "speed": 0.972, "hp": 100, "regen": 20,  # (1.0 → 0.9 → +8% 사용자 요청)
 		"color": 0xeee6d2, "leg": 0xeee6d2, "arm": 0xeee6d2, "foot": 0x8a5a32, "pips": [3, 2, 3, 2],
 		"desc": "성수병을 3개까지 모아 연달아 던진다. 3초간 남는 웅덩이가 밟은 적을 지지고 느리게 만든다. 체력 회복이 두 배 빠르다."},
 	# 4.5단계 (HTML에 없는 새 병과). 투구 자리엔 긴 깃털 달린 납작한 베레모 — 헤드샷이면 투구처럼 날아감
 	# pips는 명세에 없어서 임시로 정함 (이동 조금 빠름 · 피해 약함 · 사거리 짧음 · 계속 연주)
-	"bard": {"name": "음유시인", "weapon": "trumpet", "speed": 1.05, "hp": 95,
+	"bard": {"name": "음유시인", "weapon": "trumpet", "speed": 1.0206, "hp": 95,  # (1.05 → 0.945 → +8% 사용자 요청)
 		"color": 0x7a3fa8, "leg": 0xf3b33d, "arm": 0x7a3fa8, "foot": 0x5b3a22, "pips": [3, 1, 2, 5],
 		"desc": "트럼펫을 불어 적을 춤추게 만든다. 춤추는 적은 느리고 조준이 흔들린다."},
 	# 사용자 요청 새 병과 (HTML에 없음): 바퀴 달린 나무 대포에 올라탄 느린 탱커. 포탄 점프로 움직이는 게 핵심
@@ -163,23 +173,46 @@ const CLASSES := {
 	#   hit_r: 몸통 판정 반지름 배율 (대포 크기 — 머리는 그대로)
 	#   slow_resist: 남이 거는 둔화(성수 웅덩이·춤 이동 감소)를 이 비율만 받음. 겹치면 합친 최종 둔화량에 곱함 (춤 자체·자기 조준 감속은 그대로) — 사용자 요청 (면역 → 50%)
 	#   speed: 사용자 요청 0.65 → 0.7
-	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.7, "hp": 150,  # 사용자 요청 200 → 150
+	"cannoneer": {"name": "포병", "weapon": "cannon", "speed": 0.756, "hp": 130,  # 사용자 요청 200 → 150 → 130 (밸런스). 속도 0.7 → +8% (사용자 요청)
 		"no_sprint": true, "accel": 6.0, "jump": 0.4, "hit_r": 1.4, "slow_resist": 0.5,
-		"color": 0x5e7d3c, "leg": 0x4a3a2a, "arm": 0x5e7d3c, "foot": 0x2e241c, "pips": [1, 5, 4, 1],
+		"color": 0x5f7a3a, "leg": 0x5a4632, "arm": 0x5f7a3a, "foot": 0x2e241c, "pips": [1, 4, 4, 1],  # 누빈 천 갑옷(갬비슨) 색 — 겉모습은 CANNON_LOOK
 		"desc": "느리고 크지만 한 방이 세다. 포탄은 터지며 주변을 날리고, 발밑에 쏘면 높이 뛴다."},
+	# 사용자 요청 새 병과 (HTML에 없음): 대낮이라 몸에 불이 붙은 드라큘라. 틀니로 물어 피를 채워야 버팀 (화상은 BURN)
+	#   regen 0: 자연 회복 없음 (화상 초당 10을 상쇄하지 않게 — 사용자 확인). 성수 웅덩이·스폰룸 회복은 받음
+	#   skin: 머리·손 피부색 (없으면 C.skin)
+	"vampire": {"name": "흡혈귀", "weapon": "teeth", "speed": 1.125, "hp": 130, "regen": 0,  # 속도 (1.25). 체력 120→150→120→135→125→130 (밸런스)
+		"skin": 0xe4e6ee, "color": 0x1c1a24, "leg": 0x1c1a24, "arm": 0x1c1a24, "foot": 0x111014, "pips": [4, 3, 1, 3],
+		"desc": "햇빛에 계속 타들어간다. 틀니로 물어뜯어 피를 채우고, 박쥐로 돌진해 달라붙는 근접형."},
 }
-const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard", "cannoneer"]
+# 포병 겉모습 (사용자 요청 "14~15세기 봄바드"): 보기만 — 판정·수치는 CLASSES.cannoneer·WEAPONS.cannon 그대로
+#   포신 = 철 판재 8각 기둥 + 쇠고리, 포가 = 나무 판자 받침 + 밧줄 + 통판 나무 바퀴, 사람 = 갬비슨·케틀햇·가죽 앞치마·린스톡
+const CANNON_LOOK := {
+	"iron": 0x4f463e, "ring": 0x7d7872, "bore": 0x151311, "touch": 0x1a1715,  # 녹슨 회갈색 철 / 더 밝은 쇠고리 / 포구 안 / 점화 구멍
+	"wood": 0x7a5230, "wood_d": 0x5b3a22, "wood_end": 0xb48d5c, "bark": 0x4a3220, "rope": 0xc9ab6e,
+	"gambeson": 0x5f7a3a, "quilt": 0x46602a, "apron": 0x6e4527, "strap": 0x4e3220,
+	"hat": 0x7d8389, "hat_d": 0x5c6167, "band": 0x8a3a2c,
+	"staff": 0x6b4a2c, "fork": 0x3a3633, "match": 0xff7a1e,
+	"barrel_r": 0.155, "barrel_len": 0.92, "rings": 5,  # 3인칭 포신 굵기(8각 기둥 안쪽 반지름)·길이 (사용자 요청 0.17·0.8 → 조금 가늘고 길게)
+	# 발사: 점화 구멍 불꽃 + 포구 연기 / 폭발: 돌 파편 + 흙먼지 (주황 섬광은 예전보다 줄임). 개수 = 효과 노드 수 (웹 그리기 호출)
+	"fx": {"spark": 0xffc04a, "spark_n": 5, "spark_size": 0.1,
+		"smoke": 0xd8d2c6, "smoke_n": 7, "smoke_size": 0.5, "smoke_life": 1.2, "smoke_speed": 3.0, "fp_ahead": 3.5, "fp_alpha": 0.3,
+		"flash_n": 2, "fire_n": 3, "dust": 0xa08e70, "dust_n": 6, "dust_size": 0.7, "dust_life": 0.9,
+		"rock": 0x8d8780, "rock_n": 12, "dirt": 0x7a5a38, "dirt_n": 8},
+}
+const CLASS_ORDER := ["barbarian", "archer", "crossbow", "cleric", "bard", "cannoneer", "vampire"]
 const STAT_LABELS := ["이동속도", "공격력", "사거리", "연사"]  # 병과 카드의 pips 순서
-const CLASS_EMBLEM := {"barbarian": 0xe8811f, "archer": 0xb8322a, "crossbow": 0x4d72b8, "cleric": 0x8c63c9, "bard": 0x7a3fa8, "cannoneer": 0x5e7d3c}  # 카드 동그라미
-const CLASS_CHIP := {"barbarian": 0xf2a04e, "archer": 0xe8857a, "crossbow": 0x9fc0ea, "cleric": 0xcdb8ef, "bard": 0xc9a2e8, "cannoneer": 0xb4cc8c}    # 점수판 꼬리표
+const CLASS_EMBLEM := {"barbarian": 0xe8811f, "archer": 0xb8322a, "crossbow": 0x4d72b8, "cleric": 0x8c63c9, "bard": 0x7a3fa8, "cannoneer": 0x5e7d3c, "vampire": 0x8e1b2a}  # 카드 동그라미
+const CLASS_CHIP := {"barbarian": 0xf2a04e, "archer": 0xe8857a, "crossbow": 0x9fc0ea, "cleric": 0xcdb8ef, "bard": 0xc9a2e8, "cannoneer": 0xb4cc8c, "vampire": 0xe89aa6}    # 점수판 꼬리표
 
 # ── 무기 ─────────────────────────────────────────────────────
 # 단위: dmg 피해, cd 재사용(초), speed 투사체 속도(m/s), grav 중력, kb 넉백, up 띄우기, radius 판정 반경
-const WEAPONS := {
+const WEAPONS_BASE := {  # 개인전 기준. 실제로는 var WEAPONS를 읽음
 	# 포병 대포 (사용자 요청): 곡사 포탄. 무엇에든 닿거나 fuse초가 지나면 터짐
 	#   dmg: 직격 피해(총) / blast: 폭발 반경 m, 피해는 가운데 blast_max → 가장자리 blast_min (몸까지 거리로 선형)
 	#   폭발과 대상 사이가 벽에 막히면 범위 피해 없음. 넉백 kb(수평)·up(위)도 거리에 따라 줄어듦
-	#   reload: 한 발 쏘면 자동 재장전 시간 / grav: 포탄 중력 (사람 GRAV 22보다 작게 — 아치가 길게)
+	#   reload: R키를 꾹 누르고 있어야 차는 장전 시간 (사용자 요청 — 예전엔 쏘면 자동 재장전). 떼면 멈추고 다시 누르면 이어서, 공중·춤·넘어짐 중에도 됨
+#     reload_slow: R로 장전하는 동안 이동 배율. 우클릭 조준(aim_slow)과 겹쳐도 둘 중 작은 쪽 하나만 (최대 30% 감속)
+#   grav: 포탄 중력 (사람 GRAV 22보다 작게 — 아치가 길게)
 	#   포탄 점프: 자기 폭발은 피해 ×self_mul. jump_r 안이면 위로 jump_up, 폭발 반대쪽으로 jump_side (m/s)
 	#     그 뒤 착지할 때까지 공중 조작 ×air_ctrl. 자기 포탄으로 죽으면 자멸
 	#   우클릭 조준: 예상 궤적·착탄 지점 + 확대(AIM_CAM.cannon), 이동 ×aim_slow
@@ -193,10 +226,11 @@ const WEAPONS := {
 		"recoil": 8.0, "recoil_up": 2.0, "recoil_vmax": 4.0, "recoil_t": 0.3, "recoil_fric": 2.0,
 		"cam_kick": 0.06, "cam_kick_t": 0.2, "cam_kick_peak": 0.2,
 		"blast": 2.5, "blast_max": 80, "blast_min": 25, "kb": 6, "up": 4,
-		"self_mul": 1.0 / 3.0, "jump_r": 2.5, "jump_up": 22.0, "jump_side": 5.0, "air_ctrl": 0.3, "air_grav": 0.75, "aim_slow": 0.7,
-		"ball": 0.17, "color": 0x2a2a2e, "shake": {"max": 1.1, "near": 4.0, "far": 26.0},
+		"self_mul": 1.0 / 3.0, "jump_r": 2.5, "jump_up": 22.0, "jump_side": 5.0, "air_ctrl": 0.3, "air_grav": 0.75, "aim_slow": 0.7, "reload_slow": 0.7,
+		# ball·color = 날아가는 돌 포탄의 겉모습만 (판정은 radius)
+		"ball": 0.21, "color": 0x8d8780, "shake": {"max": 1.1, "near": 4.0, "far": 26.0},
 		"aim_every": 2, "aim_dots": 28},
-	"stone": {"name": "돌멩이", "dmg": 10, "cd": 0.4, "speed": 32, "grav": 16, "range": 15, "kb": 4, "up": 2.6, "radius": 0.12,
+	"stone": {"name": "돌멩이", "dmg": 11, "cd": 0.4, "speed": 32, "grav": 16, "range": 15, "kb": 4, "up": 2.6, "radius": 0.12,
 		"color": 0x8b8f96, "size": 0.11},  # size: 돌 모양 반지름 (손에 든 것·날아가는 것)
 	# 사용자 요청 궁수 버프 (계속 압박하는 무기): 짧게 끊어 연사, 꽉 당기면 세고 곧게. 차지 비율 = bow_t(당긴 시간)
 	# nock: 쏜 뒤 다음 화살 거는 시간 (1.0→0.3) / full: 끝까지 당기는 시간 (1.5→1.0)
@@ -208,15 +242,15 @@ const WEAPONS := {
 		"sway_start": 1.0, "sway_k": 0.05, "sway_max": 0.11, "slip_t": 3.0, "slip_yaw": 0.6, "slip_pitch": [-0.35, 0.55]},
 	# 사용자 요청 휠 장전 (예전: 쏜 뒤 4초 자동 장전): 쏜 뒤 마우스 휠을 notches칸 굴려야 다시 쏜다.
 	#   휠 위·아래 다 됨, 중간에 멈춰도 진행도 유지, 장전돼 있으면 휠 무시, 부활하면 장전된 채 (예전에도 부활하면 바로 쏠 수 있었음)
-	#   notches: 사용자 요청으로 10→25칸
+	#   notches: 사용자 요청으로 10→25→35→50칸
 	#   notch_gap: 한 칸으로 치는 최소 간격(실제 시간). 이 안에 들어온 휠은 버림 — 프리스핀 휠·터치패드로 순식간에 감지 못하게.
-	#              사용자 요청으로 0.15→0.04 (가장 빨라도 25칸 ≈ 1초)
+	#              사용자 요청으로 0.15→0.04 (가장 빨라도 50칸 ≈ 2초)
 	#   reload_speed: 휠로 감는 중 이동 속도 배율 (사용자 요청 0.9→0.75 = 25% 느려짐). 곱연산 (달리기 등과 같이 곱함)
 	#   reload_window: 마지막 휠 칸 뒤 이만큼은 '감는 중'으로 봄 (칸 사이에 속도가 튀지 않게). 다 감으면 바로 풀림
 	#   show_rate: 장전 모션이 진행도를 따라가는 속도 (초당) / cd: 쏜 직후 휠도 안 먹는 시간
 	#   wind_dir: 장전으로 치는 휠 방향 "down"(아래로 굴림) / "up". 반대 방향은 완전히 무시 (진행·간격·감속 다 안 건드림). 사용자 요청 = "down"
 	#   grav 6→2 (사용자 요청: 거의 직선, 85m에서 0.7m 떨어짐)
-	"crossbow": {"name": "석궁", "dmg": 75, "reload_speed": 0.75, "reload_window": 0.3, "notches": 25, "notch_gap": 0.04, "show_rate": 3.0, "cd": 0.25,
+	"crossbow": {"name": "석궁", "dmg": 75, "reload_speed": 0.75, "reload_window": 0.3, "notches": 50, "notch_gap": 0.04, "show_rate": 3.0, "cd": 0.25,
 		"wind_dir": "down", "speed": 100, "grav": 2, "kb": 11, "up": 5, "radius": 0.05},
 	"sniper": {"name": "대물 저격총", "ammo": 5, "kb": 0, "speed_mul": 0.9},
 	"ak": {"name": "AK-47", "dmg": 23, "min_dmg": 18, "fall0": 30, "fall1": 80, "range": 120, "rate": 0.12, "mag": 25,
@@ -275,7 +309,42 @@ const WEAPONS := {
 		}},
 	# 팡파레 (음유시인 우클릭): 앞쪽 range m, 반각 half_angle 도 안의 적에게 dmg, 넉백 kb, 띄우기 up, 재사용 cd초
 	"fanfare": {"name": "팡파레", "range": 3.5, "half_angle": 45.0, "dmg": 15, "kb": 9, "up": 3, "cd": 6.0},
+	# 흡혈귀 틀니 (사용자 요청 새 병과): 근접 물기. 눈에서 range m 안, 조준 방향 반각 half_angle° 원뿔 안의 가장 가까운 적 1명
+	#   heal: 적을 맞히면 그만큼 회복 (최대 체력은 안 넘음). 머리 판정 없음 (늘 dmg)
+	# 범위 사용자 요청으로 2.3→3.0m, 반각 30→40°. 피해 28→22 (밸런스). kill_heal = 흡혈귀가 처치하면 추가 회복 (사용자 요청, 무기 상관없이 — 화상 처치 인정 포함)
+	"teeth": {"name": "틀니", "dmg": 20, "cd": 0.5, "range": 3.0, "half_angle": 40.0, "heal": 15, "kill_heal": 30, "kb": 3, "up": 1.5,
+		"color": 0xf4f1e6, "gum": 0xd2465a},
+	# 흡혈귀 박쥐 돌진 (우클릭): 바라보는 쪽으로 time초 동안 dist m. 위아래는 ±pitch_max°로 자름
+	#   첫 번째로 부딪힌 적(몸까지 거리 r m)에게 dmg + 약한 넉백, 그 자리에서 멈춤. 맞히면 물기 1회로 쳐서 회복 + 물기 재사용 초기화
+	#   end_vy: 끝날 때 위로 남기는 속도 상한 (위로 돌진하고 끝나면 살짝만 뜸)
+	"bat": {"name": "박쥐 돌진", "dmg": 20, "cd": 7.0, "dist": 9.0, "time": 0.3, "pitch_max": 20.0, "r": 0.55, "kb": 4, "up": 2, "end_vy": 3.0},
+	# 야만인 우클릭 "고기 먹기" (사용자 요청): cd초마다 heal 회복 + 상태이상(춤·춤 게이지·성수 둔화·봇 경직) 바로 풀림.
+	#   eat_t초 동안 고기를 입에 대고 있음 (그동안 돌은 못 던짐). 춤추는 중에도 먹을 수 있음 (공격이 아니라서)
+	"meat": {"name": "고기 먹기", "cd": 8.3, "heal": 30, "eat_t": 0.6, "color": 0x9c4a26, "fat": 0xe8b08a, "bone": 0xf2ead8},
+	# 화상 (흡혈귀가 햇빛에 탐): 킬피드·사망 화면 이름만 (피해는 BURN)
+	"burn": {"name": "햇빛"},
 }
+# 흡혈귀 햇빛 화상 (사용자 요청): tick초마다 dmg (초당 10). 스폰 뒤 grace초는 면제
+# 화상으로 죽으면 언제나 자멸 (처치 +0, 킬피드 공격자 = 자기). 사용자 요청 — 예전엔 5초 안에 때린 사람이 처치를 가져갔음
+# 황금 붕어빵 무적·쟁탈전 라운드 사이엔 안 탐. low_hp 이하면 내 화면 가장자리에 타는 비네트 (hud BurnEdge)
+# snd_every: 지글 소리 간격 (임시 합성 "burn" — audio/sfx/burn.ogg를 넣고 Sfx.FILES에 더하면 바뀜)
+const BURN_BASE := {"tick": 0.25, "dmg": 2.5, "grace": 1.5, "low_hp": 40.0, "snd_every": 0.5,
+	"vig_col": 0xff4a1a, "vig_alpha": 0.75, "flicker_hz": 9.0}
+# 흡혈귀 연출 (보기만 함 — scripts/fx/burn_fx.gd). 불꽃·연기는 MultiMesh 풀 둘 (그리기 2번)
+#   flame_every / smoke_every: 한 명당 몇 초마다 하나 / pool: 전체 상한 / blood: 물었을 때 피 조각 수
+## 흡혈귀 물기 효과 (사용자 요청 — 범위가 눈에 보이게, 보기만 함). scripts/fx/bite_fx.gd
+##   fan: 물 때 발밑에서 앞쪽 바닥으로 퍼지는 빨간 부채꼴 (반지름 = 물기 범위 + 몸 두께, 반각 = half_angle). grow초에 펼쳐지고 life초에 사라짐
+##   jaw: 문 자리(빗나가면 범위 끝)에 커다란 반투명 틀니가 snap초에 딱 다물리고 life초에 사라짐. scale = 틀니 배율
+const BITE_FX := {
+	"fan": {"y": 0.06, "grow": 0.06, "life": 0.28, "alpha": 0.7, "rim": 0.1, "col": 0xe0102a, "rim_col": 0xff8a96},  # y = 발밑에서 높이 (바닥에 깔림)
+	"jaw": {"scale": 4.0, "snap": 0.08, "life": 0.32, "alpha": 0.85, "miss_alpha": 0.45, "pop": 0.2, "open_up": 0.75, "open_lo": 0.95},
+	"ring": 0.7, "pool": 8,
+}
+const VAMP_FX := {"flame_every": 0.05, "flame_life": 0.45, "flame_size": 0.16, "flame_up": 1.6, "flame_r": 0.35,
+	"smoke_every": 0.12, "smoke_life": 1.1, "smoke_size": 0.22, "smoke_up": 1.2, "pool": 160,
+	"flame_cols": [0xffd23a, 0xff8a1e, 0xff4a1a], "smoke_col": 0x4a4448, "smoke_alpha": 0.45,
+	"blood": 7, "blood_col": 0xb3122a, "heal_col": 0x6cff7a,
+	"cape": 0x14121a, "lining": 0xb3122a, "hair": 0x0e0d12, "fang": 0xffffff, "lip": 0x7a1426, "eye_red": 0xd21c2c}
 
 # ── 춤 디버프 (트럼펫, 4.5단계) ──────────────────────────────
 # 원뿔 안에 window초 동안 누적 need초 이상 있으면 dur초 동안 춤. 끝나면 immune초 동안 다시 안 춤
@@ -283,8 +352,35 @@ const WEAPONS := {
 # 넘어짐(fall_t)이 우선 — 넘어지면 춤은 멈추고 남은 시간은 사라짐
 # 아래 연출 값은 명세에 없어서 정함: sway 플레이어 조준 출렁(라디안)·sway_hz 출렁 빠르기,
 # spin_every 몇 초마다 한 바퀴·spin_t 한 바퀴 도는 시간 (춤 음표는 WEAPONS.trumpet.fx)
-const DANCE := {"window": 1.5, "need": 0.75, "dur": 2.0, "immune": 3.0, "speed": 0.6, "bot_err": 2.5,
+const DANCE_BASE := {"window": 1.5, "need": 0.95, "dur": 2.0, "immune": 3.5, "speed": 0.6, "bot_err": 2.5,
 	"sway": 0.06, "sway_hz": 1.6, "spin_every": 1.1, "spin_t": 0.45}
+
+# ── 모드별 스탯 (사용자 요청 — 쟁탈전은 개인전과 캐릭터 스탯을 다르게) ──────────────
+# 위의 *_BASE = 개인전 수치. 게임은 언제나 아래 var CLASSES·WEAPONS·BURN·DANCE를 읽는다.
+# 쟁탈전이 시작되면 Main이 apply_mode_stats("control")로 MODE_STATS.control을 *_BASE 위에 덮어쓰고, 개인전·메뉴로 오면 "ffa"로 되돌린다.
+# 바꾸고 싶은 값만 적는다 (같은 모양의 Dictionary, 안쪽까지 합쳐짐). 예: "CLASSES": {"cannoneer": {"hp": 150}}, "WEAPONS": {"cannon": {"blast": 3.0}}
+const MODE_STATS := {
+	"control": {  # 쟁탈전 밸런스 (사용자 요청, tests/balance_control.gd 시뮬 결과 c0 → 흡혈귀 판 승률 38%로 가장 약함)
+		"CLASSES": {
+			"vampire": {"hp": 150},   # 130 → 150
+			"bard": {"hp": 90},       # 95 → 90
+			"cleric": {"hp": 95},     # 100 → 95
+		},
+		"WEAPONS": {
+			"cannon": {"reload": 3.5},  # R 꾹 장전 4 → 3.5초
+			"crossbow": {"notches": 30},  # 휠 장전 50 → 30칸
+			"holy": {"slow": 0.42},       # 웅덩이 둔화 65% → 58% (이동 배율 0.35 → 0.42)
+			"teeth": {"dmg": 17},         # 흡혈귀 물기 20 → 17 (회복 15·박쥐 돌진 20은 그대로)
+		},
+		"BURN": {"dmg": 1.5},  # 화상 0.25초마다 2.5 → 1.5 (초당 10 → 6)
+		"DANCE": {},
+	},
+}
+var CLASSES: Dictionary = CLASSES_BASE.duplicate(true)
+var WEAPONS: Dictionary = WEAPONS_BASE.duplicate(true)
+var BURN: Dictionary = BURN_BASE.duplicate(true)
+var DANCE: Dictionary = DANCE_BASE.duplicate(true)
+var stats_mode := "ffa"  # 지금 쓰는 스탯 ("ffa" / "control")
 
 # 트럼펫·음유시인 모양 색 (명세: 금색 트럼펫, 깃털 달린 납작한 베레모)
 const TRUMPET_LOOK := {"brass": 0xf3b33d, "brass_dark": 0xb97a14, "beret": 0x4b2370, "feather": 0xf4ecd6, "feather_tip": 0xd94a3a,
@@ -300,7 +396,7 @@ const TRUMPET_SND := {"base_hz": 523.25, "melody": [0, 4, 7, 4, 0, 7, 12], "note
 # ── 봇 난이도 ────────────────────────────────────────────────
 const DIFF := {
 	"easy": {"name": "쉬움", "react": [1.0, 1.5], "err": 1.5, "sniper_err": 0.09, "head": 0.0, "lead": [0.0, 0.4], "fire": 0.5, "turn": 2.4,
-		"xbow_wind": 10.0,  # 봇 석궁 휠 감기 (초당 칸 수 — 25칸에 2.5초 / 1.9초 / 1.6초. 사람이 가장 빠르면 1초)
+		"xbow_wind": 10.0,  # 봇 석궁 휠 감기 (초당 칸 수 — 50칸에 5초 / 3.8초 / 3.1초. 사람이 가장 빠르면 2초)
 		"color": 0x6cc35a, "skulls": "●○○", "desc": "봇이 늦게 반응하고 자주 빗나가요. 넘어지는 데 적응하기 좋아요."},
 	"normal": {"name": "보통", "react": [0.7, 1.1], "err": 1.0, "sniper_err": 0.06, "head": 0.03, "lead": [0.1, 0.6], "fire": 0.65, "turn": 3.2,
 		"xbow_wind": 13.0,
@@ -330,14 +426,16 @@ const BOT := {
 	"strafe_t": [0.6, 1.8],      # 좌우 무빙 방향을 바꾸는 간격
 	"strafe_stop": 0.2,          # 무빙 안 할 확률
 	"strafe_k": 0.9,
-	"pref": {"barbarian": 4.0, "archer": 22.0, "crossbow": 30.0, "cleric": 15.0, "bard": 8.0, "cannoneer": 16.0},  # 병과별 선호 거리
+	"pref": {"barbarian": 4.0, "archer": 22.0, "crossbow": 30.0, "cleric": 15.0, "bard": 8.0, "cannoneer": 16.0, "vampire": 0.5},  # 병과별 선호 거리
 	"pref_sniper": 28.0, "pref_ak": 16.0,
 	"item_seek": 45.0, "horse_seek": 40.0, "fish_seek": 40.0,  # 황금 붕어빵은 40m
 	"star_avoid": 10.0,          # 무적인 적에게서 이만큼은 도망감 (대상으로도 안 고름)  # 이 거리 안의 저격총·AK / 말은 주우러 감
 	"item_busy": 8.0,            # 단, 보이는 적이 이보다 가까우면 싸움이 먼저
 	"pref_band": 5.0,            # 선호 거리 ±5m면 다가가지도 물러나지도 않음
+	"bat_min": 3.5, "bat_max": 8.5,  # 흡혈귀 봇: 대상이 이 거리 사이에 있고 보이면 박쥐 돌진
+	"meat_hp": 0.5,  # 야만인 봇: 체력이 최대의 이만큼 아래거나 춤·둔화 중이면 고기 먹기
 	"cannon_min": 4.5,  # 포병 봇: 대상이 이보다 가까우면 안 쏨 (자기 폭발에 휘말림)
-	"fire_range": {"cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
+	"fire_range": {"teeth": 2.9, "cannon": 40.0, "stone": 15.5, "holy": 32.0, "chicken": 26.0, "crossbow": 85.0, "ak": 60.0},  # 없으면 제한 없음
 	"knight_avoid": 12.0,        # 말 탄 사람 피하기 반경
 	"zone_margin": 0.6,          # 남의 성수 웅덩이 반경 + 이만큼 안이면 밖으로 나감
 	"smooth": 3.5,               # 이동 방향을 부드럽게 (급회전 넘어짐 줄이기)
@@ -395,13 +493,14 @@ const MODES := {
 			"crossbow": {0x4d72b8: "body", 0x263f78: "dark", 0x3a62a8: "accent"},                   # 등 방패 그림
 			"cleric": {0xeee6d2: "pale", 0x7a52b8: "accent", "helm_gold": "accent"},                 # 영대·모자 띠
 			"bard": {0x7a3fa8: "body", 0xf4ecd6: "accent", 0xd94a3a: "accent"},                     # 조끼·모자 깃털
-			"cannoneer": {0x5e7d3c: "body", 0x3f5a28: "dark"},                                      # 군복·모자
+			"cannoneer": {0x5f7a3a: "body", 0x46602a: "dark", 0x8a3a2c: "dark"},                    # 갬비슨·누빈 줄·철모 띠
+			"vampire": {0xb3122a: "accent"},                                                         # 망토 안감
 		},
 		# 봇
 		"bot_hold_in": 2,                           # 우리 거점이면 원 안에 이만큼, 나머지는 감시 지점
-		"bot_roles": {"barbarian": "point", "cleric": "point", "bard": "point", "cannoneer": "point", "archer": "watch", "crossbow": "watch"},
+		"bot_roles": {"barbarian": "point", "cleric": "point", "bard": "point", "cannoneer": "point", "vampire": "point", "archer": "watch", "crossbow": "watch"},
 		"lane_weight": {                            # 3갈래(왼쪽 시장 골목 / 가운데 큰길 / 오른쪽 성벽 길) 고르는 가중치
-			"barbarian": [5, 2, 1], "archer": [1, 2, 4], "crossbow": [1, 2, 4], "cleric": [2, 3, 2], "bard": [3, 3, 1], "cannoneer": [1, 4, 2]},
+			"barbarian": [5, 2, 1], "archer": [1, 2, 4], "crossbow": [1, 2, 4], "cleric": [2, 3, 2], "bard": [3, 3, 1], "cannoneer": [1, 4, 2], "vampire": [5, 2, 1]},
 		"lane_reach": 3.5,                          # 갈래 길 지점에 이만큼 다가가면 다음 지점으로
 		"path_every": 0.6,                          # 경로 다시 찾기 간격
 		"path_reach": 1.2,                          # 경로 점에 이만큼 다가가면 다음 점
@@ -556,7 +655,7 @@ const HORSE_SPOTS := [Vector3(-30, 0, 0), Vector3(30, 0, -4), Vector3(2, 0, 30),
 
 # ── 매치·메뉴·HUD (HTML startMatch / startMenuSim / updateHUD / killfeed / banner / toast) ──
 ## 메인 메뉴 (마을 게시판 — reference/ui_design/Main.html, px는 1080 시안 × 0.667)
-const VERSION := "v0.4"
+const VERSION := "v0.6.1"
 const MAIN_MENU := {
 	"tips": [  # 오늘의 팁 (메인 화면을 열 때마다 하나, \n = 줄 바꿈 자리). 규칙이 바뀌면 같이 고칠 것
 		"달리다가 급하게 돌면\n넘어집니다. 진짜로.",
@@ -599,16 +698,17 @@ const MAIN_MENU := {
 const CLASS_PAGE := {
 	"lines": {  # 개구 한마디
 		"barbarian": "생각 없음. 돌 있음.", "archer": "당기다 손 미끄러짐 주의.", "crossbow": "한 발이면 끝. 휠로 감아라.",
-		"cleric": "성수 맛 좀 봐라.", "bard": "내 연주에 춤춰라.", "cannoneer": "발밑에 쏘면 난다.",
+		"cleric": "성수 맛 좀 봐라.", "bard": "내 연주에 춤춰라.", "cannoneer": "발밑에 쏘면 난다.", "vampire": "덥다... 피 좀 줘.",
 	},
 	# 아래 한 줄 설명. {..}는 WEAPONS 값으로 채움 (game_data를 고치면 문구도 따라감)
 	"blurbs": {
-		"barbarian": "{cd}초마다 돌을 퍼붓는 돌격형. 가장 빠르지만 가장 약하다.",
+		"barbarian": "{cd}초마다 돌을 퍼붓는 돌격형. 우클릭 고기 먹기로 30 회복 + 춤·둔화 풀기.",
 		"archer": "짧게 끊어 쏘면 연사, 끝까지 당기면 {dmg_max} 피해. 화살은 포물선으로 떨어진다.",
 		"crossbow": "피해 {dmg}, 머리에 맞히면 한 방. 쏜 뒤엔 마우스 휠을 {notches}칸 굴려 감는다.",
 		"cleric": "성수병 {max_charges}개를 모아 던진다. 웅덩이가 적을 지지고 느리게 만든다.",
 		"bard": "트럼펫을 불면 적이 춤춘다. 춤추는 적은 느리고 공격을 못 한다.",
-		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 한 발 쏘면 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
+		"cannoneer": "포탄이 터지면 반경 {blast}m에 피해. 쏜 뒤엔 R키를 꾹 눌러 {reload}초 장전. 발밑에 쏘면 높이 뛴다.",
+		"vampire": "햇빛에 초당 {burn_ps}씩 탄다. 물면 {dmg} 피해 + {heal} 회복, 처치하면 +{kill_heal}. 우클릭 박쥐 돌진.",
 	},
 	"eye_h": 1.62,   # 사거리 계산: 눈높이(player.eye_pos)에서 정면으로 쏴서 땅에 닿는 거리 (무기 range가 있으면 거기까지)
 	"bar_cols": {"hp": 0xe5484d, "speed": 0x3fa7e0, "range": 0x6cc35a, "track": 0xe2c992},
@@ -651,6 +751,7 @@ const HUD_UI := {
 		"pct_font": 25, "pct_x": 4.0, "note_top": 132.0, "note_font": 20, "note_tilt": -1.0, "note_pad": Vector4(12, 2, 12, 4)},  # 상태 쪽지는 % 막대(113~128) 바로 아래 — 막대를 안 가리게 (사용자 요청)
 	"sign": {"font": 20, "sub": 15, "lift": 3.4, "pad": Vector2(11, 4), "tri": Vector2(16, 9), "fade_r": 140.0, "fade_min": 0.35},
 	"ally": {"font": 16, "tri": Vector2(14, 9)},
+	"aim_name": {"font": 16, "lift": 2.55},  # 개인전: 조준한 적 머리(발 + lift m) 위에 닉네임 (사용자 요청 — 쟁탈전과 같은 판정)
 	"feed": {"font": 19, "icon": 20.0, "gap": 7, "sep": 8, "pad": Vector4(11, 3, 11, 5), "r": 4.0,
 		"head_font": 13, "head_col": 0xc4302b, "head_tilt": -4.0, "me": "나", "trim": 0.28},
 	"vitals": {"medal": 80.0, "medal_in": 62.0, "plank": Vector2(267, 69), "overlap": 17.0, "pad": Vector4(29, 6, 15, 9), "r": 9.0,
@@ -763,6 +864,11 @@ const SFX_PITCH := {"thud": 1.15}               # 소리별 음높이 배율
 # 거리·남의 소리 (사용자 요청 — HTML은 1/(1+거리/9)라 멀어도 잘 안 줄었음). Sfx.vol_at
 #   크기 = 1 / (1 + (거리/ref)^rolloff), fade_from~max 사이에서 0까지 더 줄임.
 #   내 캐릭터 자리(self_r 안)에서 난 소리 = 내 소리, 나머지(적·아군·봇)는 × others
+# 큰 발사음 (사용자 요청 — 포병 발사음이 너무 작았음). 내가 쏘면 위치 없이 self_db로, 남(봇·친구)이 쏘면 그 자리에서 AudioStreamPlayer3D로
+# (db·unit = unit_size·max = max_distance m·감쇠 inverse distance, 가까우면 최대 db까지). 음높이는 pitch 사이 무작위. SFX 버스
+const SFX_SHOT := {
+	"cannon": {"file": "res://audio/sfx/artillery_fire_bmat.ogg", "self_db": 0.0, "db": 6.0, "unit": 10.0, "max": 80.0, "pitch": [0.92, 1.08]},
+}
 const SFX_DIST := {"ref": 8.0, "rolloff": 1.5, "fade_from": 50.0, "max": 80.0, "others": 0.7, "self_r": 0.5}
 const XBOW_RELOAD_SND := {"latch": 0.63, "seat": 0.86}  # 석궁 장전 모션 진행도에서 걸쇠·볼트 소리 나는 순간 (휠 한 칸마다는 xbow_click)
 const GALLOP := {"min_speed": 2.0, "pitch_min": 0.85, "pitch_max": 1.2, "speed_ref": HORSE_SPEED}  # 말 속도 → 다그닥 음높이
@@ -870,6 +976,9 @@ const NET := {
 	"dead_wait": 0.5, "revive_guard": 1.0,  # 죽음 사건보다 상태가 먼저 와도 잠깐 기다림 / 죽은 직후 옛 상태로 안 살아남
 	"lobby_return": 10.0,     # 경기가 끝나고 결과 화면을 이만큼 보여 준 뒤 모두 대기실로 (방장이 알림)
 	"lobby_grace": 3.0,       # 친구: 방장 알림이 늦으면 lobby_return + 이만큼 뒤에 스스로 대기실로
+	# 포병 장전 검사 (사용자 요청 "발사 가능 여부는 방장이 판정"): 친구가 쏜 포탄은 방장에게만 가고, 방장이 받은 상태의 장전 게이지가
+	# 1 - cannon_tol 이상일 때만 다른 사람에게 돌림 (상태는 30Hz라 조금 늦게 와서 여유를 둠 — 0.15 = 4초 장전에서 0.6초)
+	"cannon_tol": 0.15,
 }
 ## 친구대전 대기실 맵 목록 (모드마다. 지금은 하나씩 — 맵이 늘면 여기에 더함)
 const ROOM_MAPS := {
@@ -879,6 +988,7 @@ const ROOM_MAPS := {
 var end_wait_override := -1.0  # 테스트: 0 이상이면 결과 화면 → 대기실 시간을 이걸로
 var signal_url_override := ""  # 테스트: 신호 서버를 이 주소로 (tests/mock_signal.gd, 예 "ws://127.0.0.1:24690"). "off"면 설정이 없는 것처럼
 var ice_override: Variant = null  # 테스트: STUN 없이 (빈 배열이면 같은 컴퓨터 안에서만 연결)
+var anim_lod := true        # false면 모든 캐릭터를 매 프레임 애니메이션 (ANIM_LOD, 테스트·비교용)
 var hitbox_follow := true   # false면 예전처럼 고정 판정 (HITBOX_FOLLOW, 테스트·비교용)
 var debug_hits := false     # 명중 판정 디버그 표시 (F9로 켜고 끔, HIT_DEBUG). 저장 안 함
 var hitstop_enabled := true   # false면 히트스톱 안 함 (자동 테스트용 — 프레임 수로 시간을 재니까)
@@ -1019,8 +1129,39 @@ static func col(hex: int) -> Color:
 
 
 ## 그래픽 품질 바꾸기 (설정 화면) — 저장하고 gfx_changed로 알림
-## 병과 선택 화면 막대: 체력·걷기/달리기 속도·사거리(m)와 각 막대 비율 (모든 병과 중 가장 큰 값 = 1)
+## 모드 스탯 적용: *_BASE를 새로 복사하고 MODE_STATS[m]을 안쪽까지 덮어씀 ("ffa"면 개인전 그대로)
+func apply_mode_stats(m: String) -> void:
+	stats_mode = m
+	var over: Dictionary = MODE_STATS.get(m, {})
+	CLASSES = _merged(CLASSES_BASE, over.get("CLASSES", {}))
+	WEAPONS = _merged(WEAPONS_BASE, over.get("WEAPONS", {}))
+	BURN = _merged(BURN_BASE, over.get("BURN", {}))
+	DANCE = _merged(DANCE_BASE, over.get("DANCE", {}))
+
+
+static func _merged(base: Dictionary, over: Dictionary) -> Dictionary:
+	var out := base.duplicate(true)
+	for k: Variant in over:
+		if out.get(k) is Dictionary and over[k] is Dictionary:
+			out[k] = _merged(out[k], over[k])
+		else:
+			out[k] = over[k]
+	return out
+
+
+## 병과 선택 화면 막대: 체력·걷기/달리기 속도·사거리(m)와 각 막대 비율 (모든 병과 중 가장 큰 값 = 1).
+## 고르는 모드(GameData.mode)의 스탯으로 셈 — 메뉴 뒤 구경(개인전)은 그대로 두고 잠깐 바꿨다 되돌림
 func class_stats(k: String) -> Dictionary:
+	var prev := stats_mode
+	if mode != prev:
+		apply_mode_stats(mode)
+	var out := _class_stats(k)
+	if stats_mode != prev:
+		apply_mode_stats(prev)
+	return out
+
+
+func _class_stats(k: String) -> Dictionary:
 	var all := {}
 	for c: String in CLASS_ORDER:
 		var C: Dictionary = CLASSES[c]
@@ -1036,6 +1177,7 @@ func class_stats(k: String) -> Dictionary:
 	for key: String in WEAPONS[CLASSES[k].weapon]:
 		var v: Variant = WEAPONS[CLASSES[k].weapon][key]
 		vals[key] = str(int(v)) if v is float and is_equal_approx(v, roundf(v)) else str(v)  # 4.0 → "4"
+	vals.burn_ps = str(roundi(float(BURN.dmg) / float(BURN.tick)))  # 흡혈귀 화상 초당 (쟁탈전 6)
 	out.blurb = str(CLASS_PAGE.blurbs.get(k, "")).format(vals)
 	return out
 
@@ -1170,6 +1312,7 @@ func _setup_input() -> void:
 		"jump": [KEY_SPACE], "sprint": [KEY_SHIFT], "crouch": [KEY_CTRL, KEY_C],
 		"toggle_view": [KEY_V], "swap": [KEY_Q], "interact": [KEY_E], "scoreboard": [KEY_TAB],
 		"cancel_draw": [KEY_R],  # 활 당기기 취소 (사용자 요청)
+		"reload": [KEY_R],       # 포병: 꾹 눌러 장전 (사용자 요청 — 궁수 취소와 같은 키, 병과마다 따로 동작)
 		"debug_hits": [HIT_DEBUG.key],  # 명중 판정 디버그 표시 켜고 끄기
 		"perf_hud": [PERF_HUD.key],     # 성능 표시 (FPS·프레임 시간·그리기 호출) 켜고 끄기
 		"class_1": [KEY_1], "class_2": [KEY_2], "class_3": [KEY_3], "class_4": [KEY_4], "class_5": [KEY_5], "class_6": [KEY_6], "class_7": [KEY_7],  # 병과 고르는 화면에서만

@@ -14,12 +14,15 @@ signal hitmark(is_kill: bool)  # 내가 맞혔을 때 조준점 X 표시
 signal kill_mark(head: bool)   # 내가 막타를 쳤을 때 조준점 가운데 해골 (사용자 요청 — 헤드샷이면 빨강)
 signal hurt(dmg: float)        # 내가 맞음 → 붉은 테두리 (HTML hurt)
 signal dmg_dir(from: Vector3)  # 내가 맞음 → 때린 사람 쪽에 붉은 호 (HTML dmgDir)
+signal dealt(v: PlayerController, a: PlayerController, amount: float, kind: String)  # 실제로 들어간 피해 (밸런스 분석 tests/balance_ffa.gd용, 화상은 a = null)
 signal star_changed(e: PlayerController, on: bool)  # 황금 붕어빵 무적 시작·끝 (Main이 내 것만 보고 BGM을 바꿈)
 
 var world: WorldBuilder
 var fx: Fx
 var bard_fx: BardFx         # 음유시인 트럼펫 이펙트 (scripts/fx/bard_fx.gd — 보기만 함)
 var star_fx: StarFx         # 황금 붕어빵 무적 반짝임 (scripts/fx/star_fx.gd — 보기만 함)
+var burn_fx: BurnFx         # 흡혈귀 몸에서 나는 불꽃·연기 (scripts/fx/burn_fx.gd — 보기만 함)
+var bite_fx: BiteFx         # 흡혈귀 물기 부채꼴·유령 틀니 (scripts/fx/bite_fx.gd — 보기만 함)
 var items: Items            # 닭·말·저격총·AK
 var cannon: Cannon          # 포병 폭발·포탄 점프·탄도 조준 (scripts/cannon.gd)
 var me: PlayerController    # 내 캐릭터 (스코프·3인칭 판단)
@@ -53,6 +56,13 @@ func _ready() -> void:
 	star_fx.name = "StarFx"
 	star_fx.combat = self
 	add_child(star_fx)
+	burn_fx = BurnFx.new()
+	burn_fx.name = "BurnFx"
+	burn_fx.combat = self
+	add_child(burn_fx)
+	bite_fx = BiteFx.new()
+	bite_fx.name = "BiteFx"
+	add_child(bite_fx)
 	items = Items.new()
 	items.name = "Items"
 	items.combat = self
@@ -81,6 +91,8 @@ func warm_mats() -> Array:
 	a.append_array(fx.keep_mats)
 	a.append_array(bard_fx.keep_mats)
 	a.append_array(star_fx.keep_mats)
+	a.append_array(burn_fx.keep_mats())
+	a.append_array(bite_fx.keep_mats())
 	return a
 
 
@@ -138,6 +150,8 @@ func _physics_process(dt: float) -> void:
 			weapon_update(e, e.fire_held, dt)
 		elif e.alive and e.wep == "crossbow":  # 친구 석궁: 받은 감은 칸 수(xb_wind)로 모션·소리
 			_xbow_anim(e, dt)
+		if e.is_remote and e.eat_t > 0:  # 친구 야만인 먹는 모습 (사건 "eat"로 켜짐)
+			e.eat_t = maxf(0.0, e.eat_t - dt)
 		e.swap_req = false
 	Trumpet.update_victims(self, dt)  # 트럼펫 소리를 들은 쪽: 피해·춤 (4.5단계)
 	update_projectiles(dt)
@@ -192,10 +206,14 @@ func _tick_timers(dt: float) -> void:
 				e.star_t -= dt
 				if e.star_t <= 0:
 					end_star(e)
-			# 체력 재생: REGEN_DELAY초 동안 안 맞으면 1씩 차오른다
+			if e.cls == "vampire":  # 흡혈귀: 햇빛에 탐 (죽을 수 있음)
+				Vampire.burn(self, e, dt)
+				if not e.alive:
+					continue
+			# 체력 재생: REGEN_DELAY초 동안 안 맞으면 1씩 차오른다 (흡혈귀는 regen 0 = 없음)
 			var mh := float(GameData.class_hp(e.cls))
 			e.no_hit_t += dt
-			if e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh:
+			if e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh and GameData.class_regen(e.cls) > 0:
 				e.regen_acc += dt
 				var rs := 1.0 / GameData.class_regen(e.cls)
 				while e.regen_acc >= rs:
@@ -240,6 +258,8 @@ func clear_match_objects() -> void:
 	fx.clear()
 	bard_fx.clear()
 	star_fx.clear()
+	burn_fx.clear()
+	bite_fx.clear()
 	items.clear()
 
 
@@ -406,8 +426,9 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 		return
 	var knocked := head and v.helmet
 	var dmg := base * (GameData.HEADSHOT if v.helmet else GameData.BARE_HEAD) if head else base
+	dealt.emit(v, a, minf(dmg, maxf(v.hp, 0.0)), kind)
 	v.hp -= dmg
-	v.last_hit = {"by": a, "kind": kind, "head": head}
+	v.last_hit = {"by": a, "kind": kind, "head": head, "t": clock}  # t: 마지막으로 맞은 때
 	v.hit_squash = 1.0
 	v.flash = 0.14
 	v.no_hit_t = 0.0
@@ -436,7 +457,7 @@ func damage(v: PlayerController, a: PlayerController, base: float, kind: String,
 			v.kb_t = maxf(v.kb_t, GameData.KB_TIME_AK)
 	elif kind != "holy" and kind != "trumpet" and v.mounted <= 0:  # 성수·트럼펫은 지속 피해라 경직·미끄러짐 없음
 		v.kb_t = GameData.KB_TIME
-		if v.is_bot:
+		if v.is_bot and kind != "teeth":  # 틀니는 0.5초마다라 봇 경직은 안 줌 (계속 못 움직이게 되니까)
 			v.stagger = GameData.BOT_STAGGER_XBOW if kind == "crossbow" else GameData.BOT_STAGGER
 	# 맞은 방향으로 몸이 출렁 (스프링)
 	if v.model:
@@ -560,12 +581,17 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 					Sfx.play("reload")
 		else:
 			e.charge_t = 0.0
-	# 포병은 한 발 쏘면 자동 재장전 (다른 무기를 들고 있어도). 끝나면 철컥
-	if e.cn_t > 0:
-		e.cn_t -= dt
-		if e.cn_t <= 0:
-			e.cn_t = 0.0
+	# 포병 장전 (사용자 요청): 대포를 들고 R을 꾹 누르는 동안만 참. 떼면 멈추고 다시 누르면 이어서. 끝나면 철컥
+	# 공격이 아니라서 공중·춤·넘어짐·스폰룸에서도 된다
+	if e.cn_reloading():
+		e.cn_load = minf(1.0, e.cn_load + dt / float(GameData.WEAPONS.cannon.reload))
+		if e.cn_load >= 1.0:
 			Sfx.play("clank", e.global_position)
+	if e.cls == "vampire":  # 흡혈귀: 돌진 재사용 대기·돌진 부딪힘 (공격 금지여도 돌진은 이어짐)
+		Vampire.tick(self, e, dt)
+	if e.cls == "barbarian":  # 야만인 우클릭 고기 먹기: 춤·둔화를 풀려고 먹으니 춤추는 중에도 됨 (공격이 아님)
+		Meat.tick(e, dt)
+		Meat.try_eat(self, e)
 	# 춤추는 동안엔 어떤 무기로도 공격 못 함 (사용자 요청 — 연주·팡파레·던지기·쏘기·활 당기기 전부)
 	var dancing := e.dance_t > 0
 	# 음유시인은 숨이 다른 무기를 들고 있어도 돌아온다. 연주·팡파레는 트럼펫을 들고 넘어지지·춤추지 않았을 때만
@@ -583,12 +609,14 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 	match e.wep:
 		"bow":
 			_bow_update(e, held, dt)
-		"stone":  # 누르고 있으면 재사용 대기가 끝나는 대로 쏜다
-			if held and e.cd <= 0:
+		"stone":  # 누르고 있으면 재사용 대기가 끝나는 대로 쏜다 (고기 먹는 동안은 손이 바빠서 안 던짐)
+			if held and e.cd <= 0 and e.eat_t <= 0:
 				fire(e, e.wep)
-		"cannon":  # 장전돼 있으면 쏜다 (누르고 있으면 장전되는 대로)
-			if held and e.cn_t <= 0 and e.cd <= 0:
+		"cannon":  # 장전돼 있으면 쏜다. 안 됐으면 누른 순간 "R키를 꾹 눌러 장전" (내 화면)
+			if held and e.cn_load >= 1.0 and e.cd <= 0:
 				fire(e, "cannon")
+			elif held and not e.trig_prev and e.cn_load < 1.0 and e.is_local:
+				toast.emit("R키를 꾹 눌러 장전")
 		"crossbow":  # 휠로 다 감아 둔 것만 쏜다 (누르고 있으면 다 감는 대로)
 			if held and e.cd <= 0 and e.xb_wind >= int(GameData.WEAPONS.crossbow.notches):
 				fire(e, e.wep)
@@ -606,6 +634,8 @@ func weapon_update(e: PlayerController, held: bool, dt: float) -> void:
 				fire(e, "ak")
 		"trumpet":  # 위에서 Trumpet.update가 처리
 			pass
+		"teeth":  # 흡혈귀: 좌클릭 물기 (누르고 있으면 0.5초마다) / 우클릭 박쥐 돌진
+			Vampire.update(self, e, held)
 	e.trig_prev = held
 	e.cancel_req = false
 
@@ -862,9 +892,9 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 			speed = W.speed
 			dmg = W.dmg
 			e.cd = 0.3
-			e.cn_t = float(W.reload)
+			e.cn_load = 0.0  # 다시 쏘려면 R을 꾹
 			mesh = _cannonball()
-			Sfx.play("cannon", e.global_position)
+			Sfx.play_shot("cannon", e.global_position + Vector3(0, 1.0, 0), e.is_local)  # 나 = 위치 없이 크게, 봇 = 그 자리 3D
 			if not e.is_remote:  # 발사 반동 (몸이 밀림) — 친구 캐릭터는 그쪽 컴퓨터가
 				Cannon.fire_recoil(e, dir)  # dir = 실제로 쏜 방향
 			if e.is_local:
@@ -897,25 +927,27 @@ func fire(e: PlayerController, kind: String, t := 0.0) -> void:
 	if W.has("lift"):
 		vel.y += float(W.lift)
 	var life: float = float(W.range) / speed if W.has("range") else float(W.get("fuse", GameData.PROJ_LIFE))
-	if kind == "cannon":  # 포구 연기
-		fx.puff(pos, 0x8a8478, 0.35, 5)
-		fx.puff(pos, 0xffb347, 0.18, 2)
+	if kind == "cannon":  # 점화 구멍 불꽃 + 포구 연기
+		cannon.fire_fx(e, pos, dir)
 	projectiles.append({
 		"kind": kind, "pos": pos, "vel": vel, "grav": float(W.grav), "owner": e, "dmg": dmg,
 		"mesh": mesh, "life": life, "radius": float(W.radius), "from": from,
 		"spin": Vector3(randf_range(-15, 15), randf_range(-15, 15), randf_range(-15, 15)),
 	})
 	if mp() and not e.is_remote:  # 친구 화면에도 같은 투사체를 만든다 (맞았는지는 맞은 사람이 판정)
-		net.event(["f", Net.WEPS.find(kind), pos, vel, t], e)
+		if kind == "cannon" and not net.is_host:  # 친구의 포탄은 방장이 장전됐는지 보고 돌림 (Net._ev)
+			net.event_host(["f", Net.WEPS.find(kind), pos, vel, t])
+		else:
+			net.event(["f", Net.WEPS.find(kind), pos, vel, t], e)
 
 
 ## 포탄 모양: 검은 쇠공
 func _cannonball() -> Node3D:
 	var W: Dictionary = GameData.WEAPONS.cannon
 	var mi := MeshInstance3D.new()
-	mi.mesh = Meshes.sph()
+	mi.mesh = Meshes.stone()  # 울퉁불퉁한 돌 포탄 (겉모습만 — 판정은 W.radius)
 	mi.material_override = GameData.mat(W.color)
-	mi.scale = Vector3.ONE * float(W.ball)
+	mi.scale = Vector3(1.0, 0.9, 1.08) * float(W.ball)
 	return mi
 
 
@@ -1223,6 +1255,7 @@ func kill(v: PlayerController, a: PlayerController, kind: String, head: bool, di
 	v.reset_charge()  # 당기던 활 소리도 끔
 	if a and a != v and not a.is_remote:  # 친구대전에선 죽인 사람(의 컴퓨터)이 처치 사건을 받고 스스로 센다
 		a.kills += 1
+		Vampire.on_kill(self, a)  # 흡혈귀가 처치하면 추가 회복 (처치를 세는 컴퓨터에서 한 번만)
 	if mp() and not v.is_remote:
 		net.event(["k", net.peer_of(a) if a and a != v else 0, Net.WEPS.find(kind), head, dir], v)
 	# 말에서 내리고, 들고 있던 저격총·AK·닭은 그 자리에 떨어뜨림
@@ -1298,9 +1331,9 @@ func remote_fire(e: PlayerController, kind: String, pos: Vector3, vel: Vector3, 
 		"cannon":
 			mesh = _cannonball()
 			dmg = W.dmg
-			Sfx.play("cannon", pos)
+			Sfx.play_shot("cannon", e.global_position + Vector3(0, 1.0, 0), false)  # 친구가 쏨 = 그 자리 3D (소리는 각자 컴퓨터에서)
 			e.rec_v += 12
-			fx.puff(pos, 0x8a8478, 0.35, 5)
+			cannon.fire_fx(e, pos, vel.normalized() if vel.length_squared() > 1e-6 else Vector3.FORWARD)
 		_:
 			return
 	e.fire_anim = 1.0
@@ -1332,11 +1365,25 @@ func remote_shot(e: PlayerController, kind: String, from: Vector3, end: Vector3)
 
 
 ## 친구 음유시인이 팡파레를 붊: 효과는 그대로, 나(방장이면 내 봇도)가 앞에 있었으면 내 쪽에서 판정
+## 친구 야만인이 고기를 먹음: 모습·소리만 (회복·풀기는 그 사람 컴퓨터가, 체력은 상태로)
+func remote_eat(e: PlayerController) -> void:
+	Meat.eat_fx(self, e)
+
+
 func remote_fanfare(e: PlayerController) -> void:
 	Trumpet.fanfare_fx(self, e)
 	for v in ents:
 		if v.alive and not v.is_remote:
 			Trumpet.hit_fanfare(self, e, v)
+
+
+## 친구 흡혈귀가 물거나(bat = false) 돌진으로 부딪힘(bat = true) — 모습·소리·피는 모두, 피해는 맞은 게 내 캐릭터(내 봇)일 때만
+func remote_bite(e: PlayerController, v: PlayerController, mine: bool, fed: bool, bat: bool) -> void:
+	Vampire.bite_fx(self, e, v, fed)
+	if v and mine and v.alive:
+		var B: Dictionary = GameData.WEAPONS.bat if bat else GameData.WEAPONS.teeth
+		var d := Vector3(v.global_position.x - e.global_position.x, 0, v.global_position.z - e.global_position.z)
+		damage(v, e, float(B.dmg), "bat" if bat else "teeth", false, d.normalized() if d.length_squared() > 1e-4 else Vector3(0, 0, 1))
 
 
 ## 친구가 맞음 (친구 쪽에서 판정해서 알려줌): 맞은 효과·숫자·히트마크
@@ -1363,6 +1410,7 @@ func remote_kill(e: PlayerController, a: PlayerController, kind: String, head: b
 	e.die(dir)
 	if a and not a.is_remote:  # 나 (방장이면 내 봇도)
 		a.kills += 1
+		Vampire.on_kill(self, a)
 	if a and a.is_local and a != e:  # 친구대전: 친구 쪽이 판정한 죽음이라도 막타가 나면 내 화면에만
 		hitmark.emit(true)
 		kill_mark.emit(head)

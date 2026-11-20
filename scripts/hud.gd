@@ -17,9 +17,12 @@ var mode: ControlMode = null:  # 쟁탈전이면 규칙 (위쪽 시간 대신 �
 		if _ctrl:
 			_ctrl.mode = v
 			_ctrl.visible = v != null
+		if _aim_name:
+			_aim_name.visible = v == null
 		if _topbar:
 			_topbar.visible = v == null
 var _ctrl: ControlHud
+var _aim_name: AimName  # 개인전: 조준한 적 닉네임 (사용자 요청)
 var _topbar: Control
 
 var _speed: RichTextLabel
@@ -44,6 +47,7 @@ var _cross: Crosshair
 var _vm: ViewModel
 var _ring: ChargeRing
 var _bow_full := false  # 지난 프레임에 활을 끝까지 당겨 있었나 (번쩍 한 번만)
+var _cn_full := true    # 지난 프레임에 포병 장전이 다 차 있었나 (R로 채운 순간만 번쩍)
 var _w_icon: TextureRect
 var _w_icon_kind := ""
 var _w_name: Label
@@ -59,6 +63,7 @@ var _hurt := 0.0       # 붉은 테두리 세기 (HTML hurt)
 var _dance: DanceEdge  # 내가 춤에 걸리면: 분홍 테두리 + 테두리를 도는 음표 (트럼펫 이펙트 7)
 var _dirs: DmgDir
 var _star: StarEdge          # 황금 붕어빵 무적 (1인칭): 금색 비네트 두근 + 테두리 반짝이
+var _burn: BurnEdge          # 흡혈귀 체력이 BURN.low_hp 이하: 가장자리가 붉게 일렁이며 타오름 (불꽃 혀)
 var _star_box: VBoxContainer # 화면 위 가운데: "무적 3.2초" + 금색 막대
 var _star_lbl: Label
 var _star_bar: ProgressBar
@@ -95,6 +100,7 @@ const NUM_STYLE := {
 	"kill": {"size": 30, "color": GOLD},
 	"dance": {"size": 34, "color": Color("#ff7eb6")},  # 춤춰라! (트럼펫 이펙트)
 	"squeak": {"size": 22, "color": Color("#d6d6d6")},  # 삑!
+	"heal": {"size": 26, "color": Color("#6cff7a")},    # 흡혈귀 +15 (초록)
 }
 const NUM_LIFE := 0.85
 const NUM_MAX := 14
@@ -176,6 +182,20 @@ func _ready() -> void:
 	_star.add_child(_star.vig)
 	_star.visible = false
 	root.add_child(_star)
+	_burn = BurnEdge.new()
+	_burn.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_burn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bsm := ShaderMaterial.new()
+	bsm.shader = sh
+	var bcol := GameData.col(GameData.BURN.vig_col)
+	bsm.set_shader_parameter("col", Vector3(bcol.r, bcol.g, bcol.b))
+	_burn.vig = ColorRect.new()
+	_burn.vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_burn.vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_burn.vig.material = bsm
+	_burn.add_child(_burn.vig)
+	_burn.visible = false
+	root.add_child(_burn)
 
 	_build_topbar(root)
 	_build_feed(root)
@@ -185,6 +205,10 @@ func _ready() -> void:
 	_ctrl.hud = self
 	_ctrl.visible = false
 	root.add_child(_ctrl)
+	_aim_name = AimName.new()  # 쟁탈전은 ControlHud가 팀 색으로 그림
+	_aim_name.hud = self
+	_aim_name.visible = mode == null
+	root.add_child(_aim_name)
 	_build_notes(root)
 
 	# 큰 문구 (HTML #banner: 위에서 24%)
@@ -627,6 +651,7 @@ func _process(dt: float) -> void:
 	_dance.tick(dt, e.alive and e.dance_t > 0)
 	var starred := e.alive and e.star_t > 0
 	_star.tick(dt, starred and not e.tp_view(), e.star_t)
+	_burn.tick(dt, e.alive and e.cls == "vampire" and e.hp <= float(GameData.BURN.low_hp))
 	_star_box.visible = starred
 	if starred:
 		_star_lbl.text = "무적 %.1f초" % e.star_t
@@ -657,6 +682,8 @@ func _process(dt: float) -> void:
 		notes.append("투구 없음")
 	if e.alive and e.slow_t > 0:
 		notes.append("성수에 젖어 느려짐")
+	if e.alive and e.cls == "vampire":
+		notes.append("햇빛에 타는 중" if e.burn_wait <= 0 else "화상까지 %d초" % ceili(e.burn_wait))
 	var note := " · ".join(notes)
 	if e.next_cls != "" and e.next_cls != e.cls:
 		note += (" " if note != "" else "") + "→ 다음 부활 %s" % GameData.CLASSES[e.next_cls].name
@@ -672,7 +699,7 @@ func _process(dt: float) -> void:
 	var hc := MOSS if hpp > 0.5 else GOLD
 	if hpp <= float(V.low):  # 낮으면 빨갛게 깜빡
 		hc = BLOOD.lerp(GameData.col(V.blink_col), 0.5 + 0.5 * sin(_clock * TAU * float(V.blink_hz)))
-	_hp.set_state(hpp, hc, e.alive and e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh)  # 재생 중엔 둘레가 초록으로 빛남
+	_hp.set_state(hpp, hc, e.alive and e.no_hit_t >= GameData.REGEN_DELAY and e.hp < mh and GameData.class_regen(e.cls) > 0)  # 재생 중엔 둘레가 초록으로 빛남 (흡혈귀는 재생 없음)
 	_vitals_regen = _hp.glow
 	_hp_num.text = str(hp)
 	# 속도·조준점
@@ -761,6 +788,15 @@ func _update_weapon() -> void:
 	match e.wep:
 		"stone":
 			st = "던지는 중" if e.cd > 0 else "누르고 있으면 계속 던짐"
+			if e.cls == "barbarian":  # 우클릭 고기 먹기: 조준점 고리 = 재사용 대기
+				if e.eat_t > 0:
+					st = "냠냠..."
+				elif e.meat_cd > 0:
+					ring = 1.0 - e.meat_cd / float(GameData.WEAPONS.meat.cd)
+					ring_col = STEEL
+					st += " · 고기 %.0f초" % ceilf(e.meat_cd)
+				else:
+					st += " · 우클릭 고기 먹기"
 		"bow":
 			var B: Dictionary = GameData.WEAPONS.bow
 			var full_now := e.charging and e.charge >= float(B.full)
@@ -801,12 +837,17 @@ func _update_weapon() -> void:
 				st = "성수 %s · 클릭: 던지기" % pips
 				if e.charges < mx:
 					st += " · 다음 %.1f초" % (rc - e.charge_t)
-		"cannon":  # 한 발 쏘면 자동 재장전: 조준점 고리 = 장전 진행도
+		"cannon":  # R 꾹 장전 (사용자 요청): 조준점 고리 = 장전 게이지 (떼면 멈춘 채로), 다 차면 철컥 + 번쩍
 			var CW: Dictionary = GameData.WEAPONS.cannon
-			if e.cn_t > 0:
-				ring = 1.0 - e.cn_t / float(CW.reload)
-				ring_col = STEEL
-				st = "장전 중 %.1f초" % e.cn_t
+			var full := e.cn_load >= 1.0
+			if full and not _cn_full and e.reload_held:  # R로 다 채운 순간 (부활해서 찬 건 아님)
+				_ring.flash()
+			_cn_full = full
+			if not full:
+				ring = e.cn_load
+				ring_col = GOLD if e.cn_reloading() else STEEL
+				var left := (1.0 - e.cn_load) * float(CW.reload)
+				st = ("장전 중 · %.1f초" if e.cn_reloading() else "R키를 꾹 눌러 장전 · %.1f초") % left
 			else:
 				st = "장전 완료 · 우클릭 탄도 조준 · 발밑에 쏘면 점프"
 		"ak":
@@ -826,6 +867,23 @@ func _update_weapon() -> void:
 				st = "누르고 있으면 연주 · 우클릭 팡파레"
 			if e.fan_cd > 0:
 				st += " · 팡파레 %.0f초" % ceilf(e.fan_cd)
+		"teeth":  # 흡혈귀: 조준점 고리 = 박쥐 돌진 재사용 대기
+			var TW: Dictionary = GameData.WEAPONS.teeth
+			var BW: Dictionary = GameData.WEAPONS.bat
+			st = "물면 %d 피해 + %d 회복" % [int(TW.dmg), int(TW.heal)]
+			if e.dash_t > 0:
+				st = "박쥐 돌진!"
+			elif combat and Vampire.bite_target(combat, e):  # 물 수 있는 적이 범위 안: 조준점 고리가 빨갛게 꽉 참
+				ring = 1.0
+				ring_col = BLOOD
+				ring_label = "물기!"
+				st += " · 물 수 있음!"
+			elif e.bat_cd > 0:
+				ring = 1.0 - e.bat_cd / float(BW.cd)
+				ring_col = STEEL
+				st += " · 돌진 %.0f초" % ceilf(e.bat_cd)
+			else:
+				st += " · 우클릭 박쥐 돌진"
 		"lance":
 			st = "말 타는 중 %.1f초 · 찌르면 70 피해 + 멀리 날림" % maxf(0.0, e.mounted)
 			ring = e.mounted / GameData.HORSE_TIME
@@ -894,6 +952,58 @@ void fragment() {
 
 
 ## 피격 방향 — 조준점에서 185px 위에 붉은 호 (위가 두꺼운 반달). 1초 동안 60%까지 진하다가 사라짐. 최대 4개
+## 개인전: 조준점이 적을 가리키면 그 적 머리 위에 닉네임 (자막 규칙: 배경 없이 잉크 외곽선).
+## 판정은 쟁탈전 적 이름과 같음 (ControlHud.aimed_at — 몸·머리 근처 + 벽 뒤면 안 보임). 여럿이면 가장 가까운 한 명
+class AimName extends Control:
+	var hud: Hud
+	var target: PlayerController  # 지금 이름을 띄운 적 (테스트용)
+
+	func _init() -> void:
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(_dt: float) -> void:
+		if not is_visible_in_tree():
+			target = null
+			return
+		var t := _pick()
+		if t != target or t != null:
+			target = t
+			queue_redraw()
+
+	func _pick() -> PlayerController:
+		var me := hud.player
+		var cam := get_viewport().get_camera_3d()
+		if me == null or hud.combat == null or cam == null or not me.alive or me.spectating:
+			return null
+		var A: Dictionary = GameData.HUD_UI.aim_name
+		var best: PlayerController = null
+		var bd := INF
+		for e in hud.combat.ents:
+			if e == me or not e.alive or hud.combat.ally(me, e):
+				continue
+			var d := cam.global_position.distance_to(e.global_position)
+			if d < bd and ControlHud.aimed_at(cam, hud.combat, e, size / 2, float(A.lift)):
+				bd = d
+				best = e
+		return best
+
+	func _draw() -> void:
+		var cam := get_viewport().get_camera_3d()
+		if target == null or not is_instance_valid(target) or cam == null:
+			return
+		var A: Dictionary = GameData.HUD_UI.aim_name
+		var head := target.global_position + Vector3(0, float(A.lift), 0)
+		if cam.is_position_behind(head):
+			return
+		var f := get_theme_default_font()
+		var fs := int(A.font)
+		var w := f.get_string_size(target.ent_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var at := cam.unproject_position(head) + Vector2(-w / 2, -6)
+		draw_string_outline(f, at, target.ent_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiKit.outline_for(fs), Hud.INK)
+		draw_string(f, at, target.ent_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Hud.PARCH)
+
+
 class DmgDir extends Control:
 	var items: Array = []  # [{ang, t}]
 	var warm := false      # true면 투명한 호를 하나 그린다 (셰이더 미리 컴파일용 — Hud._process)
@@ -1242,6 +1352,47 @@ class StarEdge extends Control:
 			draw_colored_polygon(PackedVector2Array([Vector2(0, -r), Vector2(q, -q), Vector2(r, 0), Vector2(q, q),
 				Vector2(0, r), Vector2(-q, q), Vector2(-r, 0), Vector2(-q, -q)]), c)  # 네 갈래 별
 		draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## 흡혈귀 체력이 낮을 때 (1·3인칭 모두): 붉은 비네트가 불꽃처럼 일렁이고, 화면 아래·옆 가장자리에 불꽃 혀가 날름거림.
+## 수치는 GameData.BURN (vig_col·vig_alpha·flicker_hz). 불꽃 혀는 삼각형 묶음 하나로 그림 (UiKit.Tris)
+class BurnEdge extends Control:
+	var vig: ColorRect
+	var k := 0.0
+	var t := 0.0
+
+	func tick(dt: float, on: bool) -> void:
+		k = move_toward(k, 1.0 if on else 0.0, dt * 3.0)
+		t += dt
+		visible = k > 0.001
+		if visible:
+			var B: Dictionary = GameData.BURN
+			var fl := 0.75 + 0.15 * sin(t * TAU * float(B.flicker_hz)) + 0.1 * sin(t * 23.0)
+			(vig.material as ShaderMaterial).set_shader_parameter("alpha", k * float(B.vig_alpha) * fl)
+			queue_redraw()
+
+	func _draw() -> void:
+		var tr := UiKit.Tris.new()
+		var w := size.x
+		var h := size.y
+		var cols := [Color("#ffd23a"), Color("#ff8a1e"), Color("#ff4a1a")]
+		var n := 18
+		for i in n:  # 아래 가장자리
+			var x := (i + 0.5) / n * w
+			var fh := (34.0 + 26.0 * absf(sin(t * 7.0 + i * 1.7))) * k
+			var c: Color = cols[i % 3]
+			c.a = 0.55 * k
+			tr.poly(PackedVector2Array([Vector2(x - 22, h), Vector2(x + sin(t * 9.0 + i) * 8.0, h - fh), Vector2(x + 22, h)]), c)
+		for side in 2:  # 양옆 아래쪽 절반
+			for i in 6:
+				var y := h - (i + 0.5) / 6.0 * h * 0.5
+				var fw := (22.0 + 18.0 * absf(sin(t * 6.0 + i * 2.1 + side))) * k
+				var c: Color = cols[(i + side) % 3]
+				c.a = 0.45 * k
+				var x0 := 0.0 if side == 0 else w
+				var sg := 1.0 if side == 0 else -1.0
+				tr.poly(PackedVector2Array([Vector2(x0, y - 20), Vector2(x0 + sg * fw, y + sin(t * 8.0 + i) * 6.0), Vector2(x0, y + 20)]), c)
+		tr.draw(self)
 
 
 ## 왼쪽 아래 체력 막대 (시안: 어두운 홈 + 초록 채움, 둘 다 잉크 테두리, 채움 아래쪽 그늘). 재생 중엔 둘레가 초록으로 빛남

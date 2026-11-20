@@ -83,11 +83,12 @@ func _run() -> void:
 				setup(Vector3(-25, 0, 18), -PI / 2, inp(1.0, true), "barbarian")
 		3:
 			if el == 60:
-				check("야만인 달리기 속도", absf(hspeed() - 10.0) < 0.05, "%.2f m/s (기대 10.00)" % hspeed())
+				var run_want: float = G.BASE_SPEED * float(G.CLASSES.barbarian.speed) * G.SPRINT  # 예전 10.0 → 밸런스 ×0.9로 9.0
+				check("야만인 달리기 속도", absf(hspeed() - run_want) < 0.05, "%.2f m/s (기대 %.2f)" % [hspeed(), run_want])
 				setup(Vector3(-25, 0, 18), -PI / 2, inp(1.0), "crossbow")
 		4:
 			if el == 60:
-				var want: float = G.BASE_SPEED * 0.85
+				var want: float = G.BASE_SPEED * float(G.CLASSES.crossbow.speed)
 				check("석궁병 걷기 속도", absf(hspeed() - want) < 0.05, "%.2f m/s (기대 %.2f)" % [hspeed(), want])
 				setup(Vector3(-25, 0, 18), -PI / 2, inp(1.0, true), "archer")
 		5:

@@ -127,7 +127,8 @@ func _run() -> void:
 	check("막대 길이 = 병과 중 최대값 대비", absf(M._ci.hp.k - float(G.CLASSES[other].hp) / hp_max) < 0.01, "k=%.3f" % M._ci.hp.k)
 	# 능력치 계산: 걷기 = 기본 × 병과, 달리기 ×1.35, 돌멩이 사거리 = 15m 상한, 트럼펫 = 12m
 	var sb: Dictionary = G.class_stats("barbarian")
-	check("야만인 7.4 / 10.0 m/s", "%.1f / %.1f" % [sb.walk, sb.run] == "7.4 / 10.0", "%.2f %.2f" % [sb.walk, sb.run])
+	var bw: float = G.BASE_SPEED * float(G.CLASSES.barbarian.speed)
+	check("야만인 걷기 / 달리기 = 기본 × 병과 / ×달리기 (지금 6.7 / 9.0 m/s)", is_equal_approx(sb.walk, bw) and is_equal_approx(sb.run, bw * G.SPRINT) and "%.1f / %.1f" % [sb.walk, sb.run] == "6.7 / 9.0", "%.2f %.2f" % [sb.walk, sb.run])
 	check("사거리: 돌멩이 ≤15m(상한)·트럼펫 12m·석궁이 가장 멂", sb.range > 10.0 and sb.range <= 15.0
 		and is_equal_approx(G.class_stats("bard").range, 12.0) and G.class_stats("crossbow").range_k == 1.0,
 		"%.1f %.1f" % [sb.range, G.class_stats("bard").range])
@@ -175,6 +176,32 @@ func _run() -> void:
 		bad.append("topbar %s" % H._topbar.get_global_rect())
 	check("HUD: 가운데 40% 비움 · 판 높이 80 이하", bad.is_empty(), str(bad))
 	check("HUD: 무기 칸 = 아이콘 + 이름 + 상태", H._w_name.text == "돌멩이" and H._w_icon.texture != null and H._w_state.text != "", H._w_state.text)
+
+	# ── 개인전: 조준한 적 머리 위에 닉네임 (사용자 요청) ──
+	var AN = main.hud._aim_name
+	var tgt = bots()[0]
+	p.global_position = Vector3(-25, 0, 18)
+	p.velocity = Vector3.ZERO
+	p.yaw = PI / 2  # 서쪽(-X)을 봄
+	p.pitch = 0.0
+	tgt.global_position = Vector3(-33, 0, 18)
+	tgt.velocity = Vector3.ZERO
+	await wait(3)
+	await process_frame
+	await process_frame
+	var cam3: Camera3D = main.get_viewport().get_camera_3d()  # 3인칭은 카메라가 어깨 옆이라 조준선 위에 세움
+	var fwd := -cam3.global_basis.z
+	fwd.y = 0
+	tgt.global_position = cam3.global_position + fwd.normalized() * 10.0 - Vector3(0, cam3.global_position.y, 0)
+	await wait(2)
+	await process_frame
+	await process_frame
+	check("개인전: 조준한 적 위에 닉네임", AN.visible and AN.target == tgt, "target=%s" % (AN.target.ent_name if AN.target else "없음"))
+	p.yaw = -PI / 2  # 반대쪽을 봄
+	await wait(2)
+	await process_frame
+	await process_frame
+	check("  조준을 떼면 닉네임 없음", AN.target == null, "target=%s" % (AN.target.ent_name if AN.target else "없음"))
 
 	# ── 점수판 순서: 처치 많은 순, 같으면 죽음 적은 순 ──
 	var b := bots()

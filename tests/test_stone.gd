@@ -108,10 +108,10 @@ func _run() -> void:
 
 	# ── 날아가서 몸에 맞음 ──
 	await wait(20)
-	check("몸에 맞아 10 피해", near(dm.hp, 90.0), "hp=%.1f" % dm.hp)
+	check("몸에 맞아 11 피해", near(dm.hp, 89.0), "hp=%.1f" % dm.hp)
 	check("돌은 맞으면 사라짐", C.projectiles.is_empty(), "n=%d" % C.projectiles.size())
 	check("돌 넉백 4 (동쪽으로 밀림)", dm.velocity.x > 1.0, "v=%s" % dm.velocity)
-	check("데미지 숫자 10", nums.size() > 0 and nums[-1] == ["10", ""], str(nums))
+	check("데미지 숫자 11", nums.size() > 0 and nums[-1] == ["11", ""], str(nums))
 	check("맞힘 표시", marks.size() > 0 and marks[-1] == false, str(marks))
 	check("조각·링·연기 효과", C.fx.count() >= 10, "fx=%d" % C.fx.count())
 	check("팔 모션 끝남", p.fire_anim == 0.0, "fire_anim=%.2f" % p.fire_anim)
@@ -170,9 +170,9 @@ func _run() -> void:
 		q.vel = Vector3(32, 0, 0)
 		q.grav = 0.0
 	await wait(15)
-	check("헤드샷 15 (×1.5)", near(dm.hp, 85.0), "hp=%.1f" % dm.hp)
+	check("헤드샷 16.5 (×1.5)", near(dm.hp, 83.5), "hp=%.1f" % dm.hp)
 	check("투구 날아감", not dm.helmet, "helmet=%s" % dm.helmet)
-	check("헤드샷 숫자·투구 날림 문구", nums.has(["15", "head"]) and nums.has(["투구 날림!", "head"]), str(nums))
+	check("헤드샷 숫자·투구 날림 문구", nums.has(["17", "head"]) and nums.has(["투구 날림!", "head"]), str(nums))
 
 	# ── 처치하면 '처치' ──
 	dm.hp = 5.0

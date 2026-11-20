@@ -290,7 +290,10 @@ func _run() -> void:
 	C.give_star(bb)
 	bb.ai.think = 0.0
 	var dd0: float = bb.global_position.distance_to(p.global_position)
-	await wait(60)
+	for i in 120:  # 병과가 무작위라 느린 병과(포병·석궁병)는 반응 + 가속에 시간이 듦
+		await physics_frame
+		if bb.global_position.distance_to(p.global_position) < dd0 - 2.0 or p.hp < G.class_hp(p.cls):
+			break
 	check("무적 봇은 돌진", bb.global_position.distance_to(p.global_position) < dd0 - 2.0 or p.hp < G.class_hp(p.cls), "%.1f → %.1f" % [dd0, bb.global_position.distance_to(p.global_position)])
 	C.end_star(bb)
 	# 무적인 적은 안 노리고 도망

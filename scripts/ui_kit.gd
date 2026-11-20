@@ -21,6 +21,7 @@ const ICONS := {
 	"bard": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M7 18h17" stroke="#fff8e6" stroke-width="3.5" stroke-linecap="round"/><path d="M24 18l9-7v14z" fill="#fff8e6"/><path d="M12 18v5M16 18v5M20 18v5" stroke="#fff8e6" stroke-width="2.4" stroke-linecap="round"/></svg>',  # 트럼펫 (4.5단계 새 병과)
 	"cleric": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M16 5h8v4l-1 1v5c5 2 8 6 8 11 0 6-5 9-11 9s-11-3-11-9c0-5 3-9 8-11v-5l-1-1z" fill="#fff8e6"/><path d="M20 20v11M15.5 24.5h9" stroke="#6b45a8" stroke-width="2.6" stroke-linecap="round"/></svg>',
 	"cannoneer": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M7 20l22-8 3 6-22 8z" fill="#fff8e6"/><circle cx="33" cy="15" r="3" fill="#fff8e6"/><circle cx="15" cy="27" r="7" stroke="#fff8e6" stroke-width="3" fill="none"/><path d="M15 21v12M9 27h12" stroke="#fff8e6" stroke-width="2"/><path d="M19 30l12 5" stroke="#fff8e6" stroke-width="3.5" stroke-linecap="round"/></svg>',  # 바퀴 달린 대포 (새 병과)
+	"vampire": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M5 9l9 6h12l9-6-3 14c-2 7-7 11-12 11s-10-4-12-11z" fill="#fff8e6"/><path d="M12 22c3 3 13 3 16 0" stroke="#2b1d12" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M15 23l1.6 5 1.6-4.4M25 23l-1.6 5-1.6-4.4" fill="#2b1d12"/></svg>',  # 높은 깃 + 송곳니 (새 병과)
 }
 
 
@@ -65,6 +66,9 @@ const WEAPON_ICONS := {
 	"cannon": [28, '<path d="M3 15l17-7 3 6-17 7z" fill="#4a4a52"/><circle cx="24" cy="10.5" r="2.4" fill="#4a4a52"/><circle cx="10" cy="18" r="4.6" fill="#c9bfae"/><path d="M10 15.5v5M7.5 18h5"/><path d="M14 20.5l9 3" stroke="#8a542b" stroke-width="3"/>'],
 	"chicken": [24, '<path d="M5 14c0-5 3.5-8 8-7.5.5-3 5-3.5 5.5-.5.2 1.3-.5 2.3-1.5 2.7 2 2.3 2 5.5-.3 7.8-3.4 3.4-11.7 3-11.7-2.5z" fill="#fff8e6"/><path d="M19 7.5l3 1-3 1z" fill="#f2b44a"/><path d="M15 3.8c.3-1.3 1.3-1.8 2-1.2" stroke="#d8453b" stroke-width="2.2"/><circle cx="16.3" cy="7" r=".9" fill="#2b1d12" stroke="none"/><path d="M9 20.5v2M13 20.5v2" stroke="#f2b44a"/>'],
 	"lance": [24, '<path d="M4 20L16 8" stroke="#8a542b" stroke-width="3.2"/><path d="M14 5.5L21 3l-2.5 7-2.2.3-1.6-1.6z" fill="#c9bfae"/><path d="M6 13.5l4.5 4.5" stroke-width="3"/>'],
+	"teeth": [26, '<path d="M3 11c2-6 18-6 20 0z" fill="#d2465a"/><path d="M3 13c2 6 18 6 20 0z" fill="#d2465a"/><path d="M5 11h16v2H5z" fill="#fff8e6" stroke-width="1.4"/><path d="M8 11l1.5 4 1.5-4M15 11l1.5 4 1.5-4" fill="#fff8e6" stroke-width="1.4"/>'],
+	"bat": [28, '<path d="M14 8c-2-4-8-5-12-2 2 1 2 3 1 5 3-1 5 0 6 2 1-2 3-3 5-2 2-1 4 0 5 2 1-2 3-3 6-2-1-2-1-4 1-5-4-3-10-2-12 2z" fill="#4a4050"/><circle cx="12.5" cy="10" r=".9" fill="#d2465a" stroke="none"/><circle cx="15.5" cy="10" r=".9" fill="#d2465a" stroke="none"/><path d="M2 19h7M5 22h8" stroke="#8a7a90"/>'],
+	"burn": [24, '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4 1-6 1-9z" fill="#ff8a1e"/><path d="M12 12c1 2 3 3 3 5a3 3 0 0 1-6 0c0-1 1-2 1-3 1 1 2 0 2-2z" fill="#ffd23a" stroke-width="1.4"/>'],
 	"star": [24, '<path d="M2.5 12c3-5 10-6.5 14-2.3l4.5-3.2v11l-4.5-3.2c-4 4.2-11 2.7-14-2.3z" fill="#f2b44a"/><circle cx="7" cy="11" r="1.1" fill="#2b1d12" stroke="none"/><path d="M10 9.5c1 1.5 1 3.5 0 5M13 9.8c.8 1.4.8 3 0 4.4" stroke-width="1.4"/>'],
 }
 
