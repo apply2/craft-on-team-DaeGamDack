@@ -3,3 +3,10 @@
 /android/
 *.tmp
 export/
+
+# 작업 재료·측정 결과 (저장소에 안 올림)
+/jungse-nanjangpan/
+*.zip
+/SFX_*.md
+tests/balance/
+tests/screenshots/prof_*.txt
