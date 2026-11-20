@@ -157,12 +157,14 @@ static func _count_meshes(n: Node) -> int:
 
 func _merge_node(n: Node3D, skip: Dictionary) -> void:
 	var groups := {true: [], false: []}
+	# 그림자를 안 그리는 품질(낮음 — 웹 기본)이면 그림자 있는/없는 조각을 나눌 필요가 없어서 하나로 합친다 (관절마다 그리기 호출 -1)
+	var split := GameData.shadow_dist_now() > 0.0
 	for c in n.get_children():
 		if skip.has(c):
 			continue
 		if c is MeshInstance3D and c.get_child_count() == 0 and (c as MeshInstance3D).material_override is StandardMaterial3D 				and ((c as MeshInstance3D).material_override as StandardMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_DISABLED:  # 성수병 유리 같은 반투명은 따로
 			var mi := c as MeshInstance3D
-			groups[mi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF].append(mi)
+			groups[not split or mi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF].append(mi)
 		elif c is Node3D:
 			_merge_node(c, skip)
 	var in_helm := helm != null and (n == helm or helm.is_ancestor_of(n))
@@ -279,7 +281,7 @@ func _build() -> void:
 		var sx := 1.0 if idx == 0 else -1.0
 		var er: float = eye_r[idx]
 		var eg := _group(Vector3(sx * 0.12, randf_range(-0.025, 0.025) if idx == 1 else 0.0, 0.235), head)
-		_part(_sph, 0xffffff, Vector3.ZERO, Vector3.ONE * er, eg, false)
+		_part(_sph, 0xffffff, eg.position, Vector3.ONE * er, head, false)  # 흰자는 머리에 바로 (안 움직여서 머리 조각과 합쳐짐 — 그리기 호출 -2)
 		var pu := _part(_sph, 0x15151b, Vector3(0, 0, er * 0.8), Vector3(er * 0.45, er * 0.45, er * 0.3), eg, false)
 		pupils.append({"m": pu, "r": er})
 	_part(_sph, 0xc9cbd6 if cls == "vampire" else 0xe8b28a, Vector3(0, -0.075, 0.29), Vector3(0.06, 0.05, 0.065), head)

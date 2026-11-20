@@ -8,6 +8,7 @@ var main: Node
 var G: Node
 var tag := "now"
 var secs := 20.0
+var quality := ""  # low/normal/high (비우면 기본). 웹 기본은 low
 
 
 func _initialize() -> void:
@@ -17,12 +18,15 @@ func _initialize() -> void:
 			match kv[0]:
 				"tag": tag = kv[1]
 				"secs": secs = float(kv[1])
+				"quality": quality = kv[1]
 	G = root.get_node("GameData")
 	G.save_enabled = false
 	G.hitstop_enabled = false
 	G.third_person = true
 	G.difficulty = "normal"
 	G.chosen_cls = "archer"
+	if quality != "":
+		G.set_gfx(quality)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
 	main = load("res://scenes/main.tscn").instantiate()
